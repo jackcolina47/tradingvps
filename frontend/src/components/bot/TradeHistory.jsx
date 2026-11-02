@@ -1,5 +1,8 @@
+import { useState } from "react";
+import { Search } from "lucide-react";
 import { SideBadge, Empty } from "./Panel";
 import { TH, TD } from "./PositionsTable";
+import TradeDetailDialog from "./TradeDetailDialog";
 import { fmtPrice, fmtSignedUsd, fmtDateTime, pnlClass, REASON_LABELS, STRATEGY_LABELS } from "@/lib/api";
 
 const REASON_CLS = {
@@ -10,12 +13,13 @@ const REASON_CLS = {
 };
 
 export default function TradeHistory({ trades }) {
+  const [selected, setSelected] = useState(null);
   if (!trades.length) return <Empty testId="trades-empty" text="Aún no hay operaciones cerradas." />;
   return (
     <div className="max-h-[420px] overflow-auto thin-scroll">
       <table data-testid="trades-table" className="w-full text-sm">
         <thead className="sticky top-0 border-b border-[#1E293B] bg-[#0D111A]">
-          <tr><TH>Cierre</TH><TH>Símbolo</TH><TH>Lado</TH><TH right>Entrada</TH><TH right>Salida</TH><TH>Motivo</TH><TH right>Comisiones</TH><TH right>PnL</TH></tr>
+          <tr><TH>Cierre</TH><TH>Símbolo</TH><TH>Lado</TH><TH right>Entrada</TH><TH right>Salida</TH><TH>Motivo</TH><TH right>Comisiones</TH><TH right>PnL</TH><TH right>Detalle</TH></tr>
         </thead>
         <tbody className="num text-[12px]">
           {trades.map((t) => (
@@ -44,10 +48,17 @@ export default function TradeHistory({ trades }) {
                 {fmtSignedUsd(t.pnl)}
                 <span className="block text-[10px]">{t.pnl_pct > 0 ? "+" : ""}{t.pnl_pct.toFixed(2)}%</span>
               </TD>
+              <TD right>
+                <button data-testid={`trade-detail-btn-${t.id}`} onClick={() => setSelected(t)} title="Ver todos los detalles"
+                  className="inline-flex items-center gap-1 rounded-sm border border-amber-500/30 px-1.5 py-1 font-mono text-[10px] uppercase tracking-wider text-amber-300 transition-colors hover:bg-amber-500/10">
+                  <Search className="h-3 w-3" strokeWidth={2.2} /> Ver
+                </button>
+              </TD>
             </tr>
           ))}
         </tbody>
       </table>
+      <TradeDetailDialog trade={selected} onClose={() => setSelected(null)} />
     </div>
   );
 }

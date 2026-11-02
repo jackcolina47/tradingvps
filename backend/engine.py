@@ -391,7 +391,8 @@ class TradingEngine:
                       pnl_pct=round(net / margin * 100, 2) if margin else 0, fees=round(fees, 4),
                       reason=reason, opened_at=p.opened_at, live=p.live, horizon=p.horizon, entry_type=p.entry_type,
                       mfe_r=round(mfe, 2), mae_r=round(p.mae_r, 2), mfe_tp_pct=round(mfe / tp_r * 100, 1) if tp_r else 0.0,
-                      partial_tp=p.partial_done and bool(p.partial_gross), hold_min=round(hold, 1))
+                      partial_tp=p.partial_done and bool(p.partial_gross), hold_min=round(hold, 1),
+                      sl=p.sl, tp=p.tp, initial_sl=p.initial_sl, atr=p.atr, breakeven=p.breakeven, signal_id=p.signal_id, order_id=p.order_id)
         res = await self.db.trades.insert_one(trade.to_mongo())
         trade.id = str(res.inserted_id)
         return trade

@@ -264,6 +264,13 @@ class Trade(BaseDocument):
     mfe_tp_pct: float = 0.0
     partial_tp: bool = False
     hold_min: float = 0.0
+    sl: Optional[float] = None
+    tp: Optional[float] = None
+    initial_sl: Optional[float] = None
+    atr: Optional[float] = None
+    breakeven: bool = False
+    signal_id: Optional[str] = None
+    order_id: Optional[str] = None
     closed_at: str = Field(default_factory=now_iso)
 
 

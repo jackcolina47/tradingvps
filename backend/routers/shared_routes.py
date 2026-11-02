@@ -2,12 +2,14 @@
 from typing import Optional
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
+from bson import ObjectId
 
 import notify
 import cashflow
 from auth import hash_password, verify_password, create_token
 from ai_advisor import ping as ai_ping, current as ai_current, friendly_error
 from deps import store
+from models import Trade, Signal
 
 
 class PasswordChange(BaseModel):
@@ -36,6 +38,22 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT"):
     @router.get("/auth/me")
     async def auth_me():
         return {"ok": True}
+
+    @router.get("/trades/{trade_id}/detail")
+    async def trade_detail(trade_id: str):
+        if not ObjectId.is_valid(trade_id):
+            raise HTTPException(404, "Operación no encontrada")
+        doc = await engine.db.trades.find_one({"_id": ObjectId(trade_id)})
+        if not doc:
+            raise HTTPException(404, "Operación no encontrada")
+        trade = Trade.from_mongo(doc).model_dump()
+        signal = None
+        sid = trade.get("signal_id")
+        if sid and ObjectId.is_valid(sid):
+            sdoc = await engine.db.signals.find_one({"_id": ObjectId(sid)})
+            if sdoc:
+                signal = Signal.from_mongo(sdoc).model_dump()
+        return {"trade": trade, "signal": signal, "currency": currency}
 
     @router.get("/account/cashflows")
     async def cashflows():
