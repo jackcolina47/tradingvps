@@ -1,0 +1,22 @@
+{
+  "summary": "Checked that the AI test-connection works with the renewed EMERGENT_LLM_KEY (ends with f195). Backend: 6/6 pytest pass. The Emergent default (anthropic/claude-sonnet-5-5) returned 200 on /api, /api/fx and /api/pepper. OpenAI gpt-5.5 and Gemini gemini-3-flash-preview both returned 200 with the Emergent key, saved=false. GET /api/config: ai_active.health.ok=true, fails=0. UI: logged in, opened /bybit, then Ajustes. The Emergent source was selected, the key input was empty with label 'DEL SERVIDOR ••••••••F195'. Probar conexión showed the toast 'La IA respondió correctamente…' and the reply 'Claude Sonnet 5.5 (clave Emergent): …'. No error toast and no ai-health-error. Switching the provider to OpenAI (GPT) without saving gave the reply 'GPT 5.6 Terra (clave Emergent): …'. Descartar cambios restored Anthropic (Claude) and cleared the dirty badge. Chat regression: the reply came in about 6 s with no chat-error-message. Config left unchanged: emergent / anthropic / claude-sonnet-5-5, key origin=env.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Ajustes → Inteligencia artificial", "issues": ["The success toast always says 'recuerda guardar para activarla', even when the tested settings are already saved and active. The backend returns a `saved` flag that the UI could use to pick the wording."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter55_ai_test_connection.py", "/app/test_reports/pytest/pytest_iter55.xml"],
+  "action_items": ["Optional: use the `saved` flag from /ai/test to drop 'recuerda guardar' when nothing changed."],
+  "critical_code_review_comments": ["No issues in the ai/test route; it maps errors to 400/424 properly.", "Info: the chat answer quoted older bot logs from 10:05 saying 'IA sin servicio (API key inválida)'. These are historical entries from the stale key before the fix; health is OK now."],
+  "updated_files": ["/app/backend/tests/test_iter55_ai_test_connection.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Password BlackCat2233@ (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. No AI settings were saved and no bots were started.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "test_iter55_ai_test_connection.py covers /ai/test on all 3 bases plus the openai/gemini providers and config health. Header button selector: get_by_role('button', name='Ajustes'). Bot card testid: bot-card-crypto.",
+  "rca of the issue": "Stale or inactive EMERGENT_LLM_KEY in backend/.env. After the key was replaced, every provider responds."
+}

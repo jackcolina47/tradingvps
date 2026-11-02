@@ -413,6 +413,10 @@
 - `AiSection.jsx`: bajo la tarjeta Emergent, input `emergent-llm-key-input` con etiqueta de estado (guardada ••••XXXX / del servidor ••••XXXX / sin configurar), botón `ai-clear-emergent-button` («Quitar clave Emergent · volver a la del servidor»), etiqueta «Activa ahora» indica el origen.
 - Tested: testing_agent iteration_54 (100 %): `tests/test_iter64_emergent_key_config.py` 8/8 + UI completa (/bybit y /hotforex). Estado final restaurado (clave borrada → origen env).
 
+## Fixed (2026-06, iteration 64 · «Probar conexión» fallaba con la clave Emergent: clave del .env inactiva)
+- Causa: `EMERGENT_LLM_KEY` en `/app/backend/.env` (…3967, recreado al hacer fork) estaba inactiva («API key is inactive»). Sustituida por la clave universal vigente (…f195, obtenida del gestor de integraciones) y backend reiniciado. Si vuelve a pasar: `emergent_integrations_manager` → actualizar solo esa línea del .env → `supervisorctl restart backend`.
+- Tested: testing_agent iteration_55 (100 %): /ai/test en /api, /api/fx, /api/pepper con Claude, GPT y Gemini vía Emergent; UI «Probar conexión» OK, health ok, chat responde.
+
 ## Backlog
 - P2: Pepperstone cTrader: sin puente (MetaApi solo MetaTrader). Opción futura: cTrader Open API (OAuth + Protobuf) como conector alternativo del motor FX.
 - P2: FX `fix_reversion`: si el bot está apagado durante toda la ventana 16:00–16:30 Londres del último día hábil, la oportunidad del mes se pierde (sin recuperación posterior, por diseño).
