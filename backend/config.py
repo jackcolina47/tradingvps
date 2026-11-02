@@ -159,9 +159,12 @@ class ConfigStore:
             key = self.cfg.gemini_api_key if c["gemini_api_key"].startswith("••") else c["gemini_api_key"]
             if not key:
                 raise ValueError("Introduce la API key de Google Gemini")
-            return {"api_key": key, "provider": "gemini", "model": c["gemini_model"], "source": "gemini"}
-        own = self.cfg.emergent_llm_key if c["emergent_llm_key"].startswith("••") else c["emergent_llm_key"]
-        return {"api_key": own or os.environ.get("EMERGENT_LLM_KEY", ""), "provider": c["ai_provider"], "model": c["ai_model"], "source": "emergent"}
+            return {"api_key": key, "provider": "gemini", "model": c["gemini_model"], "source": "gemini", "origin": "gemini"}
+        typed = (override or {}).get("emergent_llm_key") or ""
+        if typed and not typed.startswith("••"):
+            return {"api_key": typed, "provider": c["ai_provider"], "model": c["ai_model"], "source": "emergent", "origin": "typed"}
+        key = self.cfg.emergent_llm_key or os.environ.get("EMERGENT_LLM_KEY", "")
+        return {"api_key": key, "provider": c["ai_provider"], "model": c["ai_model"], "source": "emergent", "origin": self.emergent_key_origin()}
 
     def emergent_key_origin(self) -> str:
         """Where the Emergent key in use comes from: «config» (saved in Ajustes), «env» (server variable) or «none»."""

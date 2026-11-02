@@ -64,7 +64,7 @@ export default function AiSection({ config, onSave }) {
     setReply(null);
     try {
       const { data } = await http.post("/ai/test", form);
-      setReply(`${data.label} (${data.source === "gemini" ? "tu clave de Google" : "clave Emergent"}): ${data.reply}`);
+      setReply(`${data.label} (${data.source === "gemini" ? "tu clave de Google" : "clave Emergent"}${data.key_hint ? ` ${data.key_hint}${data.key_origin_label ? ` · ${data.key_origin_label}` : ""}` : ""}): ${data.reply}`);
       toast.success("La IA respondió correctamente · recuerda guardar para activarla");
     } catch (e) {
       toast.error(errMsg(e));
@@ -77,6 +77,7 @@ export default function AiSection({ config, onSave }) {
     <Panel testId="ai-section" title="Inteligencia artificial" icon={BrainCircuit} bodyClass="p-4 space-y-3">
       <p data-testid="ai-active-label" className={`rounded-sm border px-3 py-2 text-[12px] ${active.health?.ok === false ? "border-rose-500/50 bg-rose-500/10 text-rose-200" : "border-[#1E293B] bg-[#07090E] text-slate-300"}`}>
         Activa ahora en los tres bots: <span className={`font-semibold ${active.health?.ok === false ? "text-rose-300" : "text-amber-300"}`}>{active.label}</span> <span className={active.health?.ok === false ? "text-rose-300/70" : "text-slate-500"}>· {active.source === "gemini" ? "tu API key de Google Gemini" : config.emergent_configured ? "clave Emergent guardada en Ajustes" : "clave universal de Emergent del servidor"} · {active.model}</span>
+        {active.key_hint && <span data-testid="ai-active-key" className="mt-1 block font-mono text-[11px] text-slate-400">Clave en uso: <span className="text-slate-200">{active.key_hint}</span>{active.key_origin_label ? ` · ${active.key_origin_label}` : ""}</span>}
         {active.health?.ok === false && <span data-testid="ai-health-error" className="mt-1 block font-mono text-[11px] text-rose-300">⚠ Sin servicio · {active.health.label}: {active.health.error}</span>}
       </p>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

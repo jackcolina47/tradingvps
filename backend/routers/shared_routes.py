@@ -10,7 +10,7 @@ import notify
 import cashflow
 import chart
 from auth import hash_password, verify_password, create_token
-from ai_advisor import ping as ai_ping, current as ai_current, friendly_error
+from ai_advisor import ping as ai_ping, current as ai_current, friendly_error, key_hint, ORIGIN_LABELS
 from deps import store
 from models import Trade, Signal
 
@@ -154,7 +154,8 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
             raise HTTPException(400, str(e))
         if rt["source"] == "emergent" and not rt["api_key"]:
             raise HTTPException(400, "No hay clave universal de Emergent: introdúcela en el campo o define EMERGENT_LLM_KEY en el servidor")
+        used = f"clave {key_hint(rt['api_key'])} · {ORIGIN_LABELS.get(rt.get('origin', ''), rt.get('origin', ''))}"
         try:
             return {"ok": True, "reply": await ai_ping(rt), **ai_current(rt), "saved": body is None or not body.model_dump(exclude_none=True)}
         except Exception as e:
-            raise HTTPException(424, f"Error IA: {friendly_error(e)}")
+            raise HTTPException(424, f"Error IA ({used}): {friendly_error(e)}")

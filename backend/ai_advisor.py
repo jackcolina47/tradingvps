@@ -18,12 +18,18 @@ EMERGENT_MODELS = {
 GEMINI_MODELS = ["gemini-3.1-pro-preview", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-3-flash-preview", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"]
 GEMINI_KEY_URL = "https://aistudio.google.com/apikey"
 _FAMILY = {"claude": "Claude", "gpt": "GPT", "gemini": "Gemini"}
+ORIGIN_LABELS = {"config": "guardada en Ajustes", "env": "variable del servidor", "typed": "escrita en el formulario", "gemini": "tu clave de Google", "none": "ninguna"}
 
 
-def configure(api_key: str, provider: str, model: str, source: str = "emergent"):
+def key_hint(api_key: str) -> str:
+    return f"••••{api_key[-4:]}" if api_key and len(api_key) > 8 else ("••••" if api_key else "sin clave")
+
+
+def configure(api_key: str, provider: str, model: str, source: str = "emergent", origin: str = ""):
     changed = (api_key, provider, model) != (_cfg["api_key"], _cfg["provider"], _cfg["model"])
-    _cfg.update(api_key=api_key, provider=provider, model=model, source=source)
+    _cfg.update(api_key=api_key, provider=provider, model=model, source=source, origin=origin)
     if changed:
+        logger.info(f"IA configurada: {label(model)} · {provider} · clave {key_hint(api_key)}" + (f" ({ORIGIN_LABELS.get(origin, origin)})" if origin else ""))
         # New key/model → assume healthy again, but still announce the recovery when the next call succeeds.
         pending = bool(_health["alerted_at"] or _health["recovery_pending"])
         _health.update(_fresh_health(), recovery_pending=pending, since=_health["since"] if pending else None)
@@ -41,7 +47,9 @@ def label(model: str = None) -> str:
 
 def current(cfg: dict = None) -> dict:
     c = cfg or _cfg
-    return {"provider": c["provider"], "model": c["model"], "source": c["source"], "label": label(c["model"]), "health": health()}
+    origin = c.get("origin", "")
+    return {"provider": c["provider"], "model": c["model"], "source": c["source"], "label": label(c["model"]), "health": health(),
+            "key_hint": key_hint(c["api_key"]), "key_origin": origin, "key_origin_label": ORIGIN_LABELS.get(origin, origin)}
 
 
 # ---------- health: detects auth / balance / quota / model / network failures of the active provider ----------
