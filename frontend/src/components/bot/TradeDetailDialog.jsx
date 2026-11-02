@@ -5,7 +5,7 @@ import { SideBadge } from "./Panel";
 import TradeMiniChart from "./TradeMiniChart";
 import TradeNoteEditor from "./TradeNoteEditor";
 import {
-  api, errMsg, fmtPrice, fmtQty, fmtSignedUsd, fmtPct, pnlClass,
+  http, errMsg, fmtPrice, fmtQty, fmtSignedUsd, fmtPct, pnlClass,
   REASON_LABELS, STRATEGY_LABELS, HORIZON_LABELS, ENTRY_LABELS,
 } from "@/lib/api";
 
@@ -144,7 +144,7 @@ export default function TradeDetailDialog({ trade, onClose, onSaved }) {
   useEffect(() => {
     if (!tradeId) return;
     setData(null); setErr("");
-    api.get(`/trades/${tradeId}/detail`).then((r) => setData(r.data)).catch((e) => setErr(errMsg(e)));
+    http.get(`/trades/${tradeId}/detail`).then((r) => setData(r.data)).catch((e) => setErr(errMsg(e)));
   }, [tradeId]);
   const t = trade && data?.trade ? { ...data.trade, note: trade.note ?? data.trade.note, tags: trade.tags ?? data.trade.tags } : trade;
   return (

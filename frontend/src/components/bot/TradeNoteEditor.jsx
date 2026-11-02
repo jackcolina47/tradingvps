@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, Plus, X } from "lucide-react";
 import { toast } from "sonner";
-import { api, errMsg } from "@/lib/api";
+import { http, errMsg } from "@/lib/api";
 
 export const SUGGESTED_TAGS = ["Buena entrada", "Entrada tardía", "Salida prematura", "SL muy ajustado", "Contra tendencia", "Noticias", "Revisar"];
 
@@ -19,7 +19,7 @@ export default function TradeNoteEditor({ trade, onSaved }) {
   const save = async () => {
     setBusy(true);
     try {
-      const r = await api.put(`/trades/${trade.id}/note`, { note, tags });
+      const r = await http.put(`/trades/${trade.id}/note`, { note, tags });
       onSaved?.(r.data);
       toast.success("Nota guardada");
     } catch (e) { toast.error(errMsg(e)); }

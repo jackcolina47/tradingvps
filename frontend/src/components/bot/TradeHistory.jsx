@@ -4,7 +4,7 @@ import { SideBadge, Empty } from "./Panel";
 import { TH, TD } from "./PositionsTable";
 import TradeDetailDialog from "./TradeDetailDialog";
 import TradeFilters, { EMPTY_FILTERS, applyFilters } from "./TradeFilters";
-import { api, fmtPrice, fmtSignedUsd, fmtDateTime, pnlClass, REASON_LABELS, STRATEGY_LABELS } from "@/lib/api";
+import { http, fmtPrice, fmtSignedUsd, fmtDateTime, pnlClass, REASON_LABELS, STRATEGY_LABELS } from "@/lib/api";
 
 const REASON_CLS = {
   TP: "text-emerald-400 border-emerald-500/30",
@@ -60,11 +60,13 @@ export default function TradeHistory({ trades }) {
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [selected, setSelected] = useState(null);
   const firstId = trades[0]?.id;
+  const base = http.defaults.baseURL;
   useEffect(() => {
     let live = true;
-    api.get("/trades?limit=500").then((r) => live && setAll(r.data)).catch(() => {});
+    setAll(null);
+    http.get("/trades?limit=500").then((r) => live && setAll(r.data)).catch(() => {});
     return () => { live = false; };
-  }, [firstId, trades.length]);
+  }, [firstId, trades.length, base]);
   const source = (all || trades).map((t) => (edits[t.id] ? { ...t, ...edits[t.id] } : t));
   if (!source.length) return <Empty testId="trades-empty" text="Aún no hay operaciones cerradas." />;
   const shown = applyFilters(source, filters);

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { createChart, CandlestickSeries, createSeriesMarkers, ColorType, CrosshairMode, LineStyle } from "lightweight-charts";
-import { api, errMsg } from "@/lib/api";
+import { http, errMsg } from "@/lib/api";
 import { shift } from "./chart/useChart";
 
 const LEVELS = [
@@ -53,7 +53,7 @@ export default function TradeMiniChart({ tradeId }) {
   const [err, setErr] = useState("");
   useEffect(() => {
     setData(null); setErr("");
-    api.get(`/trades/${tradeId}/candles`, { timeout: 30000 }).then((r) => setData(r.data)).catch((e) => setErr(errMsg(e)));
+    http.get(`/trades/${tradeId}/candles`, { timeout: 30000 }).then((r) => setData(r.data)).catch((e) => setErr(errMsg(e)));
   }, [tradeId]);
   useEffect(() => {
     if (!data?.candles?.length || !ref.current) return;
