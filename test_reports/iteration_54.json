@@ -1,0 +1,18 @@
+{
+  "summary": "Verified end-to-end the editable Emergent universal key in Ajustes → Inteligencia artificial. Backend: 8/8 pytest pass (env origin initial state, 'sk-emergent-' prefix validation 422, save → masked in GET + stored 'enc:' in Mongo, empty/masked PUT do not overwrite, ai/test with saved key OK, typed invalid key → 424 'API key inválida' with saved config untouched, clear → origin env and AI still works, /api/fx/ai/test 200). UI (/bybit): input emergent-llm-key-input visible with label 'del servidor ••••••••3967' + EMERGENT_LLM_KEY hint, provider/model still shown; 'abc' → error toast; real key save → toast, label 'guardada ••••••••3967', clear button 'Quitar clave Emergent · volver a la del servidor', active label 'clave Emergent guardada en Ajustes', key not leaked in DOM; Probar conexión with saved key → ai-test-reply; typed invalid key → toast 'Error IA: API key inválida…'; Descartar resets; Gemini/Emergent source switching OK; clear → label back to 'del servidor', button gone. /hotforex settings also render the field. Final state restored: ai_source emergent, emergent key cleared (origin env).",
+  "backend_issues": {"critical": [], "minor": [
+    {"endpoint": "POST /api/ai/test", "issue": "Typed emergent_llm_key is not prefix-validated ('sk-emergent-') before calling LLM; a non-prefixed value returns 424 from provider instead of a clear 400 validation message. Cosmetic."}
+  ]},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": [
+    {"screen": "Ajustes / AI section", "issues": ["Clicking the already-active source card (ai-source-emergent) marks the form dirty ('Cambios sin guardar') although nothing changed - minor."]}
+  ]},
+  "test_report_links": ["/app/backend/tests/test_iter64_emergent_key_config.py", "/app/test_reports/pytest/iter64.xml"],
+  "action_items": ["Optional: validate 'sk-emergent-' prefix in /ai/test for typed key", "Optional: don't set dirty when clicking already-selected source card"],
+  "critical_code_review_comments": ["Implementation is clean; masking/encryption/precedence logic correct. Console shows only expected 422/424 resource errors from the negative tests."],
+  "updated_files": ["/app/backend/tests/test_iter64_emergent_key_config.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None; config restored to emergent source with cleared saved key.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Settings view via settings-view-button. AI section label text found via ai-section text content (label rendered uppercase via CSS). Sonner toasts disappear in ~4s; wait for them with filter(has_text). Test file test_iter64 restores config in fixture teardown."
+}

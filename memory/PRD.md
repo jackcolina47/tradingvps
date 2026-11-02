@@ -408,6 +408,11 @@
 - Fix `ai_advisor._keep_thought_signatures(chat, resp)` llamado en `ask_tools()`: copia `resp.raw.choices[0].message.thinking_blocks` al último mensaje del historial si es del asistente con `tool_calls` (no-op con el proxy Emergent, que no devuelve firmas). Requiere redesplegar el código en el VPS.
 - Tested: testing_agent iteration_53 (100 %): `tests/test_iter63_gemini_thought_signature.py` (helper + forma de la petición Gemini: un solo `functionCall` con `thoughtSignature`; sin bloques reproduce la condición del bug) + regresión del chat real con clave Emergent (turno con herramientas y seguimiento). No reproducido en vivo con Gemini directo (sin clave AI Studio en el entorno).
 
+## Implemented (2026-06, iteration 63 · campo editable de la clave universal de Emergent en Ajustes → IA)
+- `AppConfig.emergent_llm_key` (cifrado, SECRET/ENCRYPTED_FIELDS; validación «sk-emergent-»), `ConfigUpdate.emergent_llm_key` / `clear_emergent_llm_key`. `ai_runtime()` usa la guardada y, si no hay, `EMERGENT_LLM_KEY` del entorno. `public()` expone `emergent_configured`, `emergent_key_origin` (config | env | none) y `emergent_env_key` (enmascarada). `/ai/test` acepta `emergent_llm_key` y devuelve 400 si no hay ninguna clave.
+- `AiSection.jsx`: bajo la tarjeta Emergent, input `emergent-llm-key-input` con etiqueta de estado (guardada ••••XXXX / del servidor ••••XXXX / sin configurar), botón `ai-clear-emergent-button` («Quitar clave Emergent · volver a la del servidor»), etiqueta «Activa ahora» indica el origen.
+- Tested: testing_agent iteration_54 (100 %): `tests/test_iter64_emergent_key_config.py` 8/8 + UI completa (/bybit y /hotforex). Estado final restaurado (clave borrada → origen env).
+
 ## Backlog
 - P2: Pepperstone cTrader: sin puente (MetaApi solo MetaTrader). Opción futura: cTrader Open API (OAuth + Protobuf) como conector alternativo del motor FX.
 - P2: FX `fix_reversion`: si el bot está apagado durante toda la ventana 16:00–16:30 Londres del último día hábil, la oportunidad del mes se pierde (sin recuperación posterior, por diseño).
