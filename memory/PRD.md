@@ -417,6 +417,11 @@
 - Causa: `EMERGENT_LLM_KEY` en `/app/backend/.env` (…3967, recreado al hacer fork) estaba inactiva («API key is inactive»). Sustituida por la clave universal vigente (…f195, obtenida del gestor de integraciones) y backend reiniciado. Si vuelve a pasar: `emergent_integrations_manager` → actualizar solo esa línea del .env → `supervisorctl restart backend`.
 - Tested: testing_agent iteration_55 (100 %): /ai/test en /api, /api/fx, /api/pepper con Claude, GPT y Gemini vía Emergent; UI «Probar conexión» OK, health ok, chat responde.
 
+## Implemented (2026-06, iteration 65 · diagnóstico de la clave de IA en uso — para el caso «el VPS usa una clave antigua»)
+- Precedencia confirmada en código y por pruebas: clave escrita en el formulario (solo para «Probar conexión») > `emergent_llm_key` guardada en Ajustes > `EMERGENT_LLM_KEY` del entorno. `ai_runtime()` devuelve `origin` (typed | config | env | gemini | none).
+- `ai_advisor.key_hint()` / `ORIGIN_LABELS`; `configure(..., origin)` registra en logs «IA configurada: … · clave ••••XXXX (origen)» al cambiar; `current()` expone `key_hint`, `key_origin`, `key_origin_label` → Ajustes muestra «Clave en uso: ••••XXXX · origen» (`ai-active-key`), la respuesta de «Probar conexión» incluye la clave usada y el 424 dice «Error IA (clave ••••XXXX · origen): …».
+- Tested: testing_agent iteration_56 (100 %). Nota VPS: si tras guardar el banner sigue diciendo «variable del servidor», el contenedor backend corre código viejo (ejecutar `deploy/update.sh` o `update-zip.sh`); si dice «guardada en Ajustes ••••XXXX» y falla «API key inválida», la clave en sí es rechazada por Emergent (revisar en Perfil → Universal Key).
+
 ## Backlog
 - P2: Pepperstone cTrader: sin puente (MetaApi solo MetaTrader). Opción futura: cTrader Open API (OAuth + Protobuf) como conector alternativo del motor FX.
 - P2: FX `fix_reversion`: si el bot está apagado durante toda la ventana 16:00–16:30 Londres del último día hábil, la oportunidad del mes se pierde (sin recuperación posterior, por diseño).

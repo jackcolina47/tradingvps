@@ -1,0 +1,31 @@
+{
+  "summary": "Tested how the Emergent key is chosen (typed > saved > env) and the new diagnostics (key_hint/key_origin/key_origin_label, ai-active-key banner, ai-test-reply, 424 detail, 'IA configurada' log), through the backend API and the UI. All requested scenarios pass. The saved fake key (••••ab12) is the one actually used: /api/ai/test returns 424 'Error IA (clave ••••ab12 · guardada en Ajustes): API key inválida…' and the backend log shows 'IA configurada: Claude Sonnet 5.5 · anthropic · clave ••••ab12 (guardada en Ajustes)'. A typed key is used only for that test: it returns 200 with ••••f195 · escrita en el formulario and the saved key is unchanged. Replace and clear work. /api/fx/ai/test returns 200 with key_hint. Chat answers with no chat-error-message. The only console error is the expected 424 from the fake-key test.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "ai_advisor.configure", "issue": "The 'IA configurada' log line is written only when the key, provider or model changes. If the saved key is the same as the env key, clearing it (config→env) changes only the origin, so no log line is written. Log reads during the clear step were inconclusive. Consider including origin in the 'changed' tuple."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Ajustes → Inteligencia artificial", "issues": ["The success toast after Probar conexión always says 'recuerda guardar para activarla', even when testing the already saved or env key with nothing typed. data.saved is returned but not used to change the text."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter65_ai_key_precedence.py", "/app/test_reports/pytest/iter65.xml"],
+  "action_items": [
+    "Optional: add origin to the change detection in ai_advisor.configure so a config→env switch with the same key is still logged.",
+    "Optional: use data.saved in AiSection test() to drop 'recuerda guardar' when no unsaved key was tested."
+  ],
+  "critical_code_review_comments": [
+    "Precedence in ConfigStore.ai_runtime is correct: a typed key is used only if it is not masked (••), then the saved key, then os.environ.",
+    "The real key is never returned in responses (verified in test_04)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter65_ai_key_precedence.py"],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100%"},
+  "seed_data_creation": "None. A temporary fake key was saved and then removed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Final state confirmed: emergent key cleared (emergent_configured false), ai_source emergent, provider anthropic, model claude-sonnet-5-5, key_origin env ••••f195, health ok. No bots started. Re-run test_iter65_ai_key_precedence.py for regression; its teardown restores this state."
+}
