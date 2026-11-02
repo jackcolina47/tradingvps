@@ -389,6 +389,14 @@
 - Endpoint compartido `GET {base}/trades/{id}/detail` (`routers/shared_routes.py`, /api, /api/fx, /api/pepper) → `{trade, signal|null, currency}`; 404 si el id no existe.
 - Verificado manualmente: curl (con/sin señal, 404) + UI escritorio y móvil 390px (sin overflow) con 2 operaciones de prueba luego borradas. Pendiente testing_agent si el usuario lo pide.
 
+## Implemented (2026-06, iteration 60 · detalle de operación: mini gráfico, notas/etiquetas del usuario y filtros del historial — los 3 bots)
+- `GET {base}/trades/{id}/candles` (`routers/shared_routes.py`): velas alrededor de la operación; timeframe elegido para que la duración ocupe ≤ 90 velas (5m/15m/1h/4h/1d, 25 velas de margen a cada lado) y **sube al siguiente timeframe si la ventana queda vacía** (fin de semana / mercado cerrado). Devuelve `candles, tf, step, digits, opened, closed, side, entry, exit, sl, initial_sl, tp`. Cripto usa `fetch_before` en ms, FX en s (`add_shared_routes(..., before_unit="s")`).
+- `TradeMiniChart.jsx`: lightweight-charts dentro del diálogo (sin scroll/zoom), líneas ENTRADA (blanca), SALIDA (ámbar), TP (verde), SL inicial (rojo), SL final (rosa, si difiere), marcadores Apertura/Cierre, leyenda; usa `shift()` exportado de `chart/useChart.js` para hora local.
+- Notas: `Trade.note` (≤ 2000) y `Trade.tags` (≤ 10, ≤ 30 car.). `PUT {base}/trades/{id}/note` (recorta, deduplica). `TradeNoteEditor.jsx`: etiquetas sugeridas (Buena entrada, Entrada tardía, Salida prematura, SL muy ajustado, Contra tendencia, Noticias, Revisar) + etiqueta libre, textarea, «Guardar nota» (toast). La fila del historial muestra icono de nota (`trade-note-icon-{id}`) con tooltip; el historial mantiene las ediciones en memoria (`edits`) hasta el siguiente refresco.
+- Filtros (`TradeFilters.jsx`, solo frontend): símbolo, estrategia, motivo (Select shadcn), desde/hasta (input date, día local), búsqueda en notas/etiquetas, contador «X de Y», «Limpiar». El historial carga `/trades?limit=500` al montar (y al cambiar la primera operación) para filtrar sobre todo el historial, no solo los 50 del dashboard.
+- Fix durante la verificación: crash `Cannot read properties of null (reading 'note')` al cerrar el diálogo con detalle cargado (`TradeDetailDialog`), corregido.
+- Verificado manualmente: curl velas (cripto 5m/1h, FX 5m con fallback), nota (recorte/dedupe, 404), UI: filtros por motivo y búsqueda, guardado de nota → icono en fila, gráfico renderizado (canvas), móvil 390px sin overflow. Datos de prueba borrados.
+
 
 ## Backlog
 - P2: Pepperstone cTrader: sin puente (MetaApi solo MetaTrader). Opción futura: cTrader Open API (OAuth + Protobuf) como conector alternativo del motor FX.

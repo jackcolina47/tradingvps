@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { SideBadge } from "./Panel";
+import TradeMiniChart from "./TradeMiniChart";
+import TradeNoteEditor from "./TradeNoteEditor";
 import {
   api, errMsg, fmtPrice, fmtQty, fmtSignedUsd, fmtPct, pnlClass,
   REASON_LABELS, STRATEGY_LABELS, HORIZON_LABELS, ENTRY_LABELS,
@@ -34,7 +36,7 @@ const Row = ({ label, value, className = "", testId }) => (
   </div>
 );
 
-function TradeDetailBody({ trade: t, signal: s, currency }) {
+function TradeDetailBody({ trade: t, signal: s, currency, onSaved }) {
   const price = (v) => (v == null || v === 0 ? "—" : fmtPrice(v));
   const rr = t.initial_sl && t.tp ? (Math.abs(t.tp - t.entry_price) / Math.abs(t.entry_price - t.initial_sl)).toFixed(2) : null;
   return (
@@ -49,6 +51,9 @@ function TradeDetailBody({ trade: t, signal: s, currency }) {
           {fmtSignedUsd(t.pnl)} <span className="text-xs">({fmtPct(t.pnl_pct)})</span>
         </span>
       </div>
+
+      <TradeMiniChart tradeId={t.id} />
+      <TradeNoteEditor trade={t} onSaved={onSaved} />
 
       <Section title="Tiempos" testId="trade-detail-times">
         <Row label="Apertura" value={fmtFull(t.opened_at)} testId="trade-detail-opened" />
@@ -132,15 +137,16 @@ function TradeDetailBody({ trade: t, signal: s, currency }) {
   );
 }
 
-export default function TradeDetailDialog({ trade, onClose }) {
+export default function TradeDetailDialog({ trade, onClose, onSaved }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
+  const tradeId = trade?.id;
   useEffect(() => {
-    if (!trade) return;
+    if (!tradeId) return;
     setData(null); setErr("");
-    api.get(`/trades/${trade.id}/detail`).then((r) => setData(r.data)).catch((e) => setErr(errMsg(e)));
-  }, [trade]);
-  const t = data?.trade || trade;
+    api.get(`/trades/${tradeId}/detail`).then((r) => setData(r.data)).catch((e) => setErr(errMsg(e)));
+  }, [tradeId]);
+  const t = trade && data?.trade ? { ...data.trade, note: trade.note ?? data.trade.note, tags: trade.tags ?? data.trade.tags } : trade;
   return (
     <Dialog open={!!trade} onOpenChange={(o) => !o && onClose()}>
       <DialogContent data-testid="trade-detail-dialog" className="max-h-[90vh] max-w-2xl overflow-y-auto thin-scroll border-[#1E293B] bg-[#0D111A] text-slate-200">
@@ -150,7 +156,7 @@ export default function TradeDetailDialog({ trade, onClose }) {
         </DialogHeader>
         {err && <p data-testid="trade-detail-error" className="text-xs text-rose-400">{err}</p>}
         {!data && !err && t && <div className="flex items-center gap-2 text-xs text-slate-500"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando detalle…</div>}
-        {t && (data || err) && <TradeDetailBody trade={t} signal={data?.signal} currency={data?.currency || "USD"} />}
+        {t && (data || err) && <TradeDetailBody trade={t} signal={data?.signal} currency={data?.currency || "USD"} onSaved={onSaved} />}
       </DialogContent>
     </Dialog>
   );

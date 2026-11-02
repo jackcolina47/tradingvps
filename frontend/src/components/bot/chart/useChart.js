@@ -7,7 +7,7 @@ const lineOpts = (color, width = 1) => ({ color, lineWidth: width, priceLineVisi
 // lightweight-charts draws UTC: shift every timestamp by the browser offset so axis + crosshair read in local time (DST-aware per candle)
 export const toLocal = (t) => t - new Date(t * 1000).getTimezoneOffset() * 60;
 
-function shift(points, daily) {
+export function shift(points, daily) {
   if (daily) return points; // daily candles are dates (00:00 UTC): keep them as calendar days
   let prev = -Infinity;
   return points.map((p) => {

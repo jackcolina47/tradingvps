@@ -1,15 +1,26 @@
-"""Endpoints shared by both bots (session, password, Telegram/AI connection tests). Registered on each protected router."""
-from typing import Optional
+"""Endpoints shared by both bots (session, password, Telegram/AI connection tests, trade detail/notes/candles). Registered on each protected router."""
+import time
+from datetime import datetime
+from typing import Optional, List
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 from bson import ObjectId
 
 import notify
 import cashflow
+import chart
 from auth import hash_password, verify_password, create_token
 from ai_advisor import ping as ai_ping, current as ai_current, friendly_error
 from deps import store
 from models import Trade, Signal
+
+TRADE_TFS = [("5m", 300), ("15m", 900), ("1h", 3600), ("4h", 14400), ("1d", 86400)]
+CHART_PAD = 25
+
+
+class TradeNote(BaseModel):
+    note: str = Field(default="", max_length=2000)
+    tags: List[str] = Field(default_factory=list)
 
 
 class PasswordChange(BaseModel):
@@ -34,19 +45,20 @@ class CashFlowRequest(BaseModel):
     note: str = Field(default="", max_length=120)
 
 
-def add_shared_routes(router, engine, label: str, currency: str = "USDT"):
+def add_shared_routes(router, engine, label: str, currency: str = "USDT", before_unit: str = "ms"):
+    async def _trade(trade_id: str) -> Trade:
+        doc = await engine.db.trades.find_one({"_id": ObjectId(trade_id)}) if ObjectId.is_valid(trade_id) else None
+        if not doc:
+            raise HTTPException(404, "Operación no encontrada")
+        return Trade.from_mongo(doc)
+
     @router.get("/auth/me")
     async def auth_me():
         return {"ok": True}
 
     @router.get("/trades/{trade_id}/detail")
     async def trade_detail(trade_id: str):
-        if not ObjectId.is_valid(trade_id):
-            raise HTTPException(404, "Operación no encontrada")
-        doc = await engine.db.trades.find_one({"_id": ObjectId(trade_id)})
-        if not doc:
-            raise HTTPException(404, "Operación no encontrada")
-        trade = Trade.from_mongo(doc).model_dump()
+        trade = (await _trade(trade_id)).model_dump()
         signal = None
         sid = trade.get("signal_id")
         if sid and ObjectId.is_valid(sid):
@@ -54,6 +66,39 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT"):
             if sdoc:
                 signal = Signal.from_mongo(sdoc).model_dump()
         return {"trade": trade, "signal": signal, "currency": currency}
+
+    @router.put("/trades/{trade_id}/note")
+    async def trade_note(trade_id: str, body: TradeNote):
+        await _trade(trade_id)
+        tags = list(dict.fromkeys(t.strip()[:30] for t in body.tags if t.strip()))[:10]
+        note = body.note.strip()
+        await engine.db.trades.update_one({"_id": ObjectId(trade_id)}, {"$set": {"note": note, "tags": tags}})
+        return {"ok": True, "id": trade_id, "note": note, "tags": tags}
+
+    @router.get("/trades/{trade_id}/candles")
+    async def trade_candles(trade_id: str):
+        """Candles around the trade (timeframe picked so the hold spans ~≤ 90 candles) plus entry/exit/SL/TP levels for the mini chart."""
+        t = await _trade(trade_id)
+        o = datetime.fromisoformat(t.opened_at).timestamp()
+        c = datetime.fromisoformat(t.closed_at).timestamp()
+        dur = max(c - o, 60)
+        start = next((i for i, (_, s) in enumerate(TRADE_TFS) if dur / s <= 90), len(TRADE_TFS) - 1)
+        candles, tf, step = [], None, None
+        for tf, step in TRADE_TFS[start:]:  # widen the timeframe when the window has no candles (weekend / market closed)
+            n = min(int(dur / step) + 2 * CHART_PAD, 600)
+            end = min(int(c) + CHART_PAD * step, int(time.time()) + step)
+            try:
+                rows = await engine.market.fetch_before(t.symbol, tf, end * 1000 if before_unit == "ms" else end, n)
+            except Exception as e:
+                raise HTTPException(502, f"No se pudieron cargar las velas: {e}")
+            lo = int(o) - CHART_PAD * step
+            candles = [{"time": int(float(r[0])) // 1000, "open": float(r[1]), "high": float(r[2]), "low": float(r[3]), "close": float(r[4])} for r in rows or []]
+            candles = [x for x in candles if x["time"] >= lo]
+            if candles:
+                break
+        snap = lambda ts: int(ts) - int(ts) % step  # noqa: E731
+        return {"tf": tf, "step": step, "digits": chart.price_digits(t.symbol, candles[-1]["close"] if candles else t.entry_price), "candles": candles,
+                "opened": snap(o), "closed": snap(c), "side": t.side, "entry": t.entry_price, "exit": t.exit_price, "sl": t.sl, "initial_sl": t.initial_sl, "tp": t.tp}
 
     @router.get("/account/cashflows")
     async def cashflows():

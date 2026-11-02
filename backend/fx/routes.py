@@ -304,7 +304,7 @@ def register(router, engine, store, news):
 def build_router(engine, store, news):
     router = protected_router()
     router.prefix = engine.profile.api_prefix
-    add_shared_routes(router, engine, engine.profile.bot_name, "USD")
+    add_shared_routes(router, engine, engine.profile.bot_name, "USD", before_unit="s")
     register(router, engine, store, news)
     routes_analysis.register(router, engine, store, news)
     routes_hfm.register(router, engine, store)

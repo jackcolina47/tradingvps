@@ -271,6 +271,8 @@ class Trade(BaseDocument):
     breakeven: bool = False
     signal_id: Optional[str] = None
     order_id: Optional[str] = None
+    note: str = ""
+    tags: List[str] = []
     closed_at: str = Field(default_factory=now_iso)
 
 
