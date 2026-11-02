@@ -403,6 +403,11 @@
 - Tested: testing_agent iteration_52 (100 %): pytest `tests/test_iter62_trade_history_per_bot.py` 12/12 (listas aisladas por router, detail/candles/note por bot, ids cruzados → 404) + UI en los 3 bots (lista propia tras «Cambiar bot», gráfico, nota guardada en /api/fx, filtros, cierre del diálogo sin crash, 0 errores de consola).
 
 
+## Fixed (2026-06, iteration 62 · chat IA con Gemini directo (AI Studio): «Function call is missing a thought_signature in functionCall parts»)
+- Causa: Gemini 3 exige devolver cada `functionCall` del historial con su `thought_signature`. litellm 1.80 la entrega en `message.thinking_blocks` y solo la reinyecta si el mensaje del asistente guardado en el historial conserva `thinking_blocks`; `LlmChat._assistant_history_message` (emergentintegrations) lo reconstruye solo con `tool_calls` → la 2.ª vuelta (tras los resultados de herramientas) devolvía 400.
+- Fix `ai_advisor._keep_thought_signatures(chat, resp)` llamado en `ask_tools()`: copia `resp.raw.choices[0].message.thinking_blocks` al último mensaje del historial si es del asistente con `tool_calls` (no-op con el proxy Emergent, que no devuelve firmas). Requiere redesplegar el código en el VPS.
+- Tested: testing_agent iteration_53 (100 %): `tests/test_iter63_gemini_thought_signature.py` (helper + forma de la petición Gemini: un solo `functionCall` con `thoughtSignature`; sin bloques reproduce la condición del bug) + regresión del chat real con clave Emergent (turno con herramientas y seguimiento). No reproducido en vivo con Gemini directo (sin clave AI Studio en el entorno).
+
 ## Backlog
 - P2: Pepperstone cTrader: sin puente (MetaApi solo MetaTrader). Opción futura: cTrader Open API (OAuth + Protobuf) como conector alternativo del motor FX.
 - P2: FX `fix_reversion`: si el bot está apagado durante toda la ventana 16:00–16:30 Londres del último día hábil, la oportunidad del mes se pierde (sin recuperación posterior, por diseño).

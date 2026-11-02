@@ -1,0 +1,28 @@
+{
+  "summary": "Verified the Gemini 3 thought_signature fix (_keep_thought_signatures in ai_advisor.ask_tools) with unit tests that make no network calls. Also ran an end-to-end chat regression with the Emergent LLM key through the API and the UI. Unit tests: the helper copies thinking_blocks onto the last assistant message that has tool_calls. It does nothing (and raises nothing) when the attribute is missing, None, the last message has no tool_calls, the last message is a user message, resp.raw is missing or None, or the history is empty. With litellm 1.80.0 _gemini_convert_messages_with_history, the model turn has exactly one functionCall part with thoughtSignature == 'SIG123' (no duplicate, because the tool_call part is deduped with thoughtSignature excluded). Without thinking_blocks there is no thoughtSignature, which matches the original bug condition. Live regression: a tool-calling turn (get_performance, get_market_context, get_logs, news agent) and the follow-up 'Gracias, resume en una línea.' both answered with no errors, via API and in the /bybit chat panel (no chat-error-message, no chat-ai-down, tools-used chip shown). No real thought_signature errors in backend logs. The live Gemini-direct 400 was not reproduced because there is no Google AI Studio key here. The fix is verified by unit tests only.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Chat assistant message", "issue": "The model copies the history annotation into its visible reply: the text '[Herramientas consultadas en esta respuesta: get_performance, get_market_context, get_logs]' is shown to the user. Cause: chat/service.py _to_llm (line 113) appends this tag to past assistant turns in the LLM history, so the model imitates it.", "selector": "[data-testid=chat-messages]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter63_gemini_thought_signature.py", "/app/test_reports/pytest/pytest_iter63.xml"],
+  "action_items": [
+    "Optional (LOW): stop the model from repeating the '[Herramientas consultadas…]' tag. Either tell it in the system prompt not to reproduce the tag, or strip that pattern from replies before saving them, or put the info in a form the model is less likely to copy."
+  ],
+  "critical_code_review_comments": [
+    "The fix is correct and minimal. It relies on send_message_with_tools appending to the same list (get_messages returns self.messages), which is true in the installed emergentintegrations version. Re-check if the library is upgraded.",
+    "The thinking_blocks key is also sent on the Emergent-proxy (openai custom provider) path. It is harmless today because the proxy returns no thinking_blocks, so the key is never set.",
+    "litellm turns every part that has a thoughtSignature (including text parts) into a thinking block. If Gemini signs a text part in a tool-call turn, the history could contain that text twice (once from the thinking block, once from content). This is unlikely to cause a 400 but is worth knowing.",
+    "Signatures are kept only within a single turn's tool loop. History rebuilt from the DB (_to_llm) holds plain text only, with no tool_calls, so no signatures are needed across turns. This is correct for Gemini."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter63_gemini_thought_signature.py"],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "100%"},
+  "seed_data_creation": "Added 2 chat exchanges (4 messages) to the active chat session during regression.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run with: cd /app/backend && REACT_APP_BACKEND_URL=... python -m pytest -n0 tests/test_iter63_gemini_thought_signature.py (pytest.ini adds xdist -n). Editing files under backend/tests triggers a backend hot reload (WatchFiles), so do not edit tests while a chat job is running. Chat jobs always end with status 'done'; LLM failures show up as result.assistant.error=true. The panel value must be crypto/fx/pepper.",
+  "rca of the issue": "Gemini 3 returns thoughtSignature on functionCall parts. litellm exposes it as message.thinking_blocks, but LlmChat._assistant_history_message stores only content and tool_calls, so on the next hop litellm rebuilds the functionCall without thoughtSignature and gets a 400. The fix copies thinking_blocks onto chat.messages[-1]. Unit tests confirm the outgoing Gemini request now includes thoughtSignature."
+}
