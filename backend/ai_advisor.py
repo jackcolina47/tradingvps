@@ -200,6 +200,18 @@ def tool_chat(system: str, prefix: str, history: list, tools: list = None) -> Ll
     return chat
 
 
+def _keep_thought_signatures(chat: LlmChat, resp) -> None:
+    """Gemini 3 rejects function calls echoed back without their thought_signature; LlmChat rebuilds the assistant turn with bare tool_calls, so copy
+    litellm's thinking_blocks (functionCall part + signature) onto the stored message. No-op for other providers."""
+    try:
+        blocks = getattr(resp.raw.choices[0].message, "thinking_blocks", None)
+        last = chat.messages[-1] if chat.messages else None
+        if blocks and last and last.get("role") == "assistant" and last.get("tool_calls"):
+            last["thinking_blocks"] = blocks
+    except Exception as e:  # history shape is internal to the library: never break the turn over it
+        logger.debug(f"thought_signature: {e}")
+
+
 async def ask_tools(chat: LlmChat, text: str | None):
     """One non-streaming turn; `text=None` continues after add_tool_result(). Returns ChatResponse (content, tool_calls)."""
     try:
@@ -207,6 +219,7 @@ async def ask_tools(chat: LlmChat, text: str | None):
     except Exception as e:
         await _mark_failure(e)
         raise
+    _keep_thought_signatures(chat, resp)
     await _mark_ok()
     await record_usage(getattr(chat, "_kind", "other"))
     if resp.finish_reason == "length":
