@@ -38,6 +38,7 @@ class AiTestRequest(BaseModel):
     ai_model: Optional[str] = Field(default=None, max_length=80)
     gemini_model: Optional[str] = Field(default=None, max_length=80)
     gemini_api_key: Optional[str] = Field(default=None, max_length=200)
+    emergent_llm_key: Optional[str] = Field(default=None, max_length=200)
 
 
 class CashFlowRequest(BaseModel):
@@ -151,6 +152,8 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
             rt = store.ai_runtime(body.model_dump() if body else None)
         except ValueError as e:
             raise HTTPException(400, str(e))
+        if rt["source"] == "emergent" and not rt["api_key"]:
+            raise HTTPException(400, "No hay clave universal de Emergent: introdúcela en el campo o define EMERGENT_LLM_KEY en el servidor")
         try:
             return {"ok": True, "reply": await ai_ping(rt), **ai_current(rt), "saved": body is None or not body.model_dump(exclude_none=True)}
         except Exception as e:

@@ -6,8 +6,8 @@ import ai_advisor
 import notify
 from auth import hash_password
 
-SECRET_FIELDS = ("gemini_api_key", "telegram_bot_token", "bybit_api_key", "bybit_api_secret")
-ENCRYPTED_FIELDS = ("bybit_api_secret", "bybit_api_key", "gemini_api_key", "telegram_bot_token")
+SECRET_FIELDS = ("gemini_api_key", "emergent_llm_key", "telegram_bot_token", "bybit_api_key", "bybit_api_secret")
+ENCRYPTED_FIELDS = ("bybit_api_secret", "bybit_api_key", "gemini_api_key", "emergent_llm_key", "telegram_bot_token")
 AI_PROVIDERS = ["anthropic", "openai", "gemini"]
 AI_SOURCES = ["emergent", "gemini"]
 BYBIT_ENVS = ["mainnet", "testnet", "demo"]
@@ -37,6 +37,7 @@ class AppConfig(BaseModel):
     ai_model: str = "claude-sonnet-5-5"
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.1-pro-preview"
+    emergent_llm_key: str = ""
     telegram_enabled: bool = False
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
@@ -97,6 +98,7 @@ class ConfigUpdate(BaseModel):
     ai_model: Optional[str] = Field(default=None, min_length=2, max_length=80)
     gemini_api_key: Optional[str] = Field(default=None, max_length=200)
     gemini_model: Optional[str] = Field(default=None, min_length=2, max_length=80)
+    emergent_llm_key: Optional[str] = Field(default=None, max_length=200)
     telegram_enabled: Optional[bool] = None
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = Field(default=None, max_length=40)
@@ -111,6 +113,7 @@ class ConfigUpdate(BaseModel):
     bybit_base_url: Optional[str] = Field(default=None, max_length=200)
     bybit_alert_after_sec: Optional[int] = Field(default=None, ge=10, le=3600)
     clear_gemini_api_key: bool = False
+    clear_emergent_llm_key: bool = False
     clear_telegram_bot_token: bool = False
     clear_bybit: bool = False
 
@@ -157,7 +160,12 @@ class ConfigStore:
             if not key:
                 raise ValueError("Introduce la API key de Google Gemini")
             return {"api_key": key, "provider": "gemini", "model": c["gemini_model"], "source": "gemini"}
-        return {"api_key": os.environ.get("EMERGENT_LLM_KEY", ""), "provider": c["ai_provider"], "model": c["ai_model"], "source": "emergent"}
+        own = self.cfg.emergent_llm_key if c["emergent_llm_key"].startswith("••") else c["emergent_llm_key"]
+        return {"api_key": own or os.environ.get("EMERGENT_LLM_KEY", ""), "provider": c["ai_provider"], "model": c["ai_model"], "source": "emergent"}
+
+    def emergent_key_origin(self) -> str:
+        """Where the Emergent key in use comes from: «config» (saved in Ajustes), «env» (server variable) or «none»."""
+        return "config" if self.cfg.emergent_llm_key else ("env" if os.environ.get("EMERGENT_LLM_KEY") else "none")
 
     def public(self) -> dict:
         d = self.cfg.model_dump(exclude={"password_hash", "token_version"})
@@ -169,6 +177,9 @@ class ConfigStore:
         d["gemini_models"] = ai_advisor.GEMINI_MODELS
         d["gemini_key_url"] = ai_advisor.GEMINI_KEY_URL
         d["gemini_configured"] = bool(self.cfg.gemini_api_key)
+        d["emergent_configured"] = bool(self.cfg.emergent_llm_key)
+        d["emergent_key_origin"] = self.emergent_key_origin()
+        d["emergent_env_key"] = mask(os.environ.get("EMERGENT_LLM_KEY", ""))
         d["ai_active"] = ai_advisor.current()
         d["bybit_envs"] = BYBIT_ENVS
         d["bybit_configured"] = bool(self.cfg.bybit_api_key and self.cfg.bybit_api_secret)
@@ -178,7 +189,7 @@ class ConfigStore:
 
     def patch_from(self, body: ConfigUpdate) -> dict:
         patch = {}
-        for k, v in body.model_dump(exclude={"clear_gemini_api_key", "clear_telegram_bot_token", "clear_bybit"}).items():
+        for k, v in body.model_dump(exclude={"clear_gemini_api_key", "clear_emergent_llm_key", "clear_telegram_bot_token", "clear_bybit"}).items():
             if v is None or (k in SECRET_FIELDS and (v == "" or v.startswith("••"))):
                 continue
             patch[k] = v.strip() if isinstance(v, str) else v
@@ -187,6 +198,10 @@ class ConfigStore:
             patch["gemini_model"] = AppConfig.model_fields["gemini_model"].default
             if patch.get("ai_source", self.cfg.ai_source) == "gemini":
                 patch["ai_source"] = "emergent"
+        if body.clear_emergent_llm_key:
+            patch["emergent_llm_key"] = ""
+        if "emergent_llm_key" in patch and patch["emergent_llm_key"] and not patch["emergent_llm_key"].startswith("sk-emergent-"):
+            raise ValueError("La clave universal de Emergent empieza por «sk-emergent-»")
         if body.clear_telegram_bot_token:
             patch["telegram_bot_token"] = ""
         if body.clear_bybit:

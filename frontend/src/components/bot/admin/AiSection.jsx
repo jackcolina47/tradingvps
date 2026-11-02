@@ -23,7 +23,18 @@ const SourceCard = ({ s, active, onClick }) => (
   </button>
 );
 
-const fromConfig = (c) => ({ ai_source: c.ai_source, ai_provider: c.ai_provider, ai_model: c.ai_model, gemini_model: c.gemini_model, gemini_api_key: "" });
+const fromConfig = (c) => ({ ai_source: c.ai_source, ai_provider: c.ai_provider, ai_model: c.ai_model, gemini_model: c.gemini_model, gemini_api_key: "", emergent_llm_key: "" });
+
+const emergentKeyLabel = (c) => {
+  if (c.emergent_configured) return `Clave universal de Emergent · guardada ${c.emergent_llm_key}`;
+  if (c.emergent_key_origin === "env") return `Clave universal de Emergent · del servidor ${c.emergent_env_key}`;
+  return "Clave universal de Emergent · sin configurar";
+};
+const emergentKeyHint = (c) => {
+  if (c.emergent_configured) return "Déjala vacía para mantener la guardada; escribe otra para sustituirla.";
+  if (c.emergent_key_origin === "env") return "Se está usando la variable EMERGENT_LLM_KEY del servidor. Escribe aquí una clave para usar otra distinta.";
+  return "No hay ninguna clave en el servidor: pega aquí tu clave universal (sk-emergent-…) para activar la IA.";
+};
 
 export default function AiSection({ config, onSave }) {
   const [form, setForm] = useState(fromConfig(config));
@@ -65,7 +76,7 @@ export default function AiSection({ config, onSave }) {
   return (
     <Panel testId="ai-section" title="Inteligencia artificial" icon={BrainCircuit} bodyClass="p-4 space-y-3">
       <p data-testid="ai-active-label" className={`rounded-sm border px-3 py-2 text-[12px] ${active.health?.ok === false ? "border-rose-500/50 bg-rose-500/10 text-rose-200" : "border-[#1E293B] bg-[#07090E] text-slate-300"}`}>
-        Activa ahora en los tres bots: <span className={`font-semibold ${active.health?.ok === false ? "text-rose-300" : "text-amber-300"}`}>{active.label}</span> <span className={active.health?.ok === false ? "text-rose-300/70" : "text-slate-500"}>· {active.source === "gemini" ? "tu API key de Google Gemini" : "clave universal de Emergent"} · {active.model}</span>
+        Activa ahora en los tres bots: <span className={`font-semibold ${active.health?.ok === false ? "text-rose-300" : "text-amber-300"}`}>{active.label}</span> <span className={active.health?.ok === false ? "text-rose-300/70" : "text-slate-500"}>· {active.source === "gemini" ? "tu API key de Google Gemini" : config.emergent_configured ? "clave Emergent guardada en Ajustes" : "clave universal de Emergent del servidor"} · {active.model}</span>
         {active.health?.ok === false && <span data-testid="ai-health-error" className="mt-1 block font-mono text-[11px] text-rose-300">⚠ Sin servicio · {active.health.label}: {active.health.error}</span>}
       </p>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -83,18 +94,25 @@ export default function AiSection({ config, onSave }) {
           </Field>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Proveedor">
-            <Select value={form.ai_provider} onValueChange={(v) => { setDirty(true); setForm((f) => ({ ...f, ai_provider: v, ai_model: config.ai_models[v]?.[0] || f.ai_model })); }}>
-              <SelectTrigger data-testid="ai-provider-select" className={INPUT}><SelectValue /></SelectTrigger>
-              <SelectContent className="border-[#1E293B] bg-[#0D111A]">
-                {config.ai_providers.map((p) => <SelectItem key={p} value={p} className="font-mono text-xs">{PROVIDER_LABEL[p] || p}</SelectItem>)}
-              </SelectContent>
-            </Select>
+        <div className="space-y-3">
+          <Field label={emergentKeyLabel(config)} hint={emergentKeyHint(config)}>
+            <Input data-testid="emergent-llm-key-input" type="password" autoComplete="off" value={form.emergent_llm_key}
+              placeholder={config.emergent_configured ? config.emergent_llm_key : config.emergent_key_origin === "env" ? config.emergent_env_key : "sk-emergent-…"}
+              onChange={(e) => set("emergent_llm_key", e.target.value)} className={INPUT} />
           </Field>
-          <Field label="Modelo" hint="El consumo se descuenta del saldo de tu clave Emergent.">
-            <ModelPicker models={config.ai_models[form.ai_provider] || []} value={form.ai_model} onChange={(v) => set("ai_model", v)} testId="ai-model" />
-          </Field>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Proveedor">
+              <Select value={form.ai_provider} onValueChange={(v) => { setDirty(true); setForm((f) => ({ ...f, ai_provider: v, ai_model: config.ai_models[v]?.[0] || f.ai_model })); }}>
+                <SelectTrigger data-testid="ai-provider-select" className={INPUT}><SelectValue /></SelectTrigger>
+                <SelectContent className="border-[#1E293B] bg-[#0D111A]">
+                  {config.ai_providers.map((p) => <SelectItem key={p} value={p} className="font-mono text-xs">{PROVIDER_LABEL[p] || p}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Modelo" hint="El consumo se descuenta del saldo de tu clave Emergent.">
+              <ModelPicker models={config.ai_models[form.ai_provider] || []} value={form.ai_model} onChange={(v) => set("ai_model", v)} testId="ai-model" />
+            </Field>
+          </div>
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2">
@@ -109,6 +127,11 @@ export default function AiSection({ config, onSave }) {
         )}
         {config.gemini_configured && (
           <Button data-testid="ai-clear-gemini-button" variant="outline" onClick={() => save({ clear_gemini_api_key: true })} disabled={!!busy} className={`${BTN_OUT} text-rose-300 hover:bg-rose-500/10`}>Quitar clave de Gemini</Button>
+        )}
+        {config.emergent_configured && (
+          <Button data-testid="ai-clear-emergent-button" variant="outline" onClick={() => save({ clear_emergent_llm_key: true })} disabled={!!busy} className={`${BTN_OUT} text-rose-300 hover:bg-rose-500/10`}>
+            Quitar clave Emergent{config.emergent_key_origin !== "none" && config.emergent_env_key ? " · volver a la del servidor" : ""}
+          </Button>
         )}
         {dirty && <span data-testid="ai-dirty-badge" className="rounded-sm border border-amber-500/40 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-amber-300">Cambios sin guardar</span>}
       </div>
