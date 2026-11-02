@@ -397,6 +397,11 @@
 - Fix durante la verificación: crash `Cannot read properties of null (reading 'note')` al cerrar el diálogo con detalle cargado (`TradeDetailDialog`), corregido.
 - Verificado manualmente: curl velas (cripto 5m/1h, FX 5m con fallback), nota (recorte/dedupe, 404), UI: filtros por motivo y búsqueda, guardado de nota → icono en fila, gráfico renderizado (canvas), móvil 390px sin overflow. Datos de prueba borrados.
 
+## Fixed (2026-06, iteration 61 · el historial mostraba las operaciones del bot cripto en HotForex y Pepperstone)
+- Causa: los componentes nuevos (`TradeHistory`, `TradeDetailDialog`, `TradeMiniChart`, `TradeNoteEditor`) usaban el cliente global `api` (siempre `/api`) en vez de `http` (base por bot: `/api`, `/api/fx`, `/api/pepper`, fijada por `setApiBase`). REGLA: dentro de los paneles de un bot usar SIEMPRE `http`; `api` solo para funciones globales (chat, backups, VPS, selector).
+- Además `TradeHistory` vuelve a cargar `/trades?limit=500` cuando cambia `http.defaults.baseURL` (por si el componente se reutiliza entre rutas).
+- Tested: testing_agent iteration_52 (100 %): pytest `tests/test_iter62_trade_history_per_bot.py` 12/12 (listas aisladas por router, detail/candles/note por bot, ids cruzados → 404) + UI en los 3 bots (lista propia tras «Cambiar bot», gráfico, nota guardada en /api/fx, filtros, cierre del diálogo sin crash, 0 errores de consola).
+
 
 ## Backlog
 - P2: Pepperstone cTrader: sin puente (MetaApi solo MetaTrader). Opción futura: cTrader Open API (OAuth + Protobuf) como conector alternativo del motor FX.

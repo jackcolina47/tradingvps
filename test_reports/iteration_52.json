@@ -1,0 +1,24 @@
+{
+  "summary": "Verified per-bot isolation of the Historial tab (bug fix) plus trade detail dialog, mini chart, note editor and filters on Bybit, HotForex and Pepperstone. Backend: 12/12 pytest passed (trade lists isolated per router, detail/candles/note per bot, cross-bot ids return 404). UI: each bot shows only its own trades (Bybit ETHUSDT+BTCUSDT, HotForex EURUSD+XAUUSD, Pepperstone GBPUSD), including right after switching bots with 'Cambiar bot' (no stale list, even 300ms after the tab opens). All detail/candles/note requests go to the correct base (/api, /api/fx, /api/pepper). Charts load: XAUUSD 'velas 5m · 128', GBPUSD 'velas 5m · 110', BTCUSDT 'velas 5m · 97'. Saving a note on the FX trade shows the 'Nota guardada' toast and the note icon, and the note persists on /api/fx; /api/trades/{fxId} returns 404. Filters work: Take Profit gives '1 de 2', searching 'limpia' shows only BTCUSDT, Clear brings back 2 rows. The BTCUSDT 'Señal de origen' section is present. Closing the dialog with Escape or the X button does not crash the page. No console errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Trade detail mini chart (FX seeded trades)", "issues": ["Seeded XAUUSD (entry 2650) and GBPUSD (entry 1.27) prices are far from the real Yahoo candles (~4000 / ~1.34), so the entry/exit/SL price lines sit off the visible chart. This comes from the seed data, not a code bug, but real trades will look fine."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter62_trade_history_per_bot.py", "/app/test_reports/pytest/pytest_iter62.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "TradeHistory: http.get('/trades?limit=500').catch(() => {}) swallows errors silently and falls back to the `trades` prop with no error state.",
+    "Candles and trades requests fire twice per open because of React.StrictMode double effects in dev only. Harmless.",
+    "setApiBase() runs during render in Dashboard/FxDashboard and mutates a global axios client. It works now, but it is fragile if two dashboards ever mount together (for example during a route transition with a pending request)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter62_trade_history_per_bot.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None. The UI test note on FX XAUUSD (6ae84e68799fc5d2666cceb0) was reset to an empty note and tags afterwards. The EURUSD note in the API test was restored.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login password BlackCat2233@. Bot cards: bot-card-crypto/fx/pepper. History tabs: tab-history (Bybit), fx-tab-history (FX). Seeded trade ids are in the test file. Did not start any bot."
+}
