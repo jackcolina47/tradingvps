@@ -1,0 +1,31 @@
+{
+  "summary": "Live end-to-end verification of the Gemini 3 thought_signature fix using the real Gemini 3 Flash key (ai_active.source=gemini, model=gemini-3-flash-preview, health.ok=true; AI settings NOT modified, no bots started). API: POST /api/chat/message (crypto, BTCUSDT price) -> job done, assistant.error=false, tool get_market_context used. UI (1920x1080): login -> /hotforex chat (tools get_performance/get_signals/get_trades, ~8s), /bybit chat (get_logs/get_performance), /pepperstone chat (get_signals/get_logs), and multi-hop follow-up 'compara con el bot cripto' in the same shared conversation (get_performance/get_signals) — all returned valid answers, no chat-error-message, no chat-ai-down, no 'No pude responder' / 'thought_signature' text, tool badges shown, correct panel chip per bot. backend.err.log since test start: zero thought_signature/GeminiException/BadRequest entries; ai_health stays ok.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "chat tool loop (litellm/aiohttp)", "issue": "One 'asyncio - ERROR - Unclosed client session' line logged at 06:18:36 during the first Gemini turn — harmless resource-leak warning, not user-facing."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Chat panel (all bots)", "issues": ["Gemini often ends its reply with a literal '[Herramientas consultadas en esta respuesta: get_x, get_y]' line (3 of 5 answers), duplicating the wrench tool badge and exposing raw tool names. Root cause: chat/service.py:113 appends that suffix to stored assistant history, so the model imitates it. Consider moving it to a system note/instruction ('do not repeat this') or stripping the pattern from model output."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter57_gemini_chat_live.py", "/app/test_reports/pytest/pytest_iter57.xml"],
+  "action_items": [
+    "Optional: stop the model echoing '[Herramientas consultadas…]' in its answers (strip in post-processing or change how tools are annotated in history at chat/service.py:113).",
+    "Restore AI source settings afterwards as planned (left untouched by tester)."
+  ],
+  "critical_code_review_comments": [
+    "_keep_thought_signatures is defensive (try/except, no-op for non-Gemini) and correctly copies thinking_blocks + message/tool-call provider_specific_fields onto chat.messages[-1]; verified working live with litellm 1.80.0.",
+    "It relies on LlmChat internal history shape (chat.messages[-1] being the assistant tool_calls turn); a library upgrade could silently make it a no-op — the debug-level log would hide it. Consider logging at warning level when a Gemini response has tool_calls but no signature could be attached."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter57_gemini_chat_live.py"],
+  "success_rate": {"backend": "100% (2/2)", "frontend": "100% (4/4 chat flows)"},
+  "seed_data_creation": "Added 5 user/assistant exchanges to the shared chat conversation (BTC price, HotForex diagnosis, Bybit logs, Pepperstone signals, crypto comparison).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Gemini 3 Flash answers with tools in ~6-10s. Chat is one shared conversation; only one job at a time (409 Busy). test_iter57_gemini_chat_live.py hits the real LLM (requires ai source gemini); test_iter63_gemini_thought_signature.py holds unit tests of the fix."
+}

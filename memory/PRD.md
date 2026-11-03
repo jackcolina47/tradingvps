@@ -422,6 +422,11 @@
 - `ai_advisor.key_hint()` / `ORIGIN_LABELS`; `configure(..., origin)` registra en logs «IA configurada: … · clave ••••XXXX (origen)» al cambiar; `current()` expone `key_hint`, `key_origin`, `key_origin_label` → Ajustes muestra «Clave en uso: ••••XXXX · origen» (`ai-active-key`), la respuesta de «Probar conexión» incluye la clave usada y el 424 dice «Error IA (clave ••••XXXX · origen): …».
 - Tested: testing_agent iteration_56 (100 %). Nota VPS: si tras guardar el banner sigue diciendo «variable del servidor», el contenedor backend corre código viejo (ejecutar `deploy/update.sh` o `update-zip.sh`); si dice «guardada en Ajustes ••••XXXX» y falla «API key inválida», la clave en sí es rechazada por Emergent (revisar en Perfil → Universal Key).
 
+## Fixed (2026-06, iteration 66 · «thought_signature» reproducido con clave Gemini real y verificado en los 3 chats)
+- Con `GEMINI_API_KEY` (AI Studio, en backend/.env solo para pruebas) se reprodujo el 400 exacto sin parche y se confirmó que `_keep_thought_signatures` lo resuelve (llamadas paralelas y multi-hop). El parche ahora copia también `provider_specific_fields` (por tool_call y por mensaje) para litellm nuevos, además de `thinking_blocks` (1.80).
+- `litellm==1.80.0` fijado en requirements.txt (la resolución con `openai==1.99.9` ya daba 1.80.0; ahora explícito). El chat es UNA sola ruta compartida (/api/chat); no hay código distinto por bot → si falla en el VPS en cualquier bot, el VPS corre código viejo: actualizar con `deploy/update.sh` y forzar `docker compose up -d --force-recreate backend`.
+- Tested: testing_agent iteration_57 (100 %, en vivo con Gemini 3 Flash): chat en /hotforex, /bybit, /pepperstone + seguimiento multi-hop + API; sin errores en logs. Config restaurada (fuente Emergent, clave del servidor); la clave Gemini sigue guardada cifrada en Ajustes por si se quiere usar.
+
 ## Backlog
 - P2: Pepperstone cTrader: sin puente (MetaApi solo MetaTrader). Opción futura: cTrader Open API (OAuth + Protobuf) como conector alternativo del motor FX.
 - P2: FX `fix_reversion`: si el bot está apagado durante toda la ventana 16:00–16:30 Londres del último día hábil, la oportunidad del mes se pierde (sin recuperación posterior, por diseño).
