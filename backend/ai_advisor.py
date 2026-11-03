@@ -208,14 +208,34 @@ def tool_chat(system: str, prefix: str, history: list, tools: list = None) -> Ll
     return chat
 
 
+def _as_dict(obj):
+    if obj is None or isinstance(obj, dict):
+        return obj
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump()
+    return dict(obj) if hasattr(obj, "keys") else None
+
+
 def _keep_thought_signatures(chat: LlmChat, resp) -> None:
-    """Gemini 3 rejects function calls echoed back without their thought_signature; LlmChat rebuilds the assistant turn with bare tool_calls, so copy
-    litellm's thinking_blocks (functionCall part + signature) onto the stored message. No-op for other providers."""
+    """Gemini 3 rejects function calls echoed back without their thought_signature. LlmChat rebuilds the assistant turn with bare tool_calls, so copy
+    everything litellm uses to restore the signature onto the stored message: `thinking_blocks` (litellm ≤1.80) and the per-tool-call / per-message
+    `provider_specific_fields` (newer litellm). No-op for providers without signatures."""
     try:
-        blocks = getattr(resp.raw.choices[0].message, "thinking_blocks", None)
+        msg = resp.raw.choices[0].message
         last = chat.messages[-1] if chat.messages else None
-        if blocks and last and last.get("role") == "assistant" and last.get("tool_calls"):
+        if not (last and last.get("role") == "assistant" and last.get("tool_calls")):
+            return
+        blocks = getattr(msg, "thinking_blocks", None)
+        if blocks:
             last["thinking_blocks"] = blocks
+        msg_psf = _as_dict(getattr(msg, "provider_specific_fields", None))
+        if msg_psf:
+            last["provider_specific_fields"] = msg_psf
+        raw_calls = {tc.id: tc for tc in (getattr(msg, "tool_calls", None) or []) if getattr(tc, "id", None)}
+        for stored in last["tool_calls"]:
+            psf = _as_dict(getattr(raw_calls.get(stored.get("id")), "provider_specific_fields", None))
+            if psf:
+                stored["provider_specific_fields"] = psf
     except Exception as e:  # history shape is internal to the library: never break the turn over it
         logger.debug(f"thought_signature: {e}")
 
