@@ -1,0 +1,26 @@
+{
+  "summary": "Verified the Gemini 3.1 Pro functionCall-id fix (ai_advisor._normalize_blocks). Unit: 6/6 pass. The normalized block gives exactly 1 signed part (thoughtSignature 'SIG'). The raw block with the id gives 2 parts, one unsigned, which reproduces the bug condition in litellm 1.80. Live API: POST /api/chat/message on panel fx, polled to done with error=false and real content. UI with ai_active gemini / gemini-3.1-pro-preview (precondition confirmed, settings not changed): HotForex x3 (diagnosis, multi-hop compare with crypto, repeat), Bybit BTC/ETH, Pepperstone signals/status plus multi-hop compare. All 7 turns returned answers that used tools, in 11-17 s each. No chat-error-message, no chat-ai-down, no 'No pude responder' or 'thought_signature'. The backend err log since the test started has no thought_signature, GeminiException, Traceback or ERROR lines. No trading bots were started.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "IA Expert chat", "issues": ["Gemini copies the history annotation '[Herramientas consultadas en esta respuesta: get_performance, get_signals, get_logs]' into its visible answers (seen in 3 of 7 replies). Cause: chat/service.py _to_llm() line 113 adds this text to the assistant history content, and the model imitates it. Not an error, but it clutters the replies."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter66_gemini31_fc_id.py", "/app/test_reports/pytest/iter66.xml"],
+  "action_items": [
+    "Optional: stop the model from repeating the '[Herramientas consultadas…]' history marker. Either pass it as a system/meta note, phrase it so the model won't copy it, or strip it from assistant output.",
+    "Optional: no get_price/get_ticker tool takes an arbitrary symbol. For the BTCUSDT+ETHUSDT request the model only called get_market_context and said it could not get the ETH spot price, so this prompt never produced parallel tool calls. Parallel/multi-tool turns did happen in the FX turns (logs+rendimiento+señales)."
+  ],
+  "critical_code_review_comments": [
+    "_normalize_blocks is correct and safe: it does not mutate its input, skips invalid JSON or None values, only strips 'id' when functionCall is a dict, and keeps signature/type.",
+    "_to_llm history annotation leaks into model output (see design issue)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter66_gemini31_fc_id.py"],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% (7/7 chat turns)"},
+  "seed_data_creation": "None. The chat messages from the tests were added to the shared conversation, and the memory counter went from 0 to 7 notes during the session (probably auto-memory or summary). AI settings were not changed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run pytest without -p no:xdist (pytest.ini uses -n). The chat send button sits in a slide-in panel: wait about 1 s after chat-open-button, or click through JS, to avoid 'outside of viewport'. Gemini 3.1 Pro answered in about 15 s per turn here. The main agent must restore its AI settings."
+}
