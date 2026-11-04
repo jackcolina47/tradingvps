@@ -433,6 +433,11 @@
 - Tested: testing_agent iteration_58 (100 %): `tests/test_iter66_gemini31_fc_id.py` 6/6 + chat en vivo con Gemini 3.1 Pro en /hotforex (x3), /bybit, /pepperstone, multi-hop y API; 0 errores en logs. Config restaurada a Emergent.
 - Regla para el futuro: cualquier cambio en el flujo de herramientas del chat debe probarse con **gemini-3.1-pro-preview** y `tool_choice="required"` (es el modelo que añade ids).
 
+## Implemented (2026-06, iteration 68 · Historial de PnL diario en Rendimiento — por bot)
+- `performance.daily_pnl(db, tz_min)`: agrupa `db.trades` (colección con prefijo de cada bot → datos independientes por bot) por día de cierre; `closed_at` es texto ISO (no Date), por eso se agrupa en Python con desplazamiento `tz` (minutos al este de UTC, enviado por el navegador: `-getTimezoneOffset()`); devuelve `[{day, pnl, trades, wins, cum}]` (últimos 90 días con operaciones). `GET {base}/performance?tz=` en /api y /api/fx|pepper.
+- `performance/DailyPnl.jsx` (recharts ComposedChart): barras verde/rojo por día + línea ámbar de acumulado (eje derecho), tooltip con PnL/operaciones/ganadoras/acumulado, cabecera con Total, días en verde, mejor y peor día. Se oculta sin operaciones. Integrado en `Performance.jsx` sobre las tablas por estrategia.
+- Verificado manualmente: curl en los 3 bots con datos sembrados distintos (totales distintos por bot), UI Bybit y HotForex escritorio + móvil 390px sin overflow. Datos de prueba borrados. Sin testing_agent.
+
 ## Backlog
 - P2: Pepperstone cTrader: sin puente (MetaApi solo MetaTrader). Opción futura: cTrader Open API (OAuth + Protobuf) como conector alternativo del motor FX.
 - P2: FX `fix_reversion`: si el bot está apagado durante toda la ventana 16:00–16:30 Londres del último día hábil, la oportunidad del mes se pierde (sin recuperación posterior, por diseño).

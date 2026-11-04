@@ -1,5 +1,30 @@
+from datetime import datetime, timedelta
+
 from shadow import shadow_stats
 from risk import FEE_RATE, MAKER_FEE
+
+
+async def daily_pnl(db, tz_min: int = 0, days: int = 90) -> list:
+    """PnL per calendar day (day boundaries shifted to the viewer's timezone, `tz_min` = minutes east of UTC) with running cumulative."""
+    rows = await db.trades.find({}, {"closed_at": 1, "pnl": 1}).sort("closed_at", -1).limit(5000).to_list(5000)
+    acc = {}
+    for r in rows:
+        try:
+            day = (datetime.fromisoformat(r["closed_at"]) + timedelta(minutes=tz_min)).strftime("%Y-%m-%d")
+        except (KeyError, TypeError, ValueError):
+            continue
+        a = acc.setdefault(day, {"day": day, "pnl": 0.0, "trades": 0, "wins": 0})
+        pnl = float(r.get("pnl") or 0)
+        a["pnl"] += pnl
+        a["trades"] += 1
+        a["wins"] += pnl > 0
+    out = sorted(acc.values(), key=lambda x: x["day"])[-days:]
+    cum = 0.0
+    for a in out:
+        a["pnl"] = round(a["pnl"], 2)
+        cum += a["pnl"]
+        a["cum"] = round(cum, 2)
+    return out
 
 
 def _row(r: dict) -> dict:
@@ -64,12 +89,13 @@ async def excursion_stats(db, since: str = None) -> dict:
             "open_partials": await db.positions.count_documents({"partial_done": True, "partial_gross": {"$ne": 0}})}
 
 
-async def performance(db, shadow=shadow_stats, with_excursion: bool = True) -> dict:
+async def performance(db, shadow=shadow_stats, with_excursion: bool = True, tz_min: int = 0) -> dict:
     decisions = {r["_id"]: r["n"] async for r in db.signals.aggregate([{"$group": {"_id": "$ai_decision", "n": {"$sum": 1}}}])}
     return {
         "by_strategy": await _group(db, "strategy"), "by_symbol": await _group(db, "symbol"),
         "by_side": await _group(db, "side"), "by_reason": await _group(db, "reason"),
         "by_horizon": await _group(db, "horizon"), "by_entry_type": await _group(db, "entry_type"),
+        "daily": await daily_pnl(db, tz_min),
         "maker": await maker_stats(db), "excursion": await excursion_stats(db) if with_excursion else None,
         "signals": {"total": sum(decisions.values()), "executed": await db.signals.count_documents({"executed": True}),
                     "by_decision": decisions},

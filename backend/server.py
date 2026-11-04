@@ -256,8 +256,8 @@ async def reset_account(body: ResetRequest = None):
 
 
 @api.get("/performance")
-async def get_performance():
-    return await performance(db)
+async def get_performance(tz: int = 0):
+    return await performance(db, tz_min=tz)
 
 
 @api.get("/evolution")

@@ -6,6 +6,7 @@ import { TH, TD } from "./PositionsTable";
 import { http, fmtSignedUsd, fmtUsd, pnlClass, STRATEGY_LABELS, STRATEGY_KEYS, REASON_LABELS, HORIZON_LABELS, ENTRY_LABELS, activeStrategies } from "@/lib/api";
 import ShadowStats from "./performance/ShadowStats";
 import ExcursionStats from "./performance/ExcursionStats";
+import DailyPnl from "./performance/DailyPnl";
 
 const SIDE = { long: "Long", short: "Short" };
 const DECISION = { APROBADA: "Aprobadas IA", RECHAZADA: "Rechazadas IA", BLOQUEADA: "Bloqueadas riesgo", NOTICIAS: "Bloqueadas noticias", FUNDING: "Bloqueadas funding", REGIMEN: "Bloqueadas régimen BTC", ROTACION: "Bloqueadas rotación", EXPOSICION: "Bloqueadas exposición", ROLLOVER: "Bloqueadas rollover", VOLATILIDAD: "Bloqueadas volatilidad", ESTACIONAL: "Bloqueadas estacionalidad", REGIMEN_USD: "Bloqueadas régimen USD", FOMC: "Bloqueadas FOMC", MERCADO: "Mercado cerrado", SESION: "Fuera de sesión", SIN_IA: "Sin IA", ERROR: "Error IA" };
@@ -47,7 +48,7 @@ export default function Performance({ tradeCount, settings, onSave, strategyKeys
   const [data, setData] = useState(null);
   const [error, setError] = useState(false);
   useEffect(() => {
-    http.get("/performance").then((r) => { setData(r.data); setError(false); }).catch(() => setError(true));
+    http.get(`/performance?tz=${-new Date().getTimezoneOffset()}`).then((r) => { setData(r.data); setError(false); }).catch(() => setError(true));
   }, [tradeCount]);
 
   if (error && !data) return <Empty testId="performance-error" text="No se pudo cargar el rendimiento. Reintentando en el próximo refresco." />;
@@ -85,6 +86,7 @@ export default function Performance({ tradeCount, settings, onSave, strategyKeys
         ))}
       </div>
       {!hasTrades && <Empty testId="performance-empty" text="Aún no hay operaciones cerradas. Las estadísticas aparecerán con las primeras operaciones del bot; mientras tanto puedes activar o apagar cada estrategia desde la tabla." />}
+      <DailyPnl data={data.daily} />
       <div className={`grid grid-cols-1 gap-4 ${hasTrades ? "xl:grid-cols-2" : ""}`}>
         <Group title="Por estrategia" label="Estrategia" rows={stratRows} render={(k) => STRATEGY_LABELS[k] || k} testId="perf-by-strategy"
           hint={`${active.length} de ${strategyKeys.length} activas`} isOn={(k) => active.includes(k)} onToggle={toggleStrategy} />

@@ -233,8 +233,8 @@ def register(router, engine, store, news):
         return {**out, "account": await engine.account_summary()}
 
     @router.get("/performance")
-    async def get_performance():
-        return await performance(engine.db, fx_shadow_stats)
+    async def get_performance(tz: int = 0):
+        return await performance(engine.db, fx_shadow_stats, tz_min=tz)
 
     @router.get("/evolution")
     async def get_evolution():
