@@ -141,10 +141,10 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
     async def telegram_test():
         acc = await engine.account_summary()
         try:
-            await notify.send(f"✅ <b>{label}</b> conectado.\nEquidad ${acc['equity']:,.2f} · {acc['open_positions']} posiciones abiertas · bot {'ACTIVO' if engine.running else 'DETENIDO'}")
+            results = await notify.send_detailed(f"✅ <b>{label}</b> conectado.\nEquidad ${acc['equity']:,.2f} · {acc['open_positions']} posiciones abiertas · bot {'ACTIVO' if engine.running else 'DETENIDO'}")
         except Exception as e:
             raise HTTPException(424, str(e)[:200])
-        return {"ok": True}
+        return {"ok": True, "results": results, "sent": sum(1 for r in results if r["ok"]), "total": len(results)}
 
     @router.post("/ai/test")
     async def ai_test(body: AiTestRequest = None):

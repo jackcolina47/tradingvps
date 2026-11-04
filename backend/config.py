@@ -41,6 +41,7 @@ class AppConfig(BaseModel):
     telegram_enabled: bool = False
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
+    telegram_chat_id_2: str = ""
     telegram_alerts: Dict[str, bool] = dict(DEFAULT_ALERTS)
     auto_review_enabled: bool = True
     auto_review_frequency: str = "weekly"
@@ -102,6 +103,7 @@ class ConfigUpdate(BaseModel):
     telegram_enabled: Optional[bool] = None
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = Field(default=None, max_length=40)
+    telegram_chat_id_2: Optional[str] = Field(default=None, max_length=40)
     telegram_alerts: Optional[Dict[str, bool]] = None
     auto_review_enabled: Optional[bool] = None
     auto_review_frequency: Optional[str] = None
@@ -148,7 +150,7 @@ class ConfigStore:
     async def _apply(self):
         c = self.cfg
         ai_advisor.configure(**self.ai_runtime())
-        notify.configure(c.telegram_enabled, c.telegram_bot_token, c.telegram_chat_id, c.telegram_alerts)
+        notify.configure(c.telegram_enabled, c.telegram_bot_token, c.telegram_chat_id, c.telegram_alerts, c.telegram_chat_id_2)
         for fn in self.listeners:
             await fn(c)
 
@@ -187,6 +189,7 @@ class ConfigStore:
         d["bybit_envs"] = BYBIT_ENVS
         d["bybit_configured"] = bool(self.cfg.bybit_api_key and self.cfg.bybit_api_secret)
         d["telegram_ready"] = notify.is_on()
+        d["telegram_chats_count"] = len(notify.chat_ids())
         d["secrets_encrypted"] = _fernet is not None
         return d
 
