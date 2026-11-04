@@ -443,6 +443,11 @@
 - `DailyPnl.jsx`: dos selectores segmentados (`daily-pnl-range-{7|30|90|0}`, `daily-pnl-group-{day|week|month}`), por defecto 30 días / día; título y subtítulo (`daily-pnl-subtitle`) cambian según modo; tooltip añade «Días operados» en semana/mes; estado vacío `daily-pnl-empty` si el rango no tiene operaciones.
 - Verificado manualmente con 120 días sembrados (15/3/45/60 barras según rango; 18 semanas, 5 meses; mismo total) y móvil 390px sin overflow. Datos borrados. Sin testing_agent.
 
+## Implemented (2026-06, iteration 70 · Telegram: segundo chat ID opcional, avisos a 2 chats a la vez)
+- `AppConfig.telegram_chat_id_2` / `ConfigUpdate` (≤ 40). `notify.configure(..., chat_id_2)` construye `chat_ids` (deduplicado); `send()`, `send_document()` y `notify()` envían a todos los chats en paralelo (`_fan_out`): OK si al menos uno llega, aviso en log por chat fallido, excepción solo si fallan todos. `send(chat_id=...)` explícito sigue enviando a uno solo. `send_detailed()` → resultados por chat; `POST {base}/telegram/test` devuelve `{results, sent, total}`. `public()` añade `telegram_chats_count`.
+- `TelegramSection.jsx`: campo «Chat ID adicional (opcional)» con su propio «Detectar chat ID» (los chats detectados se asignan al campo que lanzó la detección), botón «Quitar», error inline si coincide con el principal (bloquea Guardar), badge «Conectado · 2 chats», toast de prueba con detalle por chat.
+- Tested: testing_agent iteration_59 (100 %): `tests/test_iter59_telegram_two_chats.py` 22/22 (fan-out con mocks + API en /api, /api/fx, /api/pepper) + UI en los 3 bots. Sin token real en el entorno: la entrega real no se probó aquí.
+
 ## Backlog
 - P2: Pepperstone cTrader: sin puente (MetaApi solo MetaTrader). Opción futura: cTrader Open API (OAuth + Protobuf) como conector alternativo del motor FX.
 - P2: FX `fix_reversion`: si el bot está apagado durante toda la ventana 16:00–16:30 Londres del último día hábil, la oportunidad del mes se pierde (sin recuperación posterior, por diseño).
