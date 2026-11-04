@@ -438,6 +438,11 @@
 - `performance/DailyPnl.jsx` (recharts ComposedChart): barras verde/rojo por día + línea ámbar de acumulado (eje derecho), tooltip con PnL/operaciones/ganadoras/acumulado, cabecera con Total, días en verde, mejor y peor día. Se oculta sin operaciones. Integrado en `Performance.jsx` sobre las tablas por estrategia.
 - Verificado manualmente: curl en los 3 bots con datos sembrados distintos (totales distintos por bot), UI Bybit y HotForex escritorio + móvil 390px sin overflow. Datos de prueba borrados. Sin testing_agent.
 
+## Implemented (2026-06, iteration 69 · PnL diario: rango 7/30/90/Todo y agrupación Día/Semana/Mes)
+- Backend `daily_pnl` devuelve ahora TODO el historial (sin tope de 90 días); el filtrado/agrupado es frontend (`performance/dailyPnlUtils.js`: `filterRange` por días naturales hacia atrás desde hoy local, `groupBy` día | semana (lunes) | mes, acumulado recalculado sobre la vista).
+- `DailyPnl.jsx`: dos selectores segmentados (`daily-pnl-range-{7|30|90|0}`, `daily-pnl-group-{day|week|month}`), por defecto 30 días / día; título y subtítulo (`daily-pnl-subtitle`) cambian según modo; tooltip añade «Días operados» en semana/mes; estado vacío `daily-pnl-empty` si el rango no tiene operaciones.
+- Verificado manualmente con 120 días sembrados (15/3/45/60 barras según rango; 18 semanas, 5 meses; mismo total) y móvil 390px sin overflow. Datos borrados. Sin testing_agent.
+
 ## Backlog
 - P2: Pepperstone cTrader: sin puente (MetaApi solo MetaTrader). Opción futura: cTrader Open API (OAuth + Protobuf) como conector alternativo del motor FX.
 - P2: FX `fix_reversion`: si el bot está apagado durante toda la ventana 16:00–16:30 Londres del último día hábil, la oportunidad del mes se pierde (sin recuperación posterior, por diseño).

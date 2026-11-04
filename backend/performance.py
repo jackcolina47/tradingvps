@@ -4,8 +4,8 @@ from shadow import shadow_stats
 from risk import FEE_RATE, MAKER_FEE
 
 
-async def daily_pnl(db, tz_min: int = 0, days: int = 90) -> list:
-    """PnL per calendar day (day boundaries shifted to the viewer's timezone, `tz_min` = minutes east of UTC) with running cumulative."""
+async def daily_pnl(db, tz_min: int = 0) -> list:
+    """PnL per calendar day (day boundaries shifted to the viewer's timezone, `tz_min` = minutes east of UTC) with running cumulative. All history."""
     rows = await db.trades.find({}, {"closed_at": 1, "pnl": 1}).sort("closed_at", -1).limit(5000).to_list(5000)
     acc = {}
     for r in rows:
@@ -18,7 +18,7 @@ async def daily_pnl(db, tz_min: int = 0, days: int = 90) -> list:
         a["pnl"] += pnl
         a["trades"] += 1
         a["wins"] += pnl > 0
-    out = sorted(acc.values(), key=lambda x: x["day"])[-days:]
+    out = sorted(acc.values(), key=lambda x: x["day"])
     cum = 0.0
     for a in out:
         a["pnl"] = round(a["pnl"], 2)
