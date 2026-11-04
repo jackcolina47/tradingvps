@@ -216,6 +216,22 @@ def _as_dict(obj):
     return dict(obj) if hasattr(obj, "keys") else None
 
 
+def _normalize_blocks(blocks):
+    """litellm 1.80 only drops its own (unsigned) copy of a function call when the signed part matches it exactly; Gemini 3.1 Pro adds an `id` inside
+    functionCall that breaks that match and leaves an unsigned duplicate → 400 «missing thought_signature». Strip the id so the parts match."""
+    out = []
+    for b in blocks:
+        try:
+            part = json.loads(b.get("thinking") or "")
+            fc = part.get("functionCall") if isinstance(part, dict) else None
+            if isinstance(fc, dict) and "id" in fc:
+                b = {**b, "thinking": json.dumps({**part, "functionCall": {k: v for k, v in fc.items() if k != "id"}})}
+        except Exception:
+            pass
+        out.append(b)
+    return out
+
+
 def _keep_thought_signatures(chat: LlmChat, resp) -> None:
     """Gemini 3 rejects function calls echoed back without their thought_signature. LlmChat rebuilds the assistant turn with bare tool_calls, so copy
     everything litellm uses to restore the signature onto the stored message: `thinking_blocks` (litellm ≤1.80) and the per-tool-call / per-message
@@ -227,7 +243,7 @@ def _keep_thought_signatures(chat: LlmChat, resp) -> None:
             return
         blocks = getattr(msg, "thinking_blocks", None)
         if blocks:
-            last["thinking_blocks"] = blocks
+            last["thinking_blocks"] = _normalize_blocks(blocks)
         msg_psf = _as_dict(getattr(msg, "provider_specific_fields", None))
         if msg_psf:
             last["provider_specific_fields"] = msg_psf
