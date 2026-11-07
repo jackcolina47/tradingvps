@@ -35,7 +35,7 @@ export default function LearnedRulesSection() {
   const active = (rules || []).filter((r) => r.enabled).length;
 
   return (
-    <Panel title="Reglas aprendidas" icon={BookOpen} testId="learned-rules-section"
+    <Panel title="Reglas aprendidas" icon={BookOpen} testId="learned-rules-section" bodyClass="space-y-3 p-4"
       actions={<span data-testid="learned-rules-count" className="font-mono text-[10px] uppercase tracking-wider text-slate-500">{active} activas · {(rules || []).length}/{max}</span>}>
       <p className="text-[12px] text-slate-400">
         Lecciones de tus análisis o reglas propias. La IA las lee con <span className="text-amber-300">prioridad alta</span> cada vez que aprueba o rechaza una señal de este bot: si una señal incumple una regla activa, la rechaza o baja la confianza citándola.

@@ -1,0 +1,34 @@
+{
+  "summary": "Iter72: Learned rules (Reglas aprendidas) + CSV export. Backend: 8/8 pytest pass (prompt_lines, ai_advisor/fx _build_prompt injection, active() symbol/enabled filtering against real Mongo with unique PrefixedDB prefix, API CRUD on /api/fx/ai-rules incl. uppercased symbol, 409 duplicate, 422 short text, PATCH enabled/text, DELETE ok then 404, isolation from /api and /api/pepper, auth required). UI /hotforex: 'IA ✓' opens analysis, 'Guardar como regla' -> success toast + 'Guardada en reglas' disabled; API shows rule with source_trade_id 6aee77fdfccfc33acf4af24b, verdict EVITABLE. AJUSTES panel: count '1 activas · 1/30', 'Todos los símbolos · de un análisis EVITABLE', toggle off->0 activas/on->1, short text error toast, add XAUUSD rule shows 'Solo XAUUSD', delete removes. /bybit and /pepperstone panels show learned-rules-empty. CSV: historial_hotforex_*.csv, BOM, header and all columns as spec, GBPUSD row EVITABLE;78, note quoted with doubled quotes, tag Revisar, decimal commas (1,3155, -20, -15,2), XAUUSD empty AI columns; filter GBPUSD -> '(1)' and 1 data row; date filter 2030 -> '(0)' disabled. Ver/Analizar regression ok, no console errors on all 3 bots (only an expected 409 resource error, see minor). All rules cleaned up (all three lists empty).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PATCH /api/{fx,pepper}/ai-rules/{id}", "issue": "Editing text does not check duplicates (POST returns 409 for same text, PATCH allows creating a duplicate). Duplicate check is case-sensitive."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "TradeAiReview", "issue": "After closing and reopening the analysis dialog of a trade whose lesson is already saved, the button shows 'Guardar como regla' enabled again; clicking yields error toast 'Esa regla ya existe' (409, logged as console resource error). Could pre-check existing rules by source_trade_id/text.", "selector": "[data-testid='trade-ai-save-rule']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AJUSTES · Reglas aprendidas", "issues": ["Panel body had no padding (content flush with border) — FIXED by tester: added bodyClass='space-y-3 p-4' to Panel in LearnedRulesSection.jsx"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter72_learned_rules.py", "/app/test_reports/pytest/pytest_iter72.xml"],
+  "action_items": [
+    "Optional: in TradeAiReview, mark button as saved when a rule with same source_trade_id/text already exists (avoid 409 toast on reopen)",
+    "Optional: duplicate check on PATCH text in ai_rules.patch"
+  ],
+  "critical_code_review_comments": [
+    "ai_rules.active() matches symbol exactly; engine passes raw symbol — fine as long as symbols are uppercase (they are).",
+    "MAX_RULES check + insert is not atomic (race negligible for single user).",
+    "hits field is never incremented anywhere (dead field)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter72_learned_rules.py", "/app/frontend/src/components/bot/admin/LearnedRulesSection.jsx"],
+  "success_rate": {"backend": "100%", "frontend": "100% (1 low-priority UX issue)"},
+  "seed_data_creation": "None. Rules created during tests were all deleted; /api, /api/fx, /api/pepper ai-rules lists are empty. Seeded trades untouched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Bybit (tab-history) and Pepperstone (fx-tab-history) have 0 trades, so export button not rendered there (empty state). HotForex has 2 seeded trades. trade-filter-symbol is a shadcn Select (use get_by_role option). Date filters are native inputs trade-filter-from/to."
+}
