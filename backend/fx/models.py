@@ -23,6 +23,10 @@ class FxSettings(BaseModel):
     ai_enabled: bool = True
     ai_min_confidence: int = 60
     ai_news_weight: str = "normal"
+    ai_position_review_enabled: bool = False
+    ai_position_review_minutes: int = 30
+    ai_position_review_mode: str = "auto"
+    ai_position_review_min_confidence: int = 75
     scan_interval_sec: int = 120
     trailing_enabled: bool = True
     htf_filter: bool = True
@@ -183,6 +187,10 @@ class FxSettingsUpdate(BaseModel):
     ai_enabled: Optional[bool] = None
     ai_min_confidence: Optional[int] = Field(default=None, ge=0, le=100)
     ai_news_weight: Optional[str] = Field(default=None, pattern="^(normal|bajo)$")
+    ai_position_review_enabled: Optional[bool] = None
+    ai_position_review_minutes: Optional[int] = Field(default=None, ge=5, le=240)
+    ai_position_review_mode: Optional[str] = Field(default=None, pattern="^(notify|auto)$")
+    ai_position_review_min_confidence: Optional[int] = Field(default=None, ge=50, le=100)
     scan_interval_sec: Optional[int] = Field(default=None, ge=30, le=900)
     trailing_enabled: Optional[bool] = None
     htf_filter: Optional[bool] = None

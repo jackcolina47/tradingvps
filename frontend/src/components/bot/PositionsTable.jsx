@@ -1,10 +1,36 @@
-import { X } from "lucide-react";
+import { X, Sparkles, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 import { SideBadge, Empty } from "./Panel";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { fmtPrice, fmtSignedUsd, fmtUsd, fmtQty, pnlClass, STRATEGY_LABELS, ENTRY_LABELS } from "@/lib/api";
+import { http, errMsg, fmtPrice, fmtSignedUsd, fmtUsd, fmtQty, pnlClass, STRATEGY_LABELS, ENTRY_LABELS } from "@/lib/api";
+
+const AI_CLS = { MANTENER: "border-emerald-500/40 text-emerald-300", BREAKEVEN: "border-amber-500/40 text-amber-300", CERRAR: "border-rose-500/40 text-rose-300" };
+
+function AiReviewNowButton() {
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const { data } = await http.post("/positions/ai-review");
+      const acted = data.reviews.filter((r) => r.acted).length;
+      toast.success(`Revisión IA completada: ${data.count} posición(es) · ${data.reviews.map((r) => `${r.symbol} ${r.action}`).join(", ") || "sin posiciones"}${acted ? ` · ${acted} acción(es)` : ""}`);
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button data-testid="positions-ai-review-button" onClick={run} disabled={busy} title="Pedir a la IA que revise ahora todas las posiciones abiertas (según el modo configurado en Ajustes)"
+      className="inline-flex items-center gap-1 rounded-sm border border-violet-400/40 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-violet-300 transition-colors hover:bg-violet-500/10 disabled:opacity-50">
+      {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />} {busy ? "Revisando…" : "Revisar con IA"}
+    </button>
+  );
+}
 
 const TH = ({ children, right }) => (
   <th className={`whitespace-nowrap px-3 py-2.5 font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500 ${right ? "text-right" : "text-left"}`}>{children}</th>
@@ -18,8 +44,9 @@ export default function PositionsTable({ positions, onClose, onCloseAll }) {
   const anyLive = positions.some((p) => p.live);
   return (
     <div className="overflow-x-auto thin-scroll">
-      {onCloseAll && positions.length > 1 && (
-        <div className="flex justify-end border-b border-[#1E293B] px-3 py-1.5">
+      <div className="flex items-center justify-end gap-2 border-b border-[#1E293B] px-3 py-1.5">
+        <AiReviewNowButton />
+        {onCloseAll && positions.length > 1 && (
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <button data-testid="close-all-positions-button" className="rounded-sm border border-rose-500/40 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-rose-300 transition-colors hover:bg-rose-500/10">
@@ -37,8 +64,8 @@ export default function PositionsTable({ positions, onClose, onCloseAll }) {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-        </div>
-      )}
+        )}
+      </div>
       <table data-testid="positions-table" className="w-full text-sm">
         <thead className="border-b border-[#1E293B]">
           <tr><TH>Símbolo</TH><TH>Lado</TH><TH right>Entrada</TH><TH right>Marca</TH><TH right>SL</TH><TH right>TP</TH><TH right>Tamaño</TH><TH right>Margen</TH><TH right>PnL</TH><TH right>Acción</TH></tr>
@@ -56,6 +83,12 @@ export default function PositionsTable({ positions, onClose, onCloseAll }) {
                     {p.expires_at && <span data-testid={`position-expires-${p.id}`} className="ml-1 text-[9px] text-slate-500" title="Cierre por tiempo programado">⏱ {new Date(p.expires_at).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })}</span>}
                     {p.entry_type && p.entry_type !== "market" && <span data-testid={`position-entry-${p.id}`} className="ml-1 rounded-sm bg-slate-700/60 px-1 text-[9px] text-slate-300" title={ENTRY_LABELS[p.entry_type]}>{p.entry_type === "maker" ? "maker" : "mkt↩"}</span>}
                   </p>
+                  {p.ai_review && (
+                    <p data-testid={`position-ai-review-${p.id}`} title={`${p.ai_review.reasoning}\n${new Date(p.ai_review.at).toLocaleString("es-ES")}`}
+                      className={`mt-0.5 inline-flex items-center gap-1 rounded-sm border px-1 text-[9px] font-mono uppercase ${AI_CLS[p.ai_review.action] || AI_CLS.MANTENER}`}>
+                      <Sparkles className="h-2.5 w-2.5" /> IA: {p.ai_review.action} {p.ai_review.confidence}%{p.ai_review.acted ? ` · ${p.ai_review.acted}` : ""}
+                    </p>
+                  )}
                 </TD>
                 <TD><SideBadge side={p.side} /></TD>
                 <TD right>{fmtPrice(p.entry_price)}</TD>

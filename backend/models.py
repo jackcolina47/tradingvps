@@ -48,6 +48,10 @@ class Settings(BaseModel):
     daily_loss_limit: float = 5.0
     ai_enabled: bool = True
     ai_min_confidence: int = 60
+    ai_position_review_enabled: bool = False
+    ai_position_review_minutes: int = 30
+    ai_position_review_mode: str = "auto"
+    ai_position_review_min_confidence: int = 75
     scan_interval_sec: int = 60
     trailing_enabled: bool = True
     htf_filter: bool = True
@@ -183,6 +187,10 @@ class SettingsUpdate(BaseModel):
     daily_loss_limit: Optional[float] = Field(default=None, ge=1, le=20)
     ai_enabled: Optional[bool] = None
     ai_min_confidence: Optional[int] = Field(default=None, ge=0, le=100)
+    ai_position_review_enabled: Optional[bool] = None
+    ai_position_review_minutes: Optional[int] = Field(default=None, ge=5, le=240)
+    ai_position_review_mode: Optional[str] = Field(default=None, pattern="^(notify|auto)$")
+    ai_position_review_min_confidence: Optional[int] = Field(default=None, ge=50, le=100)
     scan_interval_sec: Optional[int] = Field(default=None, ge=30, le=900)
     trailing_enabled: Optional[bool] = None
     htf_filter: Optional[bool] = None
@@ -238,6 +246,7 @@ class Position(BaseDocument):
     partial_done: bool = False
     partial_gross: float = 0.0
     partial_fees: float = 0.0
+    ai_review: Optional[Dict[str, Any]] = None
     opened_at: str = Field(default_factory=now_iso)
 
 
@@ -273,6 +282,7 @@ class Trade(BaseDocument):
     order_id: Optional[str] = None
     note: str = ""
     tags: List[str] = []
+    ai_review: Optional[Dict[str, Any]] = None
     closed_at: str = Field(default_factory=now_iso)
 
 

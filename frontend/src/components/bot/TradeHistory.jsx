@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Search, StickyNote } from "lucide-react";
+import { Search, StickyNote, Sparkles } from "lucide-react";
 import { SideBadge, Empty } from "./Panel";
 import { TH, TD } from "./PositionsTable";
 import TradeDetailDialog from "./TradeDetailDialog";
@@ -44,7 +44,11 @@ function TradeRow({ t, onOpen }) {
       <TD right>
         <span className="inline-flex items-center gap-1.5">
           {hasNote && <StickyNote data-testid={`trade-note-icon-${t.id}`} className="h-3 w-3 text-amber-400" title={[...(t.tags || []), t.note].filter(Boolean).join(" · ")} />}
-          <button data-testid={`trade-detail-btn-${t.id}`} onClick={() => onOpen(t)} title="Ver todos los detalles"
+          <button data-testid={`trade-analyze-btn-${t.id}`} onClick={() => onOpen(t, true)} title={t.ai_review ? `Análisis IA: ${t.ai_review.verdict} (${t.ai_review.confidence} %)` : "Pedir a la IA un análisis detallado de esta operación"}
+            className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors ${t.ai_review ? "border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10" : "border-violet-400/40 text-violet-300 hover:bg-violet-500/10"}`}>
+            <Sparkles className="h-3 w-3" strokeWidth={2.2} /> {t.ai_review ? "IA ✓" : "Analizar IA"}
+          </button>
+          <button data-testid={`trade-detail-btn-${t.id}`} onClick={() => onOpen(t, false)} title="Ver todos los detalles"
             className="inline-flex items-center gap-1 rounded-sm border border-amber-500/30 px-1.5 py-1 font-mono text-[10px] uppercase tracking-wider text-amber-300 transition-colors hover:bg-amber-500/10">
             <Search className="h-3 w-3" strokeWidth={2.2} /> Ver
           </button>
@@ -59,6 +63,8 @@ export default function TradeHistory({ trades }) {
   const [edits, setEdits] = useState({});
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [selected, setSelected] = useState(null);
+  const [autoAnalyze, setAutoAnalyze] = useState(false);
+  const open = (t, analyze) => { setAutoAnalyze(!!analyze); setSelected(t); };
   const firstId = trades[0]?.id;
   const base = http.defaults.baseURL;
   useEffect(() => {
@@ -70,7 +76,7 @@ export default function TradeHistory({ trades }) {
   const source = (all || trades).map((t) => (edits[t.id] ? { ...t, ...edits[t.id] } : t));
   if (!source.length) return <Empty testId="trades-empty" text="Aún no hay operaciones cerradas." />;
   const shown = applyFilters(source, filters);
-  const onSaved = (r) => setEdits((e) => ({ ...e, [r.id]: { note: r.note, tags: r.tags } }));
+  const onSaved = (r) => setEdits((e) => ({ ...e, [r.id]: { ...(e[r.id] || {}), ...(r.note !== undefined ? { note: r.note, tags: r.tags } : {}), ...(r.ai_review ? { ai_review: r.ai_review } : {}) } }));
   const current = selected && source.find((t) => t.id === selected.id);
   return (
     <div>
@@ -82,12 +88,12 @@ export default function TradeHistory({ trades }) {
               <tr><TH>Cierre</TH><TH>Símbolo</TH><TH>Lado</TH><TH right>Entrada</TH><TH right>Salida</TH><TH>Motivo</TH><TH right>Comisiones</TH><TH right>PnL</TH><TH right>Detalle</TH></tr>
             </thead>
             <tbody className="num text-[12px]">
-              {shown.map((t) => <TradeRow key={t.id} t={t} onOpen={setSelected} />)}
+              {shown.map((t) => <TradeRow key={t.id} t={t} onOpen={open} />)}
             </tbody>
           </table>
         )}
       </div>
-      <TradeDetailDialog trade={current || selected} onClose={() => setSelected(null)} onSaved={onSaved} />
+      <TradeDetailDialog trade={current || selected} onClose={() => setSelected(null)} onSaved={onSaved} autoAnalyze={autoAnalyze} />
     </div>
   );
 }

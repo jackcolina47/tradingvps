@@ -9,6 +9,9 @@ from bson import ObjectId
 import notify
 import cashflow
 import chart
+import price_action
+import ai_advisor
+import position_review
 from auth import hash_password, verify_password, create_token
 from ai_advisor import ping as ai_ping, current as ai_current, friendly_error, key_hint, ORIGIN_LABELS
 from deps import store
@@ -57,6 +60,19 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
     async def auth_me():
         return {"ok": True}
 
+    @router.post("/positions/ai-review")
+    async def positions_ai_review():
+        """Manual trigger of the periodic AI review of open positions (same logic as the scheduled one)."""
+        settings = await engine.get_settings()
+        if not settings.ai_enabled:
+            raise HTTPException(400, "El filtro IA está desactivado en Ajustes")
+        bot_name = engine.profile.bot_name if hasattr(engine, "profile") else "Bybit"
+        try:
+            reviews = await position_review.review_open_positions(engine, settings, currency, bot_name)
+        except Exception as e:
+            raise HTTPException(424, f"Error IA: {friendly_error(e)}")
+        return {"ok": True, "reviews": reviews, "count": len(reviews)}
+
     @router.get("/trades/{trade_id}/detail")
     async def trade_detail(trade_id: str):
         trade = (await _trade(trade_id)).model_dump()
@@ -76,30 +92,56 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
         await engine.db.trades.update_one({"_id": ObjectId(trade_id)}, {"$set": {"note": note, "tags": tags}})
         return {"ok": True, "id": trade_id, "note": note, "tags": tags}
 
-    @router.get("/trades/{trade_id}/candles")
-    async def trade_candles(trade_id: str):
-        """Candles around the trade (timeframe picked so the hold spans ~≤ 90 candles) plus entry/exit/SL/TP levels for the mini chart."""
-        t = await _trade(trade_id)
+    async def _trade_window(t: Trade, pad: int = CHART_PAD) -> dict:
+        """Candles around a trade (timeframe picked so the hold spans ~≤ 90 candles); widens the timeframe when the window is empty (market closed)."""
         o = datetime.fromisoformat(t.opened_at).timestamp()
         c = datetime.fromisoformat(t.closed_at).timestamp()
         dur = max(c - o, 60)
         start = next((i for i, (_, s) in enumerate(TRADE_TFS) if dur / s <= 90), len(TRADE_TFS) - 1)
         candles, tf, step = [], None, None
-        for tf, step in TRADE_TFS[start:]:  # widen the timeframe when the window has no candles (weekend / market closed)
-            n = min(int(dur / step) + 2 * CHART_PAD, 600)
-            end = min(int(c) + CHART_PAD * step, int(time.time()) + step)
+        for tf, step in TRADE_TFS[start:]:
+            n = min(int(dur / step) + 2 * pad, 600)
+            end = min(int(c) + pad * step, int(time.time()) + step)
             try:
                 rows = await engine.market.fetch_before(t.symbol, tf, end * 1000 if before_unit == "ms" else end, n)
             except Exception as e:
                 raise HTTPException(502, f"No se pudieron cargar las velas: {e}")
-            lo = int(o) - CHART_PAD * step
+            lo = int(o) - pad * step
             candles = [{"time": int(float(r[0])) // 1000, "open": float(r[1]), "high": float(r[2]), "low": float(r[3]), "close": float(r[4])} for r in rows or []]
             candles = [x for x in candles if x["time"] >= lo]
             if candles:
                 break
         snap = lambda ts: int(ts) - int(ts) % step  # noqa: E731
-        return {"tf": tf, "step": step, "digits": chart.price_digits(t.symbol, candles[-1]["close"] if candles else t.entry_price), "candles": candles,
-                "opened": snap(o), "closed": snap(c), "side": t.side, "entry": t.entry_price, "exit": t.exit_price, "sl": t.sl, "initial_sl": t.initial_sl, "tp": t.tp}
+        return {"tf": tf, "step": step, "candles": candles, "opened": snap(o), "closed": snap(c)}
+
+    @router.get("/trades/{trade_id}/candles")
+    async def trade_candles(trade_id: str):
+        t = await _trade(trade_id)
+        w = await _trade_window(t)
+        candles = w["candles"]
+        return {**w, "digits": chart.price_digits(t.symbol, candles[-1]["close"] if candles else t.entry_price),
+                "side": t.side, "entry": t.entry_price, "exit": t.exit_price, "sl": t.sl, "initial_sl": t.initial_sl, "tp": t.tp}
+
+    @router.post("/trades/{trade_id}/analyze")
+    async def trade_analyze(trade_id: str, force: bool = False):
+        """AI post-mortem of a closed trade: why it opened, how the chart looked, what could have been done better. Cached on the trade."""
+        t = await _trade(trade_id)
+        if t.ai_review and not force:
+            return {"review": t.ai_review, "cached": True}
+        signal = None
+        if t.signal_id and ObjectId.is_valid(t.signal_id):
+            sdoc = await engine.db.signals.find_one({"_id": ObjectId(t.signal_id)})
+            signal = Signal.from_mongo(sdoc).model_dump() if sdoc else None
+        w = await _trade_window(t, pad=60)
+        before = [x for x in w["candles"] if x["time"] < w["opened"]]
+        during = [x for x in w["candles"] if w["opened"] <= x["time"] <= w["closed"]]
+        pa = price_action.facts(before, t.side, t.entry_price, t.atr or 0, t.initial_sl or t.sl, t.tp)
+        try:
+            review = await ai_advisor.analyze_trade(t.model_dump(), signal, pa, before[-12:], during, w["tf"], currency)
+        except Exception as e:
+            raise HTTPException(424, f"Error IA: {friendly_error(e)}")
+        await engine.db.trades.update_one({"_id": ObjectId(trade_id)}, {"$set": {"ai_review": review}})
+        return {"review": review, "cached": False}
 
     @router.get("/account/cashflows")
     async def cashflows():

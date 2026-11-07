@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { SideBadge } from "./Panel";
 import TradeMiniChart from "./TradeMiniChart";
 import TradeNoteEditor from "./TradeNoteEditor";
+import TradeAiReview from "./TradeAiReview";
 import {
   http, errMsg, fmtPrice, fmtQty, fmtSignedUsd, fmtPct, pnlClass,
   REASON_LABELS, STRATEGY_LABELS, HORIZON_LABELS, ENTRY_LABELS,
@@ -36,7 +37,7 @@ const Row = ({ label, value, className = "", testId }) => (
   </div>
 );
 
-function TradeDetailBody({ trade: t, signal: s, currency, onSaved }) {
+function TradeDetailBody({ trade: t, signal: s, currency, onSaved, autoAnalyze }) {
   const price = (v) => (v == null || v === 0 ? "—" : fmtPrice(v));
   const rr = t.initial_sl && t.tp ? (Math.abs(t.tp - t.entry_price) / Math.abs(t.entry_price - t.initial_sl)).toFixed(2) : null;
   return (
@@ -53,6 +54,7 @@ function TradeDetailBody({ trade: t, signal: s, currency, onSaved }) {
       </div>
 
       <TradeMiniChart tradeId={t.id} />
+      <TradeAiReview trade={t} autoRun={autoAnalyze} onReviewed={(review) => onSaved?.({ id: t.id, ai_review: review })} />
       <TradeNoteEditor trade={t} onSaved={onSaved} />
 
       <Section title="Tiempos" testId="trade-detail-times">
@@ -137,7 +139,7 @@ function TradeDetailBody({ trade: t, signal: s, currency, onSaved }) {
   );
 }
 
-export default function TradeDetailDialog({ trade, onClose, onSaved }) {
+export default function TradeDetailDialog({ trade, onClose, onSaved, autoAnalyze = false }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
   const tradeId = trade?.id;
@@ -156,7 +158,7 @@ export default function TradeDetailDialog({ trade, onClose, onSaved }) {
         </DialogHeader>
         {err && <p data-testid="trade-detail-error" className="text-xs text-rose-400">{err}</p>}
         {!data && !err && t && <div className="flex items-center gap-2 text-xs text-slate-500"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando detalle…</div>}
-        {t && (data || err) && <TradeDetailBody trade={t} signal={data?.signal} currency={data?.currency || "USD"} onSaved={onSaved} />}
+        {t && (data || err) && <TradeDetailBody trade={t} signal={data?.signal} currency={data?.currency || "USD"} onSaved={onSaved} autoAnalyze={autoAnalyze} />}
       </DialogContent>
     </Dialog>
   );

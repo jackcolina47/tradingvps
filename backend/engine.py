@@ -10,6 +10,8 @@ from strategies import evaluate, exit_signal, EXIT_ON_CROSS, EXIT_REASON, STRATE
 from strategies_slow import SLOW_INFO, SLOW_KEYS, evaluate_slow
 from risk import FEE_RATE, MAKER_FEE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules, move_in_r, tp_in_r, partial_qty
 from ai_advisor import evaluate_signal, label as ai_label
+import price_action
+import position_review
 from plan import SCENARIOS, build_checkin, contributions as plan_contributions
 from notify import notify as tg
 from bybit import BybitClient, BybitError
@@ -256,6 +258,8 @@ class TradingEngine:
         await monitor_shadows(self, tickers, rules)
         await maker.monitor_pending(self, tickers)
         await self._update_account_metrics(settings)
+        if position_review.due(self, settings):
+            await position_review.review_open_positions(self, settings, "USDT", "Bybit")
 
     def _excursion(self, p: Position, price: float) -> dict:
         m = move_in_r(p.side, p.entry_price, p.initial_sl, price)
@@ -742,8 +746,10 @@ class TradingEngine:
                 "recent_changes": [round(x, 3) for x in (closes.pct_change().dropna() * 100).tolist()],
                 "open_positions": len(open_syms), "daily_pnl_pct": acc["daily_pnl_pct"],
                 "news": self.news.context(symbol) if self.news else None,
+                "price_action": price_action.from_df(df, sig["side"], sig["price"], sig["indicators"].get("atr", 0), sig["sl"], sig["tp"], upto=len(df) - 1),
             }
             try:
+                signal.context = {**(signal.context or {}), "price_action": ctx["price_action"]}
                 res = await evaluate_signal(symbol, tf, sig, ctx)
                 signal.ai_decision, signal.ai_confidence = res["decision"], res["confidence"]
                 signal.ai_risk, signal.ai_reasoning = res["risk"], res["reasoning"]

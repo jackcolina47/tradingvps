@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
 from llm_json import parse_llm_json
 import funding
+import price_action
 
 logger = logging.getLogger("ai")
 _cfg = {"api_key": os.environ.get("EMERGENT_LLM_KEY", ""), "provider": "anthropic", "model": "claude-sonnet-5-5", "source": "emergent"}
@@ -328,6 +329,7 @@ def _build_prompt(symbol, timeframe, sig, ctx) -> str:
         + _layers_line(ctx) +
         f"Cambio 24h: {ctx.get('change_24h', 0):.2f}% | {funding.prompt_line(ctx.get('funding'))}\n"
         f"Últimos cierres (% cambio por vela, más reciente al final): {ctx.get('recent_changes')}\n"
+        + price_action.prompt_lines(ctx.get("price_action")) +
         f"Cuenta: {ctx.get('open_positions')} posiciones abiertas, PnL diario {ctx.get('daily_pnl_pct', 0):.2f}%\n"
         + _news_lines(ctx.get("news")) +
         "¿Ejecutar esta operación?"
@@ -344,6 +346,85 @@ async def evaluate_signal(symbol: str, timeframe: str, sig: dict, ctx: dict) -> 
         "risk": str(data.get("risk", "MEDIO")).upper(),
         "reasoning": str(data.get("reasoning", ""))[:600],
     }
+
+
+REVIEW_SYSTEM = (
+    "Eres un mentor de trading que revisa operaciones ya cerradas de un bot algorítmico para que un trader humano aprenda. "
+    "Analiza con honestidad y sin complacencia: distingue entre mala decisión y mala suerte (una operación bien planteada puede perder). "
+    "Apóyate SOLO en los datos recibidos (señal original, indicadores, acción del precio calculada y velas). Habla de velas, swings, "
+    "tendencia, momentum y niveles como lo haría alguien mirando el gráfico en TradingView. Sé concreto: cita números (ATR, pips/%, distancias). "
+    "Responde EXCLUSIVAMENTE con un objeto JSON válido en español con este formato: "
+    '{"why_opened":"2-4 frases: qué vio el sistema y la IA para abrir","chart_context":"3-5 frases: cómo estaba el gráfico justo antes de entrar '
+    '(velas previas, extensión del movimiento, swings/niveles cercanos, posición en el rango, tendencia)",'
+    '"what_happened":"2-3 frases: qué hizo el precio después y por qué cerró así",'
+    '"better_decision":"2-4 frases: ¿había una decisión mejor? (no entrar, esperar retroceso, otro nivel de SL/TP, cerrar parcial…) y por qué",'
+    '"verdict":"BUENA"|"ACEPTABLE"|"EVITABLE"|"MALA","verdict_reason":"1 frase",'
+    '"lesson":"1 regla práctica y accionable para el futuro (máx. 25 palabras)","confidence":entero 0-100}'
+)
+
+
+def _candles_txt(cs: list, digits: int = 6) -> str:
+    return "; ".join(f"O{c['open']:.{digits}g} H{c['high']:.{digits}g} L{c['low']:.{digits}g} C{c['close']:.{digits}g}" for c in cs)
+
+
+async def analyze_trade(t: dict, signal: dict | None, pa: dict, before: list, during: list, tf: str, currency: str) -> dict:
+    sig_txt = "Sin señal vinculada (operación anterior al registro de señales)."
+    if signal:
+        sig_txt = (f"Puntuación {signal.get('score')} · motivos técnicos: {'; '.join(signal.get('reasons') or [])}\n"
+                   f"Indicadores en la señal: {json.dumps(signal.get('indicators') or {})}\n"
+                   f"IA en el momento de abrir: {signal.get('ai_decision')} (confianza {signal.get('ai_confidence')}, riesgo {signal.get('ai_risk')}) · {signal.get('ai_reasoning') or '—'}")
+    mfe = f"MFE {t.get('mfe_r')} R · MAE {t.get('mae_r')} R · llegó al {t.get('mfe_tp_pct')} % del camino al TP" if t.get("mfe_r") is not None else "sin recorrido registrado"
+    prompt = (
+        f"OPERACIÓN: {t['side'].upper()} {t['symbol']} · estrategia {t['strategy']} · {t.get('entry_type') or ''} · horizonte {t.get('horizon') or ''}\n"
+        f"Abierta {t['opened_at']} · cerrada {t['closed_at']} ({t.get('hold_min')} min) · motivo de cierre {t['reason']}\n"
+        f"Entrada {t['entry_price']} · salida {t['exit_price']} · SL inicial {t.get('initial_sl')} · SL final {t.get('sl')} · TP {t.get('tp')} · ATR {t.get('atr')}\n"
+        f"Resultado: {t['pnl']:+.2f} {currency} ({t['pnl_pct']:+.2f} %) · {mfe} · breakeven {'sí' if t.get('breakeven') else 'no'} · parcial {'sí' if t.get('partial_tp') else 'no'}\n"
+        f"SEÑAL ORIGINAL: {sig_txt}\n"
+        f"ACCIÓN DEL PRECIO CALCULADA (antes de entrar): {' '.join(pa.get('summary') or [])} · datos: {json.dumps({k: v for k, v in pa.items() if k != 'summary'})}\n"
+        f"ÚLTIMAS {len(before)} VELAS ANTES DE ENTRAR ({tf}, antigua→reciente): {_candles_txt(before)}\n"
+        f"VELAS DURANTE LA OPERACIÓN ({tf}, {len(during)}): {_candles_txt(during[:40])}{' …' if len(during) > 40 else ''}\n"
+        f"Nota del usuario: {t.get('note') or '—'}\n"
+        "Haz el análisis."
+    )
+    data = parse_json(await _ask(_chat(REVIEW_SYSTEM, "trade-review"), prompt), "análisis de operación")
+    verdict = str(data.get("verdict", "ACEPTABLE")).upper()
+    return {
+        "why_opened": str(data.get("why_opened", ""))[:900], "chart_context": str(data.get("chart_context", ""))[:1200],
+        "what_happened": str(data.get("what_happened", ""))[:700], "better_decision": str(data.get("better_decision", ""))[:900],
+        "verdict": verdict if verdict in ("BUENA", "ACEPTABLE", "EVITABLE", "MALA") else "ACEPTABLE", "verdict_reason": str(data.get("verdict_reason", ""))[:300],
+        "lesson": str(data.get("lesson", ""))[:300], "confidence": int(max(0, min(100, int(data.get("confidence", 0) or 0)))),
+        "price_action": pa.get("summary"), "model": label(_cfg["model"]), "at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+POSITION_SYSTEM = (
+    "Eres un gestor de riesgo que vigila posiciones ABIERTAS de un bot algorítmico. Decides si el mercado sigue respaldando la operación. "
+    "Opciones: MANTENER (la tesis sigue viva), BREAKEVEN (proteger: mover el stop al precio de entrada porque hay beneficio pero señales de agotamiento), "
+    "CERRAR (la tesis se ha roto o hay señales claras de giro en contra y es mejor salir ya, con beneficio o pérdida menor al SL). "
+    "Sé prudente: no cierres por ruido normal; CERRAR solo con evidencia clara (estructura rota, velas de rechazo fuertes en contra, nivel clave perdido, momentum opuesto). "
+    "BREAKEVEN solo si el precio ya está claramente a favor (≥ 0,5 R) y no se puede ejecutar si eso dejaría el stop peor que el actual. "
+    "Responde EXCLUSIVAMENTE con JSON válido en español: "
+    '{"action":"MANTENER"|"BREAKEVEN"|"CERRAR","confidence":entero 0-100,"reasoning":"2-3 frases con datos concretos"}'
+)
+
+
+async def review_position(p: dict, candles: list, pa: dict, tf: str, currency: str, price: float) -> dict:
+    long = p["side"] == "long"
+    risk = abs(p["entry_price"] - (p.get("initial_sl") or p["sl"])) or 1e-9
+    r_now = ((price - p["entry_price"]) if long else (p["entry_price"] - price)) / risk
+    prompt = (
+        f"POSICIÓN ABIERTA: {p['side'].upper()} {p['symbol']} · estrategia {p['strategy']} · abierta {p['opened_at']}\n"
+        f"Entrada {p['entry_price']} · precio actual {price} · SL actual {p['sl']} (inicial {p.get('initial_sl')}) · TP {p['tp']} · ATR entrada {p.get('atr')}\n"
+        f"Recorrido actual {r_now:+.2f} R · PnL no realizado {p.get('unrealized_pnl', 0):+.2f} {currency} · breakeven ya aplicado: {'sí' if p.get('breakeven') else 'no'}\n"
+        f"ACCIÓN DEL PRECIO RECIENTE: {' '.join(pa.get('summary') or [])}\n"
+        f"ÚLTIMAS {len(candles)} VELAS ({tf}, antigua→reciente): {_candles_txt(candles)}\n"
+        "¿Qué hacemos con la posición?"
+    )
+    data = parse_json(await _ask(_chat(POSITION_SYSTEM, "position-review"), prompt), "revisión de posición")
+    action = str(data.get("action", "MANTENER")).upper()
+    return {"action": action if action in ("MANTENER", "BREAKEVEN", "CERRAR") else "MANTENER",
+            "confidence": int(max(0, min(100, int(data.get("confidence", 0) or 0)))), "reasoning": str(data.get("reasoning", ""))[:500],
+            "r_now": round(r_now, 2), "price": price, "model": label(_cfg["model"]), "at": datetime.now(timezone.utc).isoformat()}
 
 
 DEFAULT_POLICY = {"caps": {"risk_per_trade": 1.5, "leverage": 5, "max_positions": 5}, "min_trades": 30, "min_item_trades": 20, "level": 0, "name": "Conservador"}

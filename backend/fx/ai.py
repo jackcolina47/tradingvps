@@ -2,6 +2,7 @@
 import json
 import logging
 from ai_advisor import _chat, _ask, _news_lines, parse_json
+import price_action
 from fx.symbols import SPECS, pips
 
 logger = logging.getLogger("fx.ai")
@@ -62,6 +63,7 @@ def _build_prompt(symbol: str, timeframe: str, sig: dict, ctx: dict) -> str:
         f"Tendencia TF superior ({ctx.get('htf_tf')}): {ctx.get('htf_trend')}\n"
         f"Cambio 24h: {ctx.get('change_24h', 0):.2f}% | Sesiones activas: {sess}\n"
         f"Últimos cierres (% cambio por vela, más reciente al final): {ctx.get('recent_changes')}\n"
+        + price_action.prompt_lines(ctx.get("price_action")) +
         f"Cuenta: {ctx.get('open_positions')} posiciones abiertas, PnL diario {ctx.get('daily_pnl_pct', 0):.2f}%\n"
         + _news_lines(ctx.get("news")) + _weight_line(ctx.get("news_weight")) +
         "¿Ejecutar esta operación?"

@@ -18,6 +18,7 @@ from fx import filters
 from fx.live import FxLiveBroker, is_our_link
 from fx.shadow import monitor_shadows
 import evolution
+import position_review
 import broker_health
 from broker_health import fmt_duration, fresh_health as _fresh_health  # noqa: F401 (re-exported for tests)
 from fx.engine_core import (logger, INITIAL_BALANCE, LIVE_GRACE_SEC, HFM_HEALTH_SEC, HFM_HEALTH_RETRY_SEC, TRANSIENT_TG_SEC, PENDING_TTL_SEC,  # noqa: F401
@@ -224,6 +225,8 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
             await self._expire_pending(now)
         await monitor_shadows(self, tickers, settings, now)
         await self._update_account_metrics(settings)
+        if position_review.due(self, settings):
+            await position_review.review_open_positions(self, settings, "USD", self.profile.bot_name)
 
     async def _hfm_health(self, synced: bool):
         """Watches the MetaApi account (terminal state + client API) in REAL mode; alerts once per outage, reminds every 6 h, confirms recovery."""
