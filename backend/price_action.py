@@ -22,8 +22,9 @@ def _atr(c: list, n: int = 14) -> float:
     return sum(tail) / len(tail)
 
 
-def facts(candles: list, side: str, entry: float, atr: float = 0.0, sl: float = None, tp: float = None) -> dict:
-    """`candles` = closed candles BEFORE the entry (oldest first). Returns metrics + Spanish `summary` lines."""
+def facts(candles: list, side: str, entry: float, atr: float = 0.0, sl: float = None, tp: float = None, max_run: int = 3, swing_atr: float = 1.0) -> dict:
+    """`candles` = closed candles BEFORE the entry (oldest first). Returns metrics + Spanish `summary` lines.
+    `max_run` = consecutive large candles from which the move counts as extended; `swing_atr` = ATR distance under which an opposing swing counts as «too close»."""
     c = [x for x in candles if all(k in x for k in ("open", "high", "low", "close"))]
     if len(c) < 10:
         return {"summary": ["Sin suficientes velas previas para evaluar la acción del precio."]}
@@ -38,7 +39,7 @@ def facts(candles: list, side: str, entry: float, atr: float = 0.0, sl: float = 
         else:
             break
     run_size = round(sum(abs(b) for b in bodies[-run:]), 2) if run else 0.0
-    big_run = run >= 3 and run_size >= 2.0
+    big_run = run >= max(1, int(max_run)) and run_size >= 2.0
     move_pct = round((c[-1]["close"] - c[-run - 1]["close"]) / c[-run - 1]["close"] * 100, 3) if run else 0.0
 
     highs, lows = _pivots(c[-60:])
@@ -70,9 +71,10 @@ def facts(candles: list, side: str, entry: float, atr: float = 0.0, sl: float = 
     opp = out["swing_high_atr"] if long else out["swing_low_atr"]
     opp_lvl = swing_h if long else swing_l
     if opp is not None:
-        near = opp <= 1.0
+        near = opp <= float(swing_atr)
         lines.append(f"{'Resistencia' if long else 'Soporte'} (swing previo) en {opp_lvl:.6g}, a {opp} ATR" + (" — MUY CERCA: poco recorrido antes de un nivel que puede frenar el precio." if near else "."))
         out["near_opposing_swing"] = near
+        out["opposing_swing"], out["opposing_swing_atr"] = opp_lvl, opp
         if tp and out.get("tp_beyond_swing"):
             lines.append("El TP queda MÁS ALLÁ de ese swing: para cobrar debería romperlo.")
     else:
@@ -85,11 +87,23 @@ def facts(candles: list, side: str, entry: float, atr: float = 0.0, sl: float = 
     return out
 
 
-def from_df(df, side: str, entry: float, atr: float = 0.0, sl: float = None, tp: float = None, upto: int = None) -> dict:
+def from_df(df, side: str, entry: float, atr: float = 0.0, sl: float = None, tp: float = None, upto: int = None, max_run: int = 3, swing_atr: float = 1.0) -> dict:
     """Helper for engines: `df` pandas OHLC frame; `upto` = index of the signal candle (exclusive)."""
     sub = df.iloc[-80:upto] if upto is not None else df.iloc[-80:]
     rows = [{"open": float(r.open), "high": float(r.high), "low": float(r.low), "close": float(r.close)} for r in sub.itertuples()]
-    return facts(rows, side, entry, atr, sl, tp)
+    return facts(rows, side, entry, atr, sl, tp, max_run, swing_atr)
+
+
+def hard_block(pa: dict) -> str:
+    """Deterministic gate: reason text if the entry chases an extended move or sits against a nearby swing, else ''."""
+    if not pa or not pa.get("warning"):
+        return ""
+    parts = []
+    if pa.get("extended_move"):
+        parts.append(f"{pa['consecutive_candles']} velas grandes seguidas ({pa['run_size_atr']} ATR)")
+    if pa.get("near_opposing_swing"):
+        parts.append(f"swing contrario a {pa['opposing_swing_atr']} ATR ({pa['opposing_swing']:.6g})")
+    return "precio extendido: " + " y ".join(parts)
 
 
 def prompt_lines(pa: dict) -> str:

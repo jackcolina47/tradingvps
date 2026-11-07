@@ -25,7 +25,7 @@ const Toggle = ({ on, label, onClick, testId }) => (
 export default function FxFiltersPanel({ settings, onSave, symbolNames = {} }) {
   const [data, setData] = useState(null);
   const load = () => http.get("/market/context").then((r) => setData(r.data)).catch(() => toast.error("No se pudo cargar el estado de los filtros"));
-  useEffect(() => { load(); }, [settings.usd_regime_filter, settings.rollover_guard, settings.vol_filter_enabled, settings.seasonality_bias, settings.fomc_rule, settings.currency_exposure_limit]);
+  useEffect(() => { load(); }, [settings.usd_regime_filter, settings.rollover_guard, settings.vol_filter_enabled, settings.seasonality_bias, settings.fomc_rule, settings.currency_exposure_limit, settings.price_action_block]);
   if (!data) return <div className="flex justify-center p-8"><Loader2 className="h-5 w-5 animate-spin text-slate-500" /></div>;
   const rg = data.regimen_usd, exp = data.exposicion_por_divisa, roll = data.rollover, fix = data.fix_reversion, strong = rg.state === "USD FUERTE";
   const net = Object.entries(exp.neta_actual || {}).filter(([, n]) => n !== 0).sort();
@@ -91,6 +91,14 @@ export default function FxFiltersPanel({ settings, onSave, symbolNames = {} }) {
       </div>
       <p className="text-[11px] text-slate-500">
         MUERTO (percentil &lt; {settings.vol_min_pct}): sin entradas · EXTREMO (≥ {settings.vol_high_pct}): riesgo a la mitad. Sesgo horario (Breedon &amp; Ranaldo): una divisa tiende a depreciarse en su horario local; las señales contra el sesgo se bloquean en los pares marcados y se reducen en el resto. Solo afecta a estrategias de corto plazo.
+      </p>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">Precio extendido · regla dura antes de la IA · {settings.price_action_max_candles ?? 3} velas grandes seguidas o swing contrario a &lt; {settings.price_action_swing_atr ?? 1} ATR</p>
+        <Toggle on={settings.price_action_block} label="Bloqueo precio extendido" testId="fx-price-action-toggle" onClick={() => onSave({ price_action_block: !settings.price_action_block })} />
+      </div>
+      <p data-testid="fx-price-action-hint" className="text-[11px] text-slate-500">
+        No se abre una señal de corto plazo si llega tras {settings.price_action_max_candles ?? 3} o más velas grandes seguidas a favor (≥ 2 ATR en total: perseguir el precio) o si el swing contrario más cercano (resistencia en LONG, soporte en SHORT) está a menos de {settings.price_action_swing_atr ?? 1} ATR. La señal queda en sombra PRECIO_EXTENDIDO para medir cuánto ahorra. Umbrales en Configuración.
       </p>
 
       <div className="flex flex-wrap items-center justify-between gap-2 pt-1">

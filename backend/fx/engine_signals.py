@@ -170,6 +170,11 @@ class SignalsMixin:
         g_block, g_kind, g_factor, g_ctx = await self._market_gates(symbol, sig["side"], settings, horizon)
         if not block and g_block:
             block, kind = g_block, g_kind
+        pa = price_action.from_df(df, sig["side"], sig["price"], sig["indicators"].get("atr", 0), sig["sl"], sig["tp"], upto=len(df) - 1,
+                                  max_run=settings.price_action_max_candles, swing_atr=settings.price_action_swing_atr)
+        pa_block = price_action.hard_block(pa) if settings.price_action_block and horizon == "short" else ""
+        if not block and pa_block:
+            block, kind = pa_block, "PRECIO_EXTENDIDO"
         risk_factor *= g_factor
         t = self.market.tickers.get(symbol, {})
         news_ctx = self.news.context(symbol) if self.news else None
@@ -179,7 +184,7 @@ class SignalsMixin:
                    "open_positions": len(open_syms), "max_positions": settings.max_positions, "daily_pnl_pct": acc["daily_pnl_pct"], "equity": acc["equity"],
                    "news_risk": (news_ctx or {}).get("mercado", {}).get("risk") if news_ctx else None, "news_pair": (news_ctx or {}).get("par") if news_ctx else None,
                    "news_size_factor": risk_factor, "ai_enabled": settings.ai_enabled, "ai_min_confidence": settings.ai_min_confidence,
-                   "horizon": horizon, **g_ctx}
+                   "horizon": horizon, "price_action": pa, **g_ctx}
         base = dict(symbol=symbol, side=sig["side"], strategy=sig["strategy"], timeframe=tf, price=sig["price"], sl=sig["sl"], tp=sig["tp"],
                     score=sig["score"], reasons=sig["reasons"], indicators=sig["indicators"], key=key, context=context, horizon=horizon)
         if block:
@@ -200,11 +205,10 @@ class SignalsMixin:
                 "open_positions": len(open_syms), "daily_pnl_pct": acc["daily_pnl_pct"],
                 "news": news_ctx, "news_weight": settings.ai_news_weight,
                 "horizon": horizon, "vol_regime": g_ctx.get("vol_regime"), "season_bias": g_ctx.get("season_bias"), "usd_regime": g_ctx.get("usd_regime"),
-                "price_action": price_action.from_df(df, sig["side"], sig["price"], sig["indicators"].get("atr", 0), sig["sl"], sig["tp"], upto=len(df) - 1),
+                "price_action": pa,
                 "learned_rules": await ai_rules.active(self.db, symbol),
             }
             try:
-                signal.context = {**(signal.context or {}), "price_action": ctx["price_action"]}
                 res = await evaluate_signal(symbol, settings.timeframe, sig, ctx, self.profile.ai_kind)
                 signal.ai_decision, signal.ai_confidence, signal.ai_risk, signal.ai_reasoning = res["decision"], res["confidence"], res["risk"], res["reasoning"]
                 signal.ai_min_confidence = settings.ai_min_confidence

@@ -20,9 +20,10 @@ const DECISION_CLS = {
   ESTACIONAL: "bg-cyan-500/10 text-cyan-300 border-cyan-500/30",
   REGIMEN_USD: "bg-indigo-500/10 text-indigo-300 border-indigo-500/30",
   FOMC: "bg-red-500/10 text-red-300 border-red-500/30",
+  PRECIO_EXTENDIDO: "bg-amber-500/10 text-amber-300 border-amber-500/30",
 };
 
-const NO_AI_BAR = ["SIN_IA", "ERROR", "BLOQUEADA", "NOTICIAS", "FUNDING", "MERCADO", "SESION", "REGIMEN", "ROTACION", "EXPOSICION", "ROLLOVER", "VOLATILIDAD", "ESTACIONAL", "REGIMEN_USD", "FOMC"];
+const NO_AI_BAR = ["SIN_IA", "ERROR", "BLOQUEADA", "NOTICIAS", "FUNDING", "MERCADO", "SESION", "REGIMEN", "ROTACION", "EXPOSICION", "ROLLOVER", "VOLATILIDAD", "ESTACIONAL", "REGIMEN_USD", "FOMC", "PRECIO_EXTENDIDO"];
 const RISK_CLS = { BAJO: "text-emerald-400", MEDIO: "text-amber-300", ALTO: "text-rose-400" };
 const GATE_TIP = "Se ejecuta solo si la IA aprueba y la confianza ≥ mínimo (Ajustes → confianza mínima). El riesgo es informativo: no decide la ejecución.";
 

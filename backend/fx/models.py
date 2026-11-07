@@ -27,6 +27,9 @@ class FxSettings(BaseModel):
     ai_position_review_minutes: int = 30
     ai_position_review_mode: str = "auto"
     ai_position_review_min_confidence: int = 75
+    price_action_block: bool = True
+    price_action_max_candles: int = 3
+    price_action_swing_atr: float = 1.0
     scan_interval_sec: int = 120
     trailing_enabled: bool = True
     htf_filter: bool = True
@@ -191,6 +194,9 @@ class FxSettingsUpdate(BaseModel):
     ai_position_review_minutes: Optional[int] = Field(default=None, ge=5, le=240)
     ai_position_review_mode: Optional[str] = Field(default=None, pattern="^(notify|auto)$")
     ai_position_review_min_confidence: Optional[int] = Field(default=None, ge=50, le=100)
+    price_action_block: Optional[bool] = None
+    price_action_max_candles: Optional[int] = Field(default=None, ge=2, le=5)
+    price_action_swing_atr: Optional[float] = Field(default=None, ge=0.25, le=3)
     scan_interval_sec: Optional[int] = Field(default=None, ge=30, le=900)
     trailing_enabled: Optional[bool] = None
     htf_filter: Optional[bool] = None

@@ -49,7 +49,8 @@ async def build_context(engine, settings, acc: dict, with_backtest: bool = False
         "pnl > 0 en ALTO con muestra suficiente = la IA rechaza señales rentables en días de alertas generales → ai_news_weight 'bajo'; pnl < 0 = el filtro acierta → 'normal'.")
     ctx["rendimiento_real"]["shadow"]["_explicacion"] += (
         " Motivos nuevos: EXPOSICION (tope de posiciones en la misma dirección por divisa), ROLLOVER (ventana 16:50–17:15 Nueva York), VOLATILIDAD (ATR bajo el percentil mínimo), "
-        "ESTACIONAL (señal contra el sesgo horario de la divisa), REGIMEN_USD (par con USD contra el régimen del índice USD), FOMC (continuación en las 24 h tras la Fed). "
+        "ESTACIONAL (señal contra el sesgo horario de la divisa), REGIMEN_USD (par con USD contra el régimen del índice USD), FOMC (continuación en las 24 h tras la Fed), "
+        "PRECIO_EXTENDIDO (entrada tras N velas grandes seguidas o pegada a un swing contrario; ajustable con price_action_block / price_action_max_candles / price_action_swing_atr). "
         "filter_value > 0 en un motivo = el filtro ahorra dinero; < 0 con ≥ 20 sombras = relajarlo.")
     ctx["filtros_fx"] = await gates_context(engine, settings)
     if engine.news and engine.news.latest:

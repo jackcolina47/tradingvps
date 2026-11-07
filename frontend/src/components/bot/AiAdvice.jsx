@@ -11,7 +11,7 @@ export const LABELS = {
   ai_enabled: "Filtro IA", scan_interval_sec: "Intervalo de escaneo (s)", close_before_weekend: "Cierre antes del fin de semana", min_lot_max_risk: "Tope riesgo lote mínimo (%)",
   risk_profile: "Perfil de riesgo", auto_review_enabled: "Revisión IA automática", auto_review_apply: "Aplicar cambios de la revisión",
   ai_news_weight: "Peso de las noticias en la IA", partial_tp_enabled: "Cierre parcial", vol_filter_enabled: "Filtro de volatilidad", seasonality_bias: "Sesgo estacional",
-  usd_regime_filter: "Filtro régimen USD", fomc_rule: "Regla FOMC", rollover_guard: "Guarda de rollover", currency_exposure_limit: "Exposición por divisa", max_long_positions: "Máx. posiciones largo plazo",
+  usd_regime_filter: "Filtro régimen USD", fomc_rule: "Regla FOMC", price_action_block: "Bloqueo por precio extendido", rollover_guard: "Guarda de rollover", currency_exposure_limit: "Exposición por divisa", max_long_positions: "Máx. posiciones largo plazo",
 };
 export const fmtVal = (k, v) => {
   if (v == null) return "—";
