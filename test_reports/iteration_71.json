@@ -1,0 +1,19 @@
+{
+  "summary": "Tested iter71 features: AI post-mortem of closed trades (analyze/cached/detail/404/fresh real AI call), price_action.facts unit cases + prompt injection (crypto & FX _build_prompt), position_review.due unit, ai_position_review_* settings persistence/validation on /api and /api/fx, POST /api/fx|pepper/positions/ai-review (real AI), and UI on /hotforex (positions badge + Revisar con IA toast, Historial analyze buttons, trade detail AI review block, Ajustes block toggle/mode/save), /bybit and /pepperstone regression. 15/15 pytest passed; all UI checks passed; no console errors on the 3 dashboards.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter71_ai_trade_review.py", "/app/test_reports/pytest/iter71.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "position_review.review_open_positions always uses crypto `models.Position` to parse docs, including FX/Pepper positions. It worked for the seeded XAUUSD position, but any field that only exists on the FX Position model is dropped from p.model_dump() before it goes to the AI. Use the engine's own Position class.",
+    "No concurrency guard on POST /trades/{id}/analyze or /positions/ai-review. A double click or two tabs can fire two paid AI calls, and in auto mode two review cycles could both try to close the same position. Add a per-engine lock or busy flag.",
+    "engine._ai_review_last is set before the loop, so if every position fails (candles/AI error), the next attempt still waits the full interval. This is acceptable, but log one summary line when that happens.",
+    "Seeded GBPUSD trades have entry 1.3155 while Yahoo candles for that window are about 1.334-1.340. The AI itself flagged the mismatch in chart_context. This is a seed-data artefact, not a code bug."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter71_ai_trade_review.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None created. Running the fresh analysis stored ai_review on the previously unanalyzed GBPUSD trade 6aee7451d30c090fe3627972 (expected by the request). The positions AI review overwrote position.ai_review on XAUUSD 6aee74a630b35597d99f7bf1 (still MANTENER 68%). The position is still open.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run with -n 0 (settings tests mutate shared state). Positions AI review tests temporarily set fx ai_position_review_mode='notify' so the AI can never close the seeded paper position, then restore 'auto'. The auto-mode close/breakeven path was NOT exercised live; it was only checked by code review. Final state was verified: all 3 bots have ai_enabled true and enabled=false/30/auto/75. Pepper has no positions, so its positions-ai-review-button is hidden, which is expected. Bybit Historial is empty and shows 'Aún no hay operaciones cerradas.'"
+}
