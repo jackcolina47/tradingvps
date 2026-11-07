@@ -13,6 +13,7 @@ from fx import regime as fx_regime
 from fx.strategies_slow import fix_signal, fix_window
 from fx.ai import evaluate_signal
 import price_action
+import ai_rules
 from ai_advisor import label as ai_label
 from fx.backtest import build_fx_df
 from fx.shadow import open_shadow
@@ -200,6 +201,7 @@ class SignalsMixin:
                 "news": news_ctx, "news_weight": settings.ai_news_weight,
                 "horizon": horizon, "vol_regime": g_ctx.get("vol_regime"), "season_bias": g_ctx.get("season_bias"), "usd_regime": g_ctx.get("usd_regime"),
                 "price_action": price_action.from_df(df, sig["side"], sig["price"], sig["indicators"].get("atr", 0), sig["sl"], sig["tp"], upto=len(df) - 1),
+                "learned_rules": await ai_rules.active(self.db, symbol),
             }
             try:
                 signal.context = {**(signal.context or {}), "price_action": ctx["price_action"]}

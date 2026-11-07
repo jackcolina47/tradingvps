@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { X, Download } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { REASON_LABELS, STRATEGY_LABELS } from "@/lib/api";
 
@@ -36,7 +36,7 @@ const Pick = ({ testId, value, onChange, label, options }) => (
 
 const DATE_CLS = "h-7 rounded-sm border border-[#1E293B] bg-[#07090E] px-1.5 font-mono text-[10px] text-slate-300 [color-scheme:dark] focus:border-amber-500/50 focus:outline-none";
 
-export default function TradeFilters({ trades, filters, onChange, shown }) {
+export default function TradeFilters({ trades, filters, onChange, shown, onExport }) {
   const uniq = (k) => [...new Set(trades.map((t) => t[k]))].sort();
   const set = (k) => (v) => onChange({ ...filters, [k]: v });
   const active = Object.keys(EMPTY_FILTERS).some((k) => filters[k] !== EMPTY_FILTERS[k]);
@@ -58,6 +58,12 @@ export default function TradeFilters({ trades, filters, onChange, shown }) {
         <button type="button" data-testid="trade-filter-clear" onClick={() => onChange(EMPTY_FILTERS)}
           className="inline-flex items-center gap-1 rounded-sm border border-slate-600/60 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-slate-300 hover:bg-[#111827]">
           <X className="h-3 w-3" /> Limpiar
+        </button>
+      )}
+      {onExport && (
+        <button type="button" data-testid="trade-export-csv" onClick={onExport} disabled={!shown} title="Descargar las operaciones mostradas (con notas, etiquetas y análisis IA) en CSV para Excel"
+          className="inline-flex items-center gap-1 rounded-sm border border-emerald-500/40 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-emerald-300 hover:bg-emerald-500/10 disabled:opacity-40">
+          <Download className="h-3 w-3" /> Exportar CSV ({shown})
         </button>
       )}
     </div>

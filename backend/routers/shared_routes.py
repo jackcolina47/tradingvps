@@ -12,6 +12,7 @@ import chart
 import price_action
 import ai_advisor
 import position_review
+import ai_rules
 from auth import hash_password, verify_password, create_token
 from ai_advisor import ping as ai_ping, current as ai_current, friendly_error, key_hint, ORIGIN_LABELS
 from deps import store
@@ -58,6 +59,23 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
 
     @router.get("/auth/me")
     async def auth_me():
+        return {"ok": True}
+
+    @router.get("/ai-rules")
+    async def ai_rules_list():
+        return {"rules": await ai_rules.list_rules(engine.db), "max": ai_rules.MAX_RULES}
+
+    @router.post("/ai-rules")
+    async def ai_rules_add(body: ai_rules.RuleIn):
+        return await ai_rules.add(engine.db, body)
+
+    @router.patch("/ai-rules/{rule_id}")
+    async def ai_rules_patch(rule_id: str, body: ai_rules.RulePatch):
+        return await ai_rules.patch(engine.db, rule_id, body)
+
+    @router.delete("/ai-rules/{rule_id}")
+    async def ai_rules_delete(rule_id: str):
+        await ai_rules.remove(engine.db, rule_id)
         return {"ok": True}
 
     @router.post("/positions/ai-review")

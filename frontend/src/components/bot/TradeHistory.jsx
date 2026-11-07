@@ -4,7 +4,13 @@ import { SideBadge, Empty } from "./Panel";
 import { TH, TD } from "./PositionsTable";
 import TradeDetailDialog from "./TradeDetailDialog";
 import TradeFilters, { EMPTY_FILTERS, applyFilters } from "./TradeFilters";
+import { downloadCsv } from "./tradesCsv";
 import { http, fmtPrice, fmtSignedUsd, fmtDateTime, pnlClass, REASON_LABELS, STRATEGY_LABELS } from "@/lib/api";
+
+const botLabel = () => {
+  const b = http.defaults.baseURL || "";
+  return b.endsWith("/api/fx") ? "hotforex" : b.endsWith("/api/pepper") ? "pepperstone" : "bybit";
+};
 
 const REASON_CLS = {
   TP: "text-emerald-400 border-emerald-500/30",
@@ -80,7 +86,7 @@ export default function TradeHistory({ trades }) {
   const current = selected && source.find((t) => t.id === selected.id);
   return (
     <div>
-      <TradeFilters trades={source} filters={filters} onChange={setFilters} shown={shown.length} />
+      <TradeFilters trades={source} filters={filters} onChange={setFilters} shown={shown.length} onExport={() => downloadCsv(shown, botLabel())} />
       <div className="max-h-[420px] overflow-auto thin-scroll">
         {!shown.length ? <Empty testId="trades-filter-empty" text="Ninguna operación coincide con los filtros." /> : (
           <table data-testid="trades-table" className="w-full text-sm">

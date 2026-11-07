@@ -8,6 +8,7 @@ from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, Strea
 from llm_json import parse_llm_json
 import funding
 import price_action
+import ai_rules
 
 logger = logging.getLogger("ai")
 _cfg = {"api_key": os.environ.get("EMERGENT_LLM_KEY", ""), "provider": "anthropic", "model": "claude-sonnet-5-5", "source": "emergent"}
@@ -329,7 +330,8 @@ def _build_prompt(symbol, timeframe, sig, ctx) -> str:
         + _layers_line(ctx) +
         f"Cambio 24h: {ctx.get('change_24h', 0):.2f}% | {funding.prompt_line(ctx.get('funding'))}\n"
         f"Últimos cierres (% cambio por vela, más reciente al final): {ctx.get('recent_changes')}\n"
-        + price_action.prompt_lines(ctx.get("price_action")) +
+        + price_action.prompt_lines(ctx.get("price_action"))
+        + ai_rules.prompt_lines(ctx.get("learned_rules")) +
         f"Cuenta: {ctx.get('open_positions')} posiciones abiertas, PnL diario {ctx.get('daily_pnl_pct', 0):.2f}%\n"
         + _news_lines(ctx.get("news")) +
         "¿Ejecutar esta operación?"

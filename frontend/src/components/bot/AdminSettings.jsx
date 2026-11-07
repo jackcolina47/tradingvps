@@ -6,6 +6,7 @@ import SecuritySection from "./admin/SecuritySection";
 import AiSection from "./admin/AiSection";
 import TelegramSection from "./admin/TelegramSection";
 import AutoReviewSection from "./admin/AutoReviewSection";
+import LearnedRulesSection from "./admin/LearnedRulesSection";
 import AccountSection from "./admin/AccountSection";
 import BybitSection from "./admin/BybitSection";
 import LiveModeSection from "./admin/LiveModeSection";
@@ -44,6 +45,7 @@ export default function AdminSettings({ account, refresh }) {
         <LiveModeSection config={config} refresh={refresh} />
         <SecuritySection />
         <AiSection config={config} onSave={save} />
+        <LearnedRulesSection />
         <TelegramSection config={config} onSave={save} />
         <AutoReviewSection config={config} onSave={save} onRan={load} />
         <NewsSection config={config} onSave={save} />

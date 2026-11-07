@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Sparkles, RefreshCw } from "lucide-react";
+import { Loader2, Sparkles, RefreshCw, BookmarkPlus } from "lucide-react";
 import { toast } from "sonner";
 import { http, errMsg } from "@/lib/api";
 
@@ -17,8 +17,20 @@ export default function TradeAiReview({ trade, autoRun = false, onReviewed }) {
   const [review, setReview] = useState(trade.ai_review || null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [ruleState, setRuleState] = useState("");
+  const saveRule = async () => {
+    setRuleState("saving");
+    try {
+      await http.post("/ai-rules", { text: review.lesson, source_trade_id: trade.id, verdict: review.verdict });
+      setRuleState("saved");
+      toast.success("Regla guardada: la IA la tendrá en cuenta al aprobar nuevas señales de este bot");
+    } catch (e) {
+      setRuleState("");
+      toast.error(errMsg(e));
+    }
+  };
   const run = async (force = false) => {
-    setBusy(true); setErr("");
+    setBusy(true); setErr(""); setRuleState("");
     try {
       const { data } = await http.post(`/trades/${trade.id}/analyze${force ? "?force=true" : ""}`);
       setReview(data.review);
@@ -65,7 +77,13 @@ export default function TradeAiReview({ trade, autoRun = false, onReviewed }) {
             </div>
           )}
           {review.lesson && (
-            <p data-testid="trade-ai-lesson" className="rounded-sm border border-amber-500/30 bg-amber-500/5 px-2.5 py-1.5 text-xs text-amber-200"><span className="font-mono text-[10px] uppercase tracking-wider text-amber-400">Regla sugerida · </span>{review.lesson}</p>
+            <div data-testid="trade-ai-lesson" className="flex flex-wrap items-center gap-2 rounded-sm border border-amber-500/30 bg-amber-500/5 px-2.5 py-1.5 text-xs text-amber-200">
+              <span className="flex-1 min-w-[200px]"><span className="font-mono text-[10px] uppercase tracking-wider text-amber-400">Regla sugerida · </span>{review.lesson}</span>
+              <button data-testid="trade-ai-save-rule" onClick={saveRule} disabled={ruleState === "saving" || ruleState === "saved"}
+                className="inline-flex items-center gap-1 rounded-sm border border-amber-500/40 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-amber-300 transition-colors hover:bg-amber-500/10 disabled:opacity-60">
+                {ruleState === "saving" ? <Loader2 className="h-3 w-3 animate-spin" /> : <BookmarkPlus className="h-3 w-3" />} {ruleState === "saved" ? "Guardada en reglas" : "Guardar como regla"}
+              </button>
+            </div>
           )}
           <p className="text-[10px] text-slate-600">{review.model} · {new Date(review.at).toLocaleString("es-ES")}</p>
         </div>

@@ -12,6 +12,7 @@ from risk import FEE_RATE, MAKER_FEE, SLIPPAGE, position_size, pnl, check_exit, 
 from ai_advisor import evaluate_signal, label as ai_label
 import price_action
 import position_review
+import ai_rules
 from plan import SCENARIOS, build_checkin, contributions as plan_contributions
 from notify import notify as tg
 from bybit import BybitClient, BybitError
@@ -747,6 +748,7 @@ class TradingEngine:
                 "open_positions": len(open_syms), "daily_pnl_pct": acc["daily_pnl_pct"],
                 "news": self.news.context(symbol) if self.news else None,
                 "price_action": price_action.from_df(df, sig["side"], sig["price"], sig["indicators"].get("atr", 0), sig["sl"], sig["tp"], upto=len(df) - 1),
+                "learned_rules": await ai_rules.active(self.db, symbol),
             }
             try:
                 signal.context = {**(signal.context or {}), "price_action": ctx["price_action"]}

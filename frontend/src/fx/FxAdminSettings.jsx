@@ -10,6 +10,7 @@ import HfmSection from "./HfmSection";
 import FxNewsSection from "./FxNewsSection";
 import LiveModeSection from "@/components/bot/admin/LiveModeSection";
 import AutoReviewSection from "@/components/bot/admin/AutoReviewSection";
+import LearnedRulesSection from "@/components/bot/admin/LearnedRulesSection";
 import BackupSection from "@/components/bot/admin/BackupSection";
 import { fmtDateTime } from "@/lib/api";
 import { useBrand } from "./brand";
@@ -59,6 +60,7 @@ export default function FxAdminSettings({ account, refresh }) {
         <AutoReviewSection config={config} onSave={save} onRan={load} desc={AUTO_REVIEW_DESC} />
         <SecuritySection />
         <AiSection config={config} onSave={save} />
+        <LearnedRulesSection />
         <TelegramSection config={config} onSave={save} weeklyDesc={WEEKLY_DESC} />
         <AccountSection account={account} refresh={refresh} currency="USD" />
         <BackupSection />
