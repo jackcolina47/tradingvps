@@ -1,0 +1,17 @@
+{
+  "summary": "Tested the FX 'Bloqueo por precio extendido' hard gate. Backend: 19/19 pytest checks passed. They cover unit tests of price_action.facts/hard_block (extended move at max_run 3 vs 4, near swing at swing_atr 1.0 vs 0.25, short signal after green candles, too few candles), integration tests of SignalsMixin._handle_signal using a fake engine with in-memory DB and patched open_shadow/evaluate_signal/ai_rules (gate on gives ai_decision=PRECIO_EXTENDIDO, note 'Bloqueada por precio extendido: precio extendido: ...', shadow kind PRECIO_EXTENDIDO and no AI call; gate off sends the signal to the AI with ctx['price_action']; long horizon is never blocked; max_candles=4 is not blocked), and the settings API (defaults, Bybit has no price_action_* keys, pepper PUT does not change the fx bot, 422 validation on both bots, defaults restored). Frontend: on /pepperstone and /hotforex the Filtros toggle goes ACTIVO -> APAGADO, stays APAGADO after reload, then goes back to ACTIVO. The hint shows. In Ajustes the switch and both numeric inputs show 3 and 1. The Bybit dashboard has none of these elements.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter73_price_action_block.py", "/app/test_reports/pytest/iter73.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "price_action.from_df docstring says `upto` is the signal-candle index (exclusive), but _handle_signal passes upto=len(df)-1 while the signal candle is i=len(df)-2. The closed signal candle is therefore included. That behaviour looks right; only the docstring is misleading.",
+    "pa is computed even when the signal is already blocked by an earlier gate. This is harmless (only CPU), and pa is stored in the context for analysis."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter73_price_action_block.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None. The integration tests use an in-memory fake DB, so no signals or shadows were written to Mongo. Settings on both FX bots are back at their defaults (true/3/1.0).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "test_iter73_price_action_block.py has a reusable fake-engine harness (make_engine/run_gate) for calling fx SignalsMixin._handle_signal without real I/O. The settings API tests restore the defaults in their teardown."
+}

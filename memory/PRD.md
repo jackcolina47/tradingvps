@@ -460,6 +460,13 @@
 - Exportar CSV (`tradesCsv.js`): botón `trade-export-csv` «Exportar CSV (N)» en la barra de filtros; exporta SOLO las operaciones filtradas; separador «;», BOM UTF‑8, coma decimal, comillas escapadas; 38 columnas (fechas, precios, SL/TP, tamaño, PnL, motivo, MFE/MAE, modo, etiquetas, nota, veredicto/confianza/bloques/regla IA, ID); nombre `historial_<bot>_<fecha>.csv`.
 - Tested: testing_agent iteration_72 (100 %): `tests/test_iter72_learned_rules.py` 8/8 + UI completa (guardar regla desde análisis, panel Ajustes en 3 bots, descarga y contenido del CSV con filtros). Datos de prueba borrados.
 
+## Implemented (2026-06, iteration 73 · Bloqueo por precio extendido — regla dura SOLO en HotForex y Pepperstone, activa por defecto)
+- `price_action.facts/from_df` aceptan `max_run` y `swing_atr`; nuevo `price_action.hard_block(pa)` → texto del motivo («precio extendido: N velas grandes seguidas (X ATR) y/o swing contrario a Y ATR») o ''.
+- `fx/engine_signals._handle_signal`: calcula `pa` una vez; si `settings.price_action_block` y horizonte corto y `hard_block` → bloque `PRECIO_EXTENDIDO` ANTES de la IA (sin llamada IA), Signal con `ai_decision=PRECIO_EXTENDIDO`, nota «Bloqueada por precio extendido: …», sombra `PRECIO_EXTENDIDO` (KINDS en `fx/shadow.py`, BLOCK_BY en `fx/engine_core.py`). La reversión de fin de mes (largo plazo) nunca se bloquea. Con la regla apagada la IA sigue recibiendo `ctx.price_action`.
+- `FxSettings`: `price_action_block=True`, `price_action_max_candles=3` (2–5), `price_action_swing_atr=1.0` (0.25–3). Bybit NO tiene estos campos.
+- UI FX: toggle `fx-price-action-toggle` + hint en pestaña Filtros; en Ajustes toggle «Bloqueo por precio extendido» y numéricos «velas seguidas» / «swing a (ATR)». Etiquetas PRECIO_EXTENDIDO en AiSignals, Performance, ShadowStats, BLOCK_LABELS, AiAdvice; explicación en `fx/review.py`.
+- Tested: testing_agent iteration_73 (100 %): `tests/test_iter73_price_action_block.py` 19/19 (unit + integración con motor falso + API/aislamiento por bot + 422) y UI en /pepperstone, /hotforex y ausencia en Bybit.
+
 ## Backlog
 - P2: Pepperstone cTrader: sin puente (MetaApi solo MetaTrader). Opción futura: cTrader Open API (OAuth + Protobuf) como conector alternativo del motor FX.
 - P2: FX `fix_reversion`: si el bot está apagado durante toda la ventana 16:00–16:30 Londres del último día hábil, la oportunidad del mes se pierde (sin recuperación posterior, por diseño).
