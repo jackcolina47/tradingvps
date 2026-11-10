@@ -467,6 +467,11 @@
 - UI FX: toggle `fx-price-action-toggle` + hint en pestaña Filtros; en Ajustes toggle «Bloqueo por precio extendido» y numéricos «velas seguidas» / «swing a (ATR)». Etiquetas PRECIO_EXTENDIDO en AiSignals, Performance, ShadowStats, BLOCK_LABELS, AiAdvice; explicación en `fx/review.py`.
 - Tested: testing_agent iteration_73 (100 %): `tests/test_iter73_price_action_block.py` 19/19 (unit + integración con motor falso + API/aislamiento por bot + 422) y UI en /pepperstone, /hotforex y ausencia en Bybit.
 
+## Implemented (2026-06, iteration 74 · revisión IA de posiciones: prudencia específica cripto + contexto de Bitcoin)
+- `ai_advisor.POSITION_SYSTEM` parametrizado con `POSITION_PRUDENCE[market]`: FX mantiene «Sé prudente…»; cripto usa «riesgo direccional y rápido: rechazo fuerte sin recuperación / nivel clave perdido / BTC girando en contra → CERRAR antes del SL» (sin cerrar por una vela de ruido < 1 ATR).
+- `ai_advisor.btc_context_line(rows15, symbol)`: con 15m de BTCUSDT calcula variación 1 h y 30 min; prefijo «ATENCIÓN:» si |1h| ≥ 1 % o |30m| ≥ 0,7 %. Solo para altcoins (no BTCxxx). `position_review.review_open_positions` la pide una vez por ciclo (solo motor Bybit, `currency == "USDT"`) y la pasa a `review_position(..., market, btc_line)`; se guarda en `ai_review.btc_context` y se muestra en el tooltip de PositionsTable.
+- Tested: manual con datos reales de Bybit (ETHUSDT + BTC 15m) → la IA cita el movimiento de BTC en su razonamiento. Sin cambios en FX.
+
 ## Backlog
 - P2: Pepperstone cTrader: sin puente (MetaApi solo MetaTrader). Opción futura: cTrader Open API (OAuth + Protobuf) como conector alternativo del motor FX.
 - P2: FX `fix_reversion`: si el bot está apagado durante toda la ventana 16:00–16:30 Londres del último día hábil, la oportunidad del mes se pierde (sin recuperación posterior, por diseño).

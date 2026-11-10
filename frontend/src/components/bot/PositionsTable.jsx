@@ -84,7 +84,7 @@ export default function PositionsTable({ positions, onClose, onCloseAll }) {
                     {p.entry_type && p.entry_type !== "market" && <span data-testid={`position-entry-${p.id}`} className="ml-1 rounded-sm bg-slate-700/60 px-1 text-[9px] text-slate-300" title={ENTRY_LABELS[p.entry_type]}>{p.entry_type === "maker" ? "maker" : "mkt↩"}</span>}
                   </p>
                   {p.ai_review && (
-                    <p data-testid={`position-ai-review-${p.id}`} title={`${p.ai_review.reasoning}\n${new Date(p.ai_review.at).toLocaleString("es-ES")}`}
+                    <p data-testid={`position-ai-review-${p.id}`} title={`${p.ai_review.reasoning}${p.ai_review.btc_context ? `\n${p.ai_review.btc_context}` : ""}\n${new Date(p.ai_review.at).toLocaleString("es-ES")}`}
                       className={`mt-0.5 inline-flex items-center gap-1 rounded-sm border px-1 text-[9px] font-mono uppercase ${AI_CLS[p.ai_review.action] || AI_CLS.MANTENER}`}>
                       <Sparkles className="h-2.5 w-2.5" /> IA: {p.ai_review.action} {p.ai_review.confidence}%{p.ai_review.acted ? ` · ${p.ai_review.acted}` : ""}
                     </p>

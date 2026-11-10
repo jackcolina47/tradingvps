@@ -403,14 +403,32 @@ POSITION_SYSTEM = (
     "Eres un gestor de riesgo que vigila posiciones ABIERTAS de un bot algorítmico. Decides si el mercado sigue respaldando la operación. "
     "Opciones: MANTENER (la tesis sigue viva), BREAKEVEN (proteger: mover el stop al precio de entrada porque hay beneficio pero señales de agotamiento), "
     "CERRAR (la tesis se ha roto o hay señales claras de giro en contra y es mejor salir ya, con beneficio o pérdida menor al SL). "
-    "Sé prudente: no cierres por ruido normal; CERRAR solo con evidencia clara (estructura rota, velas de rechazo fuertes en contra, nivel clave perdido, momentum opuesto). "
+    "{prudence} "
     "BREAKEVEN solo si el precio ya está claramente a favor (≥ 0,5 R) y no se puede ejecutar si eso dejaría el stop peor que el actual. "
     "Responde EXCLUSIVAMENTE con JSON válido en español: "
-    '{"action":"MANTENER"|"BREAKEVEN"|"CERRAR","confidence":entero 0-100,"reasoning":"2-3 frases con datos concretos"}'
+    '{{"action":"MANTENER"|"BREAKEVEN"|"CERRAR","confidence":entero 0-100,"reasoning":"2-3 frases con datos concretos"}}'
 )
+POSITION_PRUDENCE = {
+    "fx": "Sé prudente: no cierres por ruido normal; CERRAR solo con evidencia clara (estructura rota, velas de rechazo fuertes en contra, nivel clave perdido, momentum opuesto).",
+    "crypto": ("En cripto el riesgo es direccional y rápido: si ves un rechazo fuerte en contra de la tendencia sin recuperación rápida, una pérdida del nivel clave o a Bitcoin "
+               "girando en contra de la posición (las altcoins lo siguen con más fuerza), no dudes en CERRAR antes de que el stop loss sea alcanzado. "
+               "Aun así no cierres por una sola vela de ruido dentro del rango normal (< 1 ATR) con la estructura intacta."),
+}
 
 
-async def review_position(p: dict, candles: list, pa: dict, tf: str, currency: str, price: float) -> dict:
+def btc_context_line(rows15: list, symbol: str) -> str:
+    """Line for the prompt with BTC's 30 min / 1 h move when reviewing an altcoin. `rows15` = 15m BTCUSDT klines (old→new, Bybit list format)."""
+    if symbol.startswith("BTC") or not rows15 or len(rows15) < 5:
+        return ""
+    closes = [float(r[4]) for r in rows15[-5:]]
+    c1h, c30 = (closes[-1] / closes[0] - 1) * 100, (closes[-1] / closes[-3] - 1) * 100
+    strong = abs(c1h) >= 1.0 or abs(c30) >= 0.7
+    head = "ATENCIÓN: " if strong else ""
+    verb = "ha caído" if c1h < 0 else "ha subido"
+    return f"{head}Bitcoin {verb} un {c1h:+.2f} % en la última hora ({c30:+.2f} % en los últimos 30 min){' — movimiento fuerte: las altcoins suelen amplificarlo.' if strong else '.'}"
+
+
+async def review_position(p: dict, candles: list, pa: dict, tf: str, currency: str, price: float, market: str = "fx", btc_line: str = "") -> dict:
     long = p["side"] == "long"
     risk = abs(p["entry_price"] - (p.get("initial_sl") or p["sl"])) or 1e-9
     r_now = ((price - p["entry_price"]) if long else (p["entry_price"] - price)) / risk
@@ -418,14 +436,17 @@ async def review_position(p: dict, candles: list, pa: dict, tf: str, currency: s
         f"POSICIÓN ABIERTA: {p['side'].upper()} {p['symbol']} · estrategia {p['strategy']} · abierta {p['opened_at']}\n"
         f"Entrada {p['entry_price']} · precio actual {price} · SL actual {p['sl']} (inicial {p.get('initial_sl')}) · TP {p['tp']} · ATR entrada {p.get('atr')}\n"
         f"Recorrido actual {r_now:+.2f} R · PnL no realizado {p.get('unrealized_pnl', 0):+.2f} {currency} · breakeven ya aplicado: {'sí' if p.get('breakeven') else 'no'}\n"
-        f"ACCIÓN DEL PRECIO RECIENTE: {' '.join(pa.get('summary') or [])}\n"
+        + (f"MERCADO LÍDER: {btc_line}\n" if btc_line else "")
+        + f"ACCIÓN DEL PRECIO RECIENTE: {' '.join(pa.get('summary') or [])}\n"
         f"ÚLTIMAS {len(candles)} VELAS ({tf}, antigua→reciente): {_candles_txt(candles)}\n"
         "¿Qué hacemos con la posición?"
     )
-    data = parse_json(await _ask(_chat(POSITION_SYSTEM, "position-review"), prompt), "revisión de posición")
+    system = POSITION_SYSTEM.format(prudence=POSITION_PRUDENCE.get(market, POSITION_PRUDENCE["fx"]))
+    data = parse_json(await _ask(_chat(system, "position-review"), prompt), "revisión de posición")
     action = str(data.get("action", "MANTENER")).upper()
     return {"action": action if action in ("MANTENER", "BREAKEVEN", "CERRAR") else "MANTENER",
             "confidence": int(max(0, min(100, int(data.get("confidence", 0) or 0)))), "reasoning": str(data.get("reasoning", ""))[:500],
+            "btc_context": btc_line or None,
             "r_now": round(r_now, 2), "price": price, "model": label(_cfg["model"]), "at": datetime.now(timezone.utc).isoformat()}
 
 

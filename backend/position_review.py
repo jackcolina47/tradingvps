@@ -51,6 +51,13 @@ async def review_open_positions(engine, settings, currency: str, bot_name: str) 
         return []
     tf = getattr(settings, "timeframe", "1h")
     mode, min_conf = settings.ai_position_review_mode, int(settings.ai_position_review_min_confidence)
+    crypto = currency == "USDT"
+    btc15 = []
+    if crypto and any(not d["symbol"].startswith("BTC") for d in docs):
+        try:
+            btc15 = await engine.market.fetch_klines("BTCUSDT", "15m", 6, cache_sec=60)
+        except Exception as e:
+            logger.warning(f"BTC context unavailable: {e}")
     out = []
     for doc in docs:
         p = Position.from_mongo(doc)
@@ -60,7 +67,8 @@ async def review_open_positions(engine, settings, currency: str, bot_name: str) 
                 continue
             price = candles[-1]["close"]
             pa = price_action.facts(candles[:-1], p.side, p.entry_price, p.atr or 0, p.sl, p.tp)
-            review = await ai_advisor.review_position(p.model_dump(), candles[-CANDLES:], pa, tf, currency, price)
+            btc_line = ai_advisor.btc_context_line(btc15, p.symbol) if crypto else ""
+            review = await ai_advisor.review_position(p.model_dump(), candles[-CANDLES:], pa, tf, currency, price, "crypto" if crypto else "fx", btc_line)
         except Exception as e:
             await engine.log("ERROR", f"{p.symbol}: revisión IA de la posición fallida · {ai_advisor.friendly_error(e)}")
             continue
