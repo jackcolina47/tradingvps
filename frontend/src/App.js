@@ -153,7 +153,7 @@ function Dashboard({ onLogout }) {
                 <Performance tradeCount={data.account.total_trades} settings={data.settings} strategyKeys={meta?.strategy_keys} onSave={(body) => act(() => http.put("/settings", body), "Configuración actualizada")} />
               </TabsContent>
               <TabsContent value="pairs" className="mt-0">
-                <PairRanking tradeCount={data.account.total_trades} settings={data.settings} onSave={(body) => act(() => http.put("/settings", body), "Pares actualizados")} />
+                <PairRanking tradeCount={data.account.total_trades} settings={data.settings} refresh={refresh} onSave={(body) => act(() => http.put("/settings", body), "Pares actualizados")} />
               </TabsContent>
               <TabsContent value="optimizer" className="mt-0">
                 <Optimizer settings={data.settings} refresh={refresh} onSave={(body) => act(() => http.put("/settings", body), "Parámetros del bot actualizados")} />
@@ -172,9 +172,15 @@ function Dashboard({ onLogout }) {
             extraNums={[{ k: "max_long_positions", label: "Máx. posiciones largo plazo", min: 1, max: 6, step: 1 }, { k: "maker_wait_bars", label: "Espera orden maker (velas)", min: 1, max: 3, step: 1 },
               { k: "be_start_r", label: "Breakeven a (R)", min: 0.5, max: 3, step: 0.25 }, { k: "trail_start_r", label: "Trailing desde (R)", min: 0.5, max: 3, step: 0.25 },
               { k: "trail_atr_mult", label: "Distancia trailing (ATR)", min: 0.5, max: 3, step: 0.25 }, { k: "partial_tp_r", label: "Cierre parcial a (R)", min: 0.5, max: 3, step: 0.25 },
-              { k: "partial_tp_pct", label: "Cierre parcial (%)", min: 25, max: 75, step: 5 }]}
+              { k: "partial_tp_pct", label: "Cierre parcial (%)", min: 25, max: 75, step: 5 },
+              { k: "auto_prune_pf", label: "Poda: PF mínimo (30 d)", min: 0.3, max: 1.5, step: 0.05, hint: "Un par activo con factor de beneficio por debajo de este valor en los últimos 30 días entra en poda" },
+              { k: "auto_prune_min_trades", label: "Poda: más de N operaciones", min: 3, max: 100, step: 1, hint: "Solo se poda con más de N operaciones cerradas en 30 días (muestra suficiente)" }]}
             extraToggles={[{ k: "btc_regime_filter", label: "Filtro régimen BTC", hint: "Cortos plazos solo a favor de BTC vs SMA200 diaria" }, { k: "rotation_enabled", label: "Rotación semanal", hint: "Momentum 7 d ponderado por volumen: sesgo y tamaño por par" },
-              { k: "partial_tp_enabled", label: "Cierre parcial de beneficios", hint: "Cierra una parte al alcanzar el nivel en R y deja correr el resto con trailing" }]}
+              { k: "partial_tp_enabled", label: "Cierre parcial de beneficios", hint: "Cierra una parte al alcanzar el nivel en R y deja correr el resto con trailing" },
+              { k: "reopt_enabled", label: "Re-optimización semanal", hint: "Cada 7 días repite el optimizador SL/TP/ATR en los pares marcados abajo, aplica el mejor resultado robusto y avisa por Telegram si un par apagado pasa a ser rentable" },
+              { k: "auto_prune_enabled", label: "Poda automática de pares", hint: "Cada día revisa los últimos 30 días: un par con más de N operaciones y PF bajo recibe aviso por Telegram y, si sigue igual al día siguiente, se apaga solo" }]}
+            extraChips={[{ k: "reopt_symbols", label: "Pares a re-optimizar cada semana", emptyLabel: "ninguno", options: (meta?.symbols || []).map((s) => ({ id: s, name: s.replace("USDT", "") })),
+              hint: "Máximo 6 pares. Los parámetros propios (SL/TP/ATR) de cada uno se actualizan si el optimizador encuentra una combinación robusta mejor." }]}
             onSave={(body) => act(() => http.put("/settings", body), "Configuración guardada")}
             onProfile={(level) => act(() => http.post("/profile", { level }), `Perfil de riesgo aplicado: ${meta?.profiles?.[level]?.name || level}`)} />
           <Terminal logs={data.logs} onClear={() => act(() => http.delete("/logs"))} />

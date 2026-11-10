@@ -11,6 +11,7 @@ from strategies_slow import SLOW_INFO, SLOW_KEYS, evaluate_slow
 from risk import FEE_RATE, MAKER_FEE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules, move_in_r, tp_in_r, partial_qty
 from ai_advisor import evaluate_signal, label as ai_label
 import price_action
+import housekeeping
 import position_review
 import ai_rules
 from plan import SCENARIOS, build_checkin, contributions as plan_contributions
@@ -263,6 +264,7 @@ class TradingEngine:
             await position_review.review_open_positions(self, settings, "USDT", "Bybit")
         elif shock := await position_review.btc_shock(self, settings):
             await position_review.review_open_positions(self, settings, "USDT", "Bybit", trigger=shock)
+        await housekeeping.tick(self, settings)
 
     def _excursion(self, p: Position, price: float) -> dict:
         m = move_in_r(p.side, p.entry_price, p.initial_sl, price)

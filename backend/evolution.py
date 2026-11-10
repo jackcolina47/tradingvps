@@ -7,7 +7,7 @@ from models import now_iso
 IGNORE = {"bot_running", "plan_scenario", "plan_target_monthly", "plan_monthly_deposit"}
 SOURCES = {"auto_review": "Revisión IA automática", "optimize_all": "Optimizar todo con IA", "optimizer": "IA sobre el optimizador", "plan": "IA sobre el plan",
            "walk_forward": "Revalidación walk-forward", "profile": "Perfil de riesgo", "manual": "Ajuste manual", "system": "Sistema", "revert": "Deshecho manualmente",
-           "chat": "Chat IA expert (confirmado por ti)", "lab": "Modo laboratorio"}
+           "chat": "Chat IA expert (confirmado por ti)", "lab": "Modo laboratorio", "reopt": "Re-optimización semanal", "auto_prune": "Poda automática de pares"}
 AI_SOURCES = ("auto_review", "optimize_all", "optimizer", "plan", "chat")
 MIN_TRADES = 5
 

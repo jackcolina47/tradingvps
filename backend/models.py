@@ -54,6 +54,11 @@ class Settings(BaseModel):
     ai_position_review_mode: str = "auto"
     ai_position_review_min_confidence: int = 75
     btc_shock_pct: float = 1.5
+    reopt_enabled: bool = True
+    reopt_symbols: List[str] = ["ZECUSDT", "HYPEUSDT"]
+    auto_prune_enabled: bool = True
+    auto_prune_pf: float = 0.8
+    auto_prune_min_trades: int = 10
     scan_interval_sec: int = 60
     trailing_enabled: bool = True
     htf_filter: bool = True
@@ -178,6 +183,11 @@ class Settings(BaseModel):
             raise ValueError("Selecciona al menos un símbolo")
         return v
 
+    @field_validator("reopt_symbols")
+    @classmethod
+    def _reopt_symbols(cls, v):
+        return [s for s in dict.fromkeys(v or []) if s in AVAILABLE_SYMBOLS][:6]
+
 
 class SettingsUpdate(BaseModel):
     strategy: Optional[str] = None
@@ -194,6 +204,11 @@ class SettingsUpdate(BaseModel):
     ai_position_review_mode: Optional[str] = Field(default=None, pattern="^(notify|auto)$")
     ai_position_review_min_confidence: Optional[int] = Field(default=None, ge=50, le=100)
     btc_shock_pct: Optional[float] = Field(default=None, ge=0, le=10)
+    reopt_enabled: Optional[bool] = None
+    reopt_symbols: Optional[List[str]] = None
+    auto_prune_enabled: Optional[bool] = None
+    auto_prune_pf: Optional[float] = Field(default=None, ge=0.3, le=1.5)
+    auto_prune_min_trades: Optional[int] = Field(default=None, ge=3, le=100)
     scan_interval_sec: Optional[int] = Field(default=None, ge=30, le=900)
     trailing_enabled: Optional[bool] = None
     htf_filter: Optional[bool] = None

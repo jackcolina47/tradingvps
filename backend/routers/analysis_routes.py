@@ -9,9 +9,36 @@ from strategies_slow import SLOW_INFO, scan_slow
 from plan import build_plan, SCENARIOS
 from optimizer import optimize
 from review import plan_stats
+import housekeeping
 from deps import db, engine, protected_router
 
 router = protected_router()
+
+
+@router.get("/housekeeping")
+async def housekeeping_status():
+    """Last weekly re-optimisation and pruning state (crypto bot)."""
+    reopt = await db.meta.find_one({"_id": "reopt"}, {"_id": 0}) or {}
+    prune = await db.meta.find_one({"_id": "prune"}, {"_id": 0}) or {}
+    return {"reopt": reopt, "prune": prune}
+
+
+@router.post("/housekeeping/reopt")
+async def housekeeping_reopt():
+    """Runs the weekly re-optimisation now for the configured pairs."""
+    settings = await engine.get_settings()
+    if not settings.reopt_symbols:
+        raise HTTPException(400, "No hay pares seleccionados para re-optimizar")
+    if housekeeping._lock.locked():
+        raise HTTPException(409, "Ya hay una re-optimización en curso")
+    async with housekeeping._lock:
+        return await housekeeping.reoptimize(engine, settings, "manual")
+
+
+@router.post("/housekeeping/prune")
+async def housekeeping_prune():
+    """Runs the pruning check now (warns / switches off according to the 30-day stats)."""
+    return await housekeeping.prune(engine, await engine.get_settings())
 
 
 @router.post("/plan")

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Loader2, Power, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { http, fmtSignedUsd, pnlClass } from "@/lib/api";
+import MaintenanceStatus from "./MaintenanceStatus";
 
 const RANGES = [7, 30, 90];
 const short = (s) => (s.endsWith("USDT") ? s.slice(0, -4) : s);
@@ -16,7 +17,7 @@ function Bar({ pnl, max }) {
   );
 }
 
-export default function PairRanking({ settings, onSave, tradeCount }) {
+export default function PairRanking({ settings, onSave, tradeCount, refresh }) {
   const [days, setDays] = useState(30);
   const [data, setData] = useState(null);
   useEffect(() => {
@@ -91,6 +92,7 @@ export default function PairRanking({ settings, onSave, tradeCount }) {
           </tbody>
         </table>
       </div>
+      {"reopt_enabled" in settings && <MaintenanceStatus settings={settings} refresh={refresh} />}
     </div>
   );
 }
