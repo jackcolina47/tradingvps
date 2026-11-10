@@ -1,0 +1,26 @@
+{
+  "summary": "Tested Bybit housekeeping (weekly re-optimisation + automatic pruning) end-to-end. Backend: new pytest suite tests/test_iter75_housekeeping.py, 10/10 passing. It covers the settings defaults and validation (an invalid reopt symbol is dropped, auto_prune_pf=2 and min_trades=1 return 422), that FX/Pepperstone settings have none of the new keys and their /housekeeping routes return 404, the shape of GET /api/housekeeping, and the full live prune flow with seeded trades: <=10 trades never warned; 12 trades with PF 0.2 warned; an immediate repeat does nothing; a warning backdated 21 h switches the pair off and removes it from symbols, with an auto_prune evolution event; an inactive pair is left alone; after re-adding the pair and replacing its trades with winners it is 'cleared'. Unit tests with a fake engine and patched optimize/notify cover: params applied only when robust>0 and actually different (20 vs 20.0 does not update), 'ha pasado a ser RENTABLE' sent only for a profitable switched-off pair, the _profitable thresholds at their exact limits, and tick skipping when checked <300 s ago or nothing is due (and running both jobs when due). POST /api/housekeeping/reopt live returned 200 with results for ZEC (profitable, PF 1.1, robust 1.117, params unchanged so nothing applied) and HYPE (robust -0.39, not applied, not profitable). Frontend /bybit: in the 'Pares 30d' tab maintenance-status shows ZEC 'rentable' and HYPE 'no rentable' rows and prune-warned reads 'Ningún par en aviso.'. prune-run-button shows the toast 'Ningún par cumple el criterio de poda'. Both switches are checked, the ZEC/HYPE chips are highlighted, the inputs show 0.8 and 10, and toggling the HYPE chip off, saving and reloading persisted ['ZECUSDT'], then toggling it back on restored ['ZECUSDT','HYPEUSDT']. /hotforex has none of the new elements.",
+  "backend_issues": {"critical": [], "minor": [
+    {"endpoint": "POST /api/housekeeping/reopt", "issue": "The optimizer took ~2 s here, much faster than the expected 60-90 s, because klines are cached for 300 s. So I ran it twice by accident, and could not produce the 409 'already running' case by timing; the lock check was only read in code."}
+  ]},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": [
+    {"screen": "/bybit Pares 30d", "issues": ["The pair-ranking/maintenance card takes about 2/3 of the width and leaves a large empty dark area to its right (existing layout, minor)"]}
+  ]},
+  "test_report_links": ["/app/backend/tests/test_iter75_housekeeping.py", "/app/test_reports/pytest/pytest_iter75.xml"],
+  "action_items": [
+    "Optional: prune() only ranks settings.symbols plus pairs that have trades. A warned pair that is switched off manually and has no trades in 30 days keeps its stale meta.prune.warned entry; also clear warned entries for symbols not in settings.symbols.",
+    "Optional: when all bad pairs would remove the last symbol, off is reset to [] but their warned entries were already popped. They get re-warned next day instead of staying warned, so the Telegram warning repeats daily.",
+    "Optional: manual POST /housekeeping/prune ignores auto_prune_enabled and resets meta.prune.last_at, which delays the daily automatic run. Document this or respect the flag."
+  ],
+  "critical_code_review_comments": [
+    "housekeeping.py is clean and small. The float-normalised compare is correct, and the lock is shared by the API and tick.",
+    "reopt_symbols validator silently drops invalid entries and caps at 6. An empty list is allowed (the endpoint returns 400 then). OK.",
+    "Turning the bot's own pairs off is risky and is only guarded by the 20 h window. Notify returns False when Telegram is unconfigured, so a user without Telegram gets no warning before the switch-off."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter75_housekeeping.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Seeded TEST_iter75 trades for ONDOUSDT during the prune test; all deleted (0 remain). meta.prune.warned reset to {}. ONDOUSDT re-added to symbols (now last in the list). The test left one 'Poda automática: apagado ONDO' event in db.changes (an expected part of the flow). The earlier 'apagado ARB' event was not created by me.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Final state matches the expected one: symbols include ONDOUSDT and ARBUSDT, HYPEUSDT is off, reopt_symbols is ['ZECUSDT','HYPEUSDT'], prune defaults are true/0.8/10, there are 0 trades, and meta.prune.warned is {}. The prune test re-adds ONDOUSDT in a finally block. Run with: pytest tests/test_iter75_housekeeping.py -n 0. The bot was left stopped."
+}
