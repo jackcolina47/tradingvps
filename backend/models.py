@@ -8,6 +8,7 @@ PyObjectId = Annotated[str, BeforeValidator(lambda v: str(v) if isinstance(v, Ob
 AVAILABLE_SYMBOLS = [
     "BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "DOGEUSDT",
     "AVAXUSDT", "LINKUSDT", "ADAUSDT", "NEARUSDT", "SUIUSDT", "LTCUSDT",
+    "ZECUSDT", "HYPEUSDT", "ENAUSDT", "ONDOUSDT", "ARBUSDT", "UNIUSDT",
 ]
 TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h"]
 STRATEGY_KEYS = ["all", "trend_ema", "mean_reversion", "breakout_turtle", "supertrend_momentum", "ema_pullback", "ema_cross"]

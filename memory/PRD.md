@@ -472,6 +472,10 @@
 - `ai_advisor.btc_context_line(rows15, symbol)`: con 15m de BTCUSDT calcula variación 1 h y 30 min; prefijo «ATENCIÓN:» si |1h| ≥ 1 % o |30m| ≥ 0,7 %. Solo para altcoins (no BTCxxx). `position_review.review_open_positions` la pide una vez por ciclo (solo motor Bybit, `currency == "USDT"`) y la pasa a `review_position(..., market, btc_line)`; se guarda en `ai_review.btc_context` y se muestra en el tooltip de PositionsTable.
 - Tested: manual con datos reales de Bybit (ETHUSDT + BTC 15m) → la IA cita el movimiento de BTC en su razonamiento. Sin cambios en FX.
 
+## Implemented (2026-06, iteration 75 · Bybit: 6 pares nuevos)
+- Investigación web (perpetuos USDT por volumen en Bybit): los nuevos líderes son acciones tokenizadas (SOXL, NVDA, SNDK…) no aptas 24/7; se eligieron altcoins puras con liquidez y presentes también en Bitget (fallback): **ZECUSDT, HYPEUSDT, ENAUSDT, ONDOUSDT, ARBUSDT, UNIUSDT** → añadidos a `AVAILABLE_SYMBOLS` (models.py) y activados en `settings.symbols` del bot Bybit (ahora 12 pares). Descartados por naming distinto Bybit/Bitget: 1000PEPE/PEPE, 1000SHIB. XAU/XAG tokenizados descartados (ya en FX, no 24/7).
+- Specs de instrumento (qtyStep, mínimos) se leen en vivo de Bybit (bybit.py) → nada más que cambiar. Verificado: /klines devuelve 100 velas 1h para los 6, watchlist del dashboard muestra precio en vivo, chips visibles y activos en «Pares a operar».
+
 ## Backlog
 - P2: Pepperstone cTrader: sin puente (MetaApi solo MetaTrader). Opción futura: cTrader Open API (OAuth + Protobuf) como conector alternativo del motor FX.
 - P2: FX `fix_reversion`: si el bot está apagado durante toda la ventana 16:00–16:30 Londres del último día hábil, la oportunidad del mes se pierde (sin recuperación posterior, por diseño).
