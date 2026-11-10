@@ -21,6 +21,7 @@ import PositionsTable from "@/components/bot/PositionsTable";
 import TradeHistory from "@/components/bot/TradeHistory";
 import Backtest from "@/components/bot/Backtest";
 import Performance from "@/components/bot/Performance";
+import PairRanking from "@/components/bot/performance/PairRanking";
 import GrowthPlan from "@/components/bot/GrowthPlan";
 import Optimizer from "@/components/bot/Optimizer";
 import NewsPanel from "@/components/bot/NewsPanel";
@@ -120,6 +121,7 @@ function Dashboard({ onLogout }) {
                   <TabsTrigger data-testid="tab-history" value="history" className={TAB_CLS}>Historial</TabsTrigger>
                   <TabsTrigger data-testid="tab-backtest" value="backtest" className={TAB_CLS}>Backtest</TabsTrigger>
                   <TabsTrigger data-testid="tab-performance" value="performance" className={TAB_CLS}>Rendimiento</TabsTrigger>
+                  <TabsTrigger data-testid="tab-pairs" value="pairs" className={TAB_CLS}>Pares 30d</TabsTrigger>
                   <TabsTrigger data-testid="tab-optimizer" value="optimizer" className={TAB_CLS}>Optimizador</TabsTrigger>
                   <TabsTrigger data-testid="tab-news" value="news" className={`${TAB_CLS} relative`}>
                     Noticias
@@ -149,6 +151,9 @@ function Dashboard({ onLogout }) {
               <TabsContent value="backtest" className="mt-0"><Backtest meta={meta} settings={data.settings} /></TabsContent>
               <TabsContent value="performance" className="mt-0">
                 <Performance tradeCount={data.account.total_trades} settings={data.settings} strategyKeys={meta?.strategy_keys} onSave={(body) => act(() => http.put("/settings", body), "Configuración actualizada")} />
+              </TabsContent>
+              <TabsContent value="pairs" className="mt-0">
+                <PairRanking tradeCount={data.account.total_trades} settings={data.settings} onSave={(body) => act(() => http.put("/settings", body), "Pares actualizados")} />
               </TabsContent>
               <TabsContent value="optimizer" className="mt-0">
                 <Optimizer settings={data.settings} refresh={refresh} onSave={(body) => act(() => http.put("/settings", body), "Parámetros del bot actualizados")} />

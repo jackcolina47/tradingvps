@@ -13,10 +13,12 @@ import price_action
 import ai_advisor
 import position_review
 import ai_rules
+import performance
 from auth import hash_password, verify_password, create_token
 from ai_advisor import ping as ai_ping, current as ai_current, friendly_error, key_hint, ORIGIN_LABELS
 from deps import store
-from models import Trade, Signal
+from models import Trade, Signal, AVAILABLE_SYMBOLS
+from fx.symbols import SPECS
 
 TRADE_TFS = [("5m", 300), ("15m", 900), ("1h", 3600), ("4h", 14400), ("1d", 86400)]
 CHART_PAD = 25
@@ -77,6 +79,13 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
     async def ai_rules_delete(rule_id: str):
         await ai_rules.remove(engine.db, rule_id)
         return {"ok": True}
+
+    @router.get("/performance/pairs")
+    async def performance_pairs(days: int = 30):
+        """PnL ranking per pair over the last `days` (closed trades), including configured pairs without trades, to prune the list."""
+        settings = await engine.get_settings()
+        available = list(SPECS) if hasattr(engine, "profile") else AVAILABLE_SYMBOLS
+        return await performance.pair_ranking(engine.db, settings.symbols, max(1, min(int(days), 365)), available)
 
     @router.post("/positions/ai-review")
     async def positions_ai_review():

@@ -12,6 +12,7 @@ from models import Position
 
 logger = logging.getLogger("position_review")
 CANDLES = 60
+SHOCK_COOLDOWN = 30 * 60
 
 
 def _rows(rows: list) -> list:
@@ -43,8 +44,33 @@ async def _breakeven(engine, p: Position, price: float) -> bool:
     return True
 
 
-async def review_open_positions(engine, settings, currency: str, bot_name: str) -> list:
-    """Runs one review cycle. Returns the list of reviews (also stored on each position as `ai_review`)."""
+async def btc_shock(engine, settings) -> str:
+    """Crypto only: returns an alert line when BTC moved ≥ `btc_shock_pct` in the last 30 min / 1 h and there are open altcoin positions (30 min cooldown)."""
+    pct = float(getattr(settings, "btc_shock_pct", 0) or 0)
+    if not (pct and getattr(settings, "ai_position_review_enabled", False) and settings.ai_enabled and engine.running):
+        return ""
+    if time.time() - getattr(engine, "_btc_shock_last", 0.0) < SHOCK_COOLDOWN:
+        return ""
+    if not await engine.db.positions.count_documents({"symbol": {"$not": {"$regex": "^BTC"}}}):
+        return ""
+    try:
+        rows = await engine.market.fetch_klines("BTCUSDT", "15m", 6, cache_sec=60)
+    except Exception as e:
+        logger.warning(f"BTC shock check unavailable: {e}")
+        return ""
+    if len(rows) < 5:
+        return ""
+    closes = [float(r[4]) for r in rows[-5:]]
+    c1h, c30 = (closes[-1] / closes[0] - 1) * 100, (closes[-1] / closes[-3] - 1) * 100
+    if abs(c30) < pct and abs(c1h) < pct:
+        return ""
+    engine._btc_shock_last = time.time()
+    verb = "ha caído" if (c30 if abs(c30) >= pct else c1h) < 0 else "ha subido"
+    return f"ALERTA BTC: Bitcoin {verb} un {c1h:+.2f} % en la última hora ({c30:+.2f} % en 30 min), por encima del umbral de {pct:g} %."
+
+
+async def review_open_positions(engine, settings, currency: str, bot_name: str, trigger: str = "") -> list:
+    """Runs one review cycle. Returns the list of reviews (also stored on each position as `ai_review`). `trigger` = extraordinary reason (BTC shock)."""
     engine._ai_review_last = time.time()
     docs = await engine.db.positions.find().to_list(200)
     if not docs:
@@ -52,6 +78,10 @@ async def review_open_positions(engine, settings, currency: str, bot_name: str) 
     tf = getattr(settings, "timeframe", "1h")
     mode, min_conf = settings.ai_position_review_mode, int(settings.ai_position_review_min_confidence)
     crypto = currency == "USDT"
+    if trigger:
+        docs = [d for d in docs if not d["symbol"].startswith("BTC")]
+        await engine.log("AI_REVIEW", f"{trigger} Revisión extraordinaria de {len(docs)} altcoin(s) abierta(s).")
+        await tg(f"⚡ <b>{bot_name}</b> · {trigger}\nRevisión IA inmediata de {len(docs)} posición(es) en altcoins.", "ai")
     btc15 = []
     if crypto and any(not d["symbol"].startswith("BTC") for d in docs):
         try:
@@ -68,6 +98,8 @@ async def review_open_positions(engine, settings, currency: str, bot_name: str) 
             price = candles[-1]["close"]
             pa = price_action.facts(candles[:-1], p.side, p.entry_price, p.atr or 0, p.sl, p.tp)
             btc_line = ai_advisor.btc_context_line(btc15, p.symbol) if crypto else ""
+            if trigger:
+                btc_line = f"{trigger} {btc_line}".strip()
             review = await ai_advisor.review_position(p.model_dump(), candles[-CANDLES:], pa, tf, currency, price, "crypto" if crypto else "fx", btc_line)
         except Exception as e:
             await engine.log("ERROR", f"{p.symbol}: revisión IA de la posición fallida · {ai_advisor.friendly_error(e)}")
@@ -89,5 +121,5 @@ async def review_open_positions(engine, settings, currency: str, bot_name: str) 
         if review["action"] != "MANTENER" or acted:
             await tg(f"{icon} <b>{bot_name}</b> · revisión IA de {p.symbol} {p.side.upper()}\n<b>{review['action']}</b> ({review['confidence']} %) · {review['r_now']:+.2f} R\n{review['reasoning']}"
                      + (f"\n→ Acción: <b>{acted}</b>" if acted else "\n→ Solo aviso (modo manual)" if mode != "auto" else f"\n→ Sin acción: confianza por debajo del mínimo ({min_conf} %)"), "ai")
-    await engine.db.ai_reviews.update_one({"_id": "last"}, {"$set": {"at": datetime.now(timezone.utc).isoformat(), "reviews": out}}, upsert=True)
+    await engine.db.ai_reviews.update_one({"_id": "last"}, {"$set": {"at": datetime.now(timezone.utc).isoformat(), "reviews": out, "trigger": trigger or None}}, upsert=True)
     return out

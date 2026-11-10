@@ -261,6 +261,8 @@ class TradingEngine:
         await self._update_account_metrics(settings)
         if position_review.due(self, settings):
             await position_review.review_open_positions(self, settings, "USDT", "Bybit")
+        elif shock := await position_review.btc_shock(self, settings):
+            await position_review.review_open_positions(self, settings, "USDT", "Bybit", trigger=shock)
 
     def _excursion(self, p: Position, price: float) -> dict:
         m = move_in_r(p.side, p.entry_price, p.initial_sl, price)

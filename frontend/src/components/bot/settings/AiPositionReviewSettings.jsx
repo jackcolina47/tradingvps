@@ -40,6 +40,16 @@ export default function AiPositionReviewSettings({ form, set }) {
         </div>
       )}
       {on && <p className="mt-2 text-[11px] text-slate-500">Consume una llamada de IA por posición abierta en cada ciclo. Cerrar o proteger solo ocurre con confianza ≥ al mínimo; con «Solo avisar» nunca toca la posición.</p>}
+      {on && "btc_shock_pct" in form && (
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div>
+            <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-slate-500">Alerta BTC: revisar ya si BTC se mueve ≥ (%)</p>
+            <Input data-testid="settings-btc-shock-pct-input" type="number" step={0.25} min={0} max={10} value={form.btc_shock_pct ?? 1.5}
+              onChange={(e) => set("btc_shock_pct", e.target.value)} className="num h-9 border-[#1E293B] bg-[#07090E] text-xs" />
+          </div>
+          <p className="self-end text-[11px] text-slate-500 sm:col-span-2">Si Bitcoin sube o baja más de este % en 30 min o en 1 h, la IA revisa de inmediato todas las altcoins abiertas sin esperar al ciclo (máx. una vez cada 30 min). 0 = apagado.</p>
+        </div>
+      )}
     </div>
   );
 }

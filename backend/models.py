@@ -53,6 +53,7 @@ class Settings(BaseModel):
     ai_position_review_minutes: int = 30
     ai_position_review_mode: str = "auto"
     ai_position_review_min_confidence: int = 75
+    btc_shock_pct: float = 1.5
     scan_interval_sec: int = 60
     trailing_enabled: bool = True
     htf_filter: bool = True
@@ -192,6 +193,7 @@ class SettingsUpdate(BaseModel):
     ai_position_review_minutes: Optional[int] = Field(default=None, ge=5, le=240)
     ai_position_review_mode: Optional[str] = Field(default=None, pattern="^(notify|auto)$")
     ai_position_review_min_confidence: Optional[int] = Field(default=None, ge=50, le=100)
+    btc_shock_pct: Optional[float] = Field(default=None, ge=0, le=10)
     scan_interval_sec: Optional[int] = Field(default=None, ge=30, le=900)
     trailing_enabled: Optional[bool] = None
     htf_filter: Optional[bool] = None

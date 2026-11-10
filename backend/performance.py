@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from shadow import shadow_stats
 from risk import FEE_RATE, MAKER_FEE
@@ -87,6 +87,28 @@ async def excursion_stats(db, since: str = None) -> dict:
             "avg_mae_r": round(sum(r["avg_mae_r"] * r["trades"] for r in by_reason) / total, 2) if total else 0,
             "partial": {"trades": p["n"], "pnl": round(p["pnl"], 2), "win_rate": round(p["wins"] / p["n"] * 100, 1) if p["n"] else 0},
             "open_partials": await db.positions.count_documents({"partial_done": True, "partial_gross": {"$ne": 0}})}
+
+
+async def pair_ranking(db, symbols: list, days: int = 30, available: list = None) -> dict:
+    """Per-pair PnL over the last `days` (closed trades), ranked best→worst; configured pairs without trades are listed with zeros,
+    `available` (selectable but switched off) pairs come last so they can be re-enabled from the ranking."""
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    pipe = [{"$match": {"closed_at": {"$gte": since}}}, {"$group": {
+        "_id": "$symbol", "n": {"$sum": 1}, "pnl": {"$sum": "$pnl"}, "fees": {"$sum": "$fees"},
+        "wins": {"$sum": {"$cond": [{"$gt": ["$pnl", 0]}, 1, 0]}},
+        "gw": {"$sum": {"$cond": [{"$gt": ["$pnl", 0]}, "$pnl", 0]}},
+        "gl": {"$sum": {"$cond": [{"$lte": ["$pnl", 0]}, "$pnl", 0]}},
+    }}]
+    rows = {r["_id"]: _row(r) for r in await db.trades.aggregate(pipe).to_list(100)}
+    open_by = {r["_id"]: r["n"] async for r in db.positions.aggregate([{"$group": {"_id": "$symbol", "n": {"$sum": 1}}}])}
+    for s in list(symbols) + list(available or []):
+        rows.setdefault(s, {"key": s, "trades": 0, "wins": 0, "win_rate": 0, "pnl": 0.0, "fees": 0.0, "avg_pnl": 0, "profit_factor": None})
+    out = sorted(rows.values(), key=lambda r: (r["key"] not in symbols and not r["trades"], -r["pnl"], -r["trades"]))
+    for r in out:
+        r["active"] = r["key"] in symbols
+        r["open_positions"] = open_by.get(r["key"], 0)
+    total = round(sum(r["pnl"] for r in out), 2)
+    return {"days": days, "since": since, "rows": out, "total_pnl": total, "trades": sum(r["trades"] for r in out)}
 
 
 async def performance(db, shadow=shadow_stats, with_excursion: bool = True, tz_min: int = 0) -> dict:

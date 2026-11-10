@@ -55,8 +55,9 @@ async def backtest(req: BacktestRequest):
                           acc["initial_balance"], req.symbol)
         result.pop("r_multiples", None)
         return {"symbol": req.symbol, "strategy": req.strategy, "timeframe": tf, **result}
-    df = build_df(await engine.market.fetch_klines(req.symbol, req.timeframe, 1000, cache_sec=60))
+    params = s.symbol_params.get(req.symbol) or {}
+    df = build_df(await engine.market.fetch_klines(req.symbol, req.timeframe, 1000, cache_sec=60), int(params.get("atr_period", 14)))
     result = run_backtest(df, req.strategy, req.risk_per_trade, req.leverage, trade_rules(s), initial=acc["initial_balance"], symbol=req.symbol,
-                          mode=s.signal_mode, disabled=s.disabled_strategies)
+                          params=params or None, mode=s.signal_mode, disabled=s.disabled_strategies)
     result.pop("r_multiples", None)
-    return {"symbol": req.symbol, "strategy": req.strategy, "timeframe": req.timeframe, **result}
+    return {"symbol": req.symbol, "strategy": req.strategy, "timeframe": req.timeframe, "params": params or None, **result}
