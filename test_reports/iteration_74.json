@@ -1,0 +1,25 @@
+{
+  "summary": "Iter74: tested the Bybit per-pair ATR params plus backtest params echo, the btc_shock_pct setting, the BTC shock unit logic (btc_shock + review_open_positions with a trigger) and the /performance/pairs ranking for all 3 bots, through the API and the UI. Backend: 17/17 pytest passed, including 2 temporary trades plus 1 trade older than 30 days that I inserted to check aggregation; all 3 were deleted afterwards. Frontend: on /bybit the 'Pares 30d' tab shows 18 rows. HYPEUSDT shows Apagado with opacity-50. The 7/90/30 buttons each reload the data (200). The HYPEUSDT toggle switched Activo and back to Apagado, sending 2 PUT /settings calls. On the main Bybit panel the btc-shock input (1.5) appears when the review switch is on. On /hotforex the input does not exist, and neither does tab-pairs. Final state checked in Mongo: HYPEUSDT off, ZECUSDT on, btc_shock_pct 1.5, symbol_params unchanged, ai_position_review_enabled false (original value), 0 seeded trades left.",
+  "backend_issues": {"critical": [], "minor": [
+    {"endpoint": "POST /api/backtest", "issue": "The branch for slow/long-horizon strategies (SLOW_INFO) returns early without the `params` key, so the response shape differs from the 'all'/fast branch even though it uses symbol_params."}
+  ]},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": [
+    {"screen": "Pares 30d table", "issues": ["Two column headers are both labelled 'PnL' (the bar column and the value column). Consider a blank or different label for the bar column."]}
+  ]},
+  "test_report_links": ["/app/backend/tests/test_iter74_pairs_btc_shock.py", "/app/test_reports/pytest/iter74.xml"],
+  "action_items": [
+    "Optional: include `params` in the SLOW_INFO branch of /backtest for a consistent response",
+    "Optional: rename the duplicate 'PnL' header in PairRanking"
+  ],
+  "critical_code_review_comments": [
+    "review_open_positions(trigger=...) sets engine._ai_review_last = now, so a BTC-shock review also pushes back the next scheduled review. Probably intended, but worth a comment.",
+    "btc_shock uses the last 15m kline, which is still forming, so the '30 min' window is really 30-45 min and the '1 h' window is 60-75 min. Acceptable but undocumented.",
+    "pair_ranking sorts switched-off pairs that have trades in with the active ones by PnL. Only switched-off pairs with 0 trades go last. This matches the spec ('active/traded first')."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter74_pairs_btc_shock.py"],
+  "success_rate": {"backend": "100% (17/17)", "frontend": "100%"},
+  "seed_data_creation": "3 temporary trades (HYPEUSDT, flagged TEST_seed:true) were inserted and then deleted by _id inside the test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The Bybit SettingsPanel is on the main /bybit dashboard (not behind settings-view-button, which opens AdminSettings). Run pytest normally, not with -p no:xdist (pytest.ini uses -n). The Position fixture needs margin, fees and mark_price. The bot was left stopped and the real AI was never called (it was patched)."
+}
