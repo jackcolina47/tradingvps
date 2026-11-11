@@ -34,3 +34,8 @@
 - Para lanzar procesos largos desde el agente (mock, suites): `setsid nohup … < /dev/null & disown` — si no, el timeout del shell mata el grupo de procesos (ocurrió con el mock y una tanda de pytest).
 - `GET /api/fx/market/context` tarda > 60 s la primera vez tras reiniciar el backend (régimen USD: 5 series diarias de Yahoo con reintentos por 429); después responde de la caché (600 s). Comportamiento previo al refactor.
 - Las suites FX (iter15/16/17/19/48…) y el testing_agent generan pares de eventos «cambio → restauración» en `fx_changes`/`changes` (Evolución + resumen semanal). Tras una tanda de pruebas, borrar los eventos del día: `db.fx_changes.delete_many({"ts": {"$gte": "<hoy>"}})` (idem `changes`), comprobando antes que no hay cambios reales del usuario en esa ventana. Quedan ~80 eventos de pruebas de sesiones anteriores (22 y 24 de octubre) pendientes de confirmar con el usuario.
+
+## Auditoría 2026-11-11 (iteration 76)
+- NO volver a lanzar `pytest tests` completo con `-n 4`: 148 fallos espurios por pisarse entre sí y dejó Bybit en modo REAL (testnet), símbolos reseteados a 6, `symbol_params` vacío y Pepperstone arrancado. Restaurado a mano (paper, 11 pares, params ZEC/HYPE, pepper parado).
+- `test_iter50_fx_candle_alignment` depende de Yahoo (falla en la pausa diaria de metales 21–22 h UTC): no es regresión.
+- La Emergent key solo admite 1 petición simultánea (`429 concurrent_request_limit`, 124 veces en el log): `ai_advisor._serialized` serializa todas las llamadas LLM (semáforo global) y reintenta con backoff 2/5/10 s.

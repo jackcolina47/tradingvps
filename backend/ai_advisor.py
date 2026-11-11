@@ -2,6 +2,7 @@ import os
 import re
 import json
 import uuid
+import asyncio
 import logging
 from datetime import datetime, timezone
 from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone
@@ -144,6 +145,26 @@ def _chat(system: str, prefix: str, cfg: dict = None) -> LlmChat:
 
 
 _usage_hook = None
+_gate = asyncio.Semaphore(1)
+_RETRY_SLEEPS = (2, 5, 10)
+
+
+def _is_concurrency_limit(e: Exception) -> bool:
+    s = str(e)
+    return "concurrent_request_limit" in s or "CONCURRENCY_REQUEST_LIMIT" in s
+
+
+async def _serialized(fn):
+    """All LLM calls go one at a time (the Emergent key allows a single in-flight request) and a 429 concurrency error is retried with backoff."""
+    async with _gate:
+        for i, pause in enumerate((*_RETRY_SLEEPS, None)):
+            try:
+                return await fn()
+            except Exception as e:
+                if pause is None or not _is_concurrency_limit(e):
+                    raise
+                logger.warning(f"LLM: límite de peticiones simultáneas, reintento {i + 1}/{len(_RETRY_SLEEPS)} en {pause}s")
+                await asyncio.sleep(pause)
 
 
 def set_usage_hook(fn):
@@ -161,15 +182,20 @@ async def record_usage(kind: str, skipped: bool = False):
 
 
 async def _ask(chat: LlmChat, prompt: str) -> str:
-    text, done = "", None
     probe = getattr(chat, "_probe", False)
-    try:
+
+    async def run():
+        text, done = "", None
         async for ev in chat.stream_message(UserMessage(text=prompt)):
             if isinstance(ev, TextDelta):
                 text += ev.content
             elif isinstance(ev, StreamDone):
                 done = ev
                 break
+        return text, done
+
+    try:
+        text, done = await _serialized(run)
     except Exception as e:
         if not probe:
             await _mark_failure(e)
@@ -261,7 +287,7 @@ def _keep_thought_signatures(chat: LlmChat, resp) -> None:
 async def ask_tools(chat: LlmChat, text: str | None):
     """One non-streaming turn; `text=None` continues after add_tool_result(). Returns ChatResponse (content, tool_calls)."""
     try:
-        resp = await chat.send_message_with_tools(UserMessage(text=text) if text else None)
+        resp = await _serialized(lambda: chat.send_message_with_tools(UserMessage(text=text) if text else None))
     except Exception as e:
         await _mark_failure(e)
         raise

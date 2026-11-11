@@ -162,8 +162,8 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
           <Panel testId="fx-operations-panel" className="lg:col-span-8" delay={220}>
             <Tabs defaultValue="positions" className="flex h-full flex-col">
               <div className="flex items-center gap-3 border-b border-[#1E293B] px-4 py-2.5">
-                <Layers className="h-4 w-4 text-amber-400" />
-                <TabsList className="h-auto gap-1 bg-transparent p-0">
+                <Layers className="h-4 w-4 shrink-0 text-amber-400" />
+                <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto bg-transparent p-0 [scrollbar-width:none]">
                   <TabsTrigger data-testid="fx-tab-positions" value="positions" className={TAB_CLS}>Posiciones ({data.positions.length})</TabsTrigger>
                   <TabsTrigger data-testid="fx-tab-history" value="history" className={TAB_CLS}>Historial</TabsTrigger>
                   <TabsTrigger data-testid="fx-tab-backtest" value="backtest" className={TAB_CLS}>Backtest</TabsTrigger>
