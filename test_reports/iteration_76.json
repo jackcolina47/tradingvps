@@ -1,0 +1,40 @@
+{
+  "summary": "Full audit of the 3 bots (Bybit /bybit, HotForex /hotforex, Pepperstone /pepperstone). Backend: new suite tests/test_iter76_audit.py (20 tests, run serially -n 0). Sweep of all 82 GET routes without path params with Bearer: all 200 (klines x3 -> 422 without symbol); none slower than 15 s. 401 without token works; only /api/ is public (/api/meta requires auth, /api/health does not exist). Backtest SOLUSDT 1h (27 trades, PF 0.67) and EURUSD 1h on /api/fx (64 trades, PF 0.61) return numbers. /performance on all 3 bots includes 'daily'; /performance/pairs?days=30 is 200 on all 3; trade history is isolated (crypto 0, fx 2, pepper 0). LLM concurrency fix: 3 POST /ai/test calls fired at the same time (crypto, fx, pepper) all came back 200 ok:true, finishing at 3.1 s, 4.6 s and 6.1 s, which shows they ran one after another. The backend.err.log count of 'concurrent_request_limit' stayed at 52 (no new 429s). _serialized unit tests pass: two 429s then success returns the value after sleeps [2,5]; a non-429 error is re-raised at once with no sleep; four 429s in a row re-raise. Frontend (1920x1080): login, the selector with 3 cards, and Entrar on all 3 work. All 10 Bybit tabs and all 9 FX tabs (on both FX bots) render content with 0 console errors. 'Ajustes' (admin settings) opens on all 3 bots. The settings save round-trip (scan_interval_sec 60->70->60 on Bybit, 120->130->120 on HotForex) works and was restored; I deleted the 4 Evolución events it created. 'Cambiar bot' returns to the selector. The AI chat on HotForex gave a real Claude Sonnet answer in 8.7 s. Mobile (390x844) on /bybit and /hotforex: page scrollWidth is 390 (no horizontal overflow) and no element sticks out except the scrollable TabsList (overflow-x:auto, 1069/1049 px scroll width). The last tab (Régimen/Filtros) can be reached and activated.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "state (crypto bot)", "issue": "Bybit bot was RUNNING (paper) when the audit started (log: 'Bot ACTIVADO · operando 24/7 en modo paper trading' at 22:23:10, just after the E1 test runs at 22:19 that reset the crypto account). Restored with POST /api/bot/stop; now running=false."},
+      {"endpoint": "/api/fx/account (HotForex paper account)", "issue": "Leftover test data: fx_account was recreated at 22:15:11 with net_deposits=200 and no cashflow items (/api/fx/account/cashflows items=[]), peak_equity 1020 (API shows 1220) and max_drawdown 70.59%. The UI shows 'Retorno -28.57% · aportes +$200' and 'Máx. drawdown 70.59% · Pico $1,220' on the selector card and the KPI strip. The 2 fx_trades (ids 6af4e8ef…e8e/e8f, live:true) are also seeded data, and balance (500) does not match realized_pnl (+15). Probably left by the cashflows/HFM suites E1 ran around 22:13-22:15. I did not change it (not on the restore list): reset the FX paper account or set net_deposits back to 0, after confirming with the user."},
+      {"endpoint": "crypto config (Ajustes > Bybit cuenta real)", "issue": "Leftover mock settings: bybit_base_url='http://localhost:8011', bybit_alert_after_sec=15, and dummy encrypted API key/secret (UI shows '••••' / '…cret'). Mode is still paper, so nothing breaks, but the Ajustes screen shows a localhost endpoint. Clear it (QUITAR) or restore the user's real values."},
+      {"endpoint": "/api/meta", "issue": "Not public (401 without token), even though the review request expected it to be. No /api/health exists. Only GET /api/ is public. This looks intentional; noted only because it differs from the request."},
+      {"endpoint": "backend shutdown", "issue": "'asyncio - ERROR - Unclosed client session' on every hot reload (an aiohttp session is not closed in shutdown). Harmless noise."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Mobile 390px dashboards", "issues": ["The sticky header (title, badges and 8 action buttons over 5 rows) takes about 345 px, roughly 40% of the 844 px viewport, and stays on screen while scrolling. Consider making it non-sticky on mobile or putting the actions in a menu.", "The TabsList scrollbar is hidden ([scrollbar-width:none]), so nothing shows that more tabs exist off-screen. Consider an edge fade or arrow."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter76_audit.py", "/app/backend/tests/audit_state.py", "/app/test_reports/pytest/iter76.xml", "/app/test_reports/pytest/iter76_final.xml"],
+  "action_items": [
+    "MEDIUM (code): ai_advisor._serialized retries call the same fn again. LlmChat.stream_message and send_message_with_tools both call _add_user_message(messages, …) BEFORE litellm.acompletion (checked in the emergentintegrations source). So after a 429 retry the history holds the user prompt twice (system,user,user), which doubles input tokens. In ask_tools(text=…) it also duplicates the user turn in the chat conversation. Fix: in run() / the ask_tools lambda, save n=len(await chat.get_messages()) before the call, and on retry trim back to n (del msgs[n:]) before calling again.",
+    "Clean the leftover HotForex paper account data (net_deposits=200 with no cashflows, peak 1220, DD 70.59%) after confirming with the user.",
+    "Clear the leftover Bybit mock endpoint http://localhost:8011, the 15 s alert and the dummy key/secret in the crypto config.",
+    "Find out which suite left the Bybit bot running (paper) at 22:23 and add a restore step to it (now stopped).",
+    "Optional: sticky header on mobile; a visual cue that the tab bar scrolls."
+  ],
+  "critical_code_review_comments": [
+    "_serialized holds the global semaphore during the backoff sleeps (2+5+10 s). Up to 17 s of sleep, plus up to 4 attempts, block every other LLM call on all 3 bots. Acceptable with a 1-concurrency key, but a hung stream also blocks every LLM call because there is no timeout on fn(). Consider asyncio.wait_for around fn().",
+    "Retry on 429 re-sends the user message after it was already appended to history (see the action item above).",
+    "_gate = asyncio.Semaphore(1) at module level is fine on Python 3.11 (no loop binding at creation)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter76_audit.py", "/app/backend/tests/audit_state.py"],
+  "success_rate": {"backend": "100% (20/20 after correcting the /api/meta expectation; the only real deviation, the Bybit bot running, was restored)", "frontend": "100%"},
+  "seed_data_creation": "None. Created and then deleted: 2 'changes' events and 2 'fx_changes' events from the scan_interval round-trip (deleted by exact ts). One chat message 'TEST_ En una frase: ¿está el bot de HotForex activo o detenido?' plus the AI reply stay in the shared chat_messages history.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run tests/test_iter76_audit.py with -n 0 only. Writing files under /app/backend/tests triggers a uvicorn hot reload (the engine restarts with 'Motor iniciado'). A browser tool screenshot path built with an f-string gets mangled; use literal paths. Final state checked: Bybit paper and stopped, 11 symbols, ZEC/HYPE params 1.5/6/20, reopt [ZEC,HYPE]; FX and Pepper paper, stopped, price_action_block true. 429 count in backend.err.log is 52 (baseline).",
+  "rca of the issue": "The state deviations (Bybit bot running, the FX account with a phantom $200 deposit, the localhost:8011 Bybit endpoint) all date from 22:13-22:23. That is when E1 ran the legacy suites (iter21 HFM mock, iter28 cashflows, iter49/iter5 Bybit mock, account reset). They are leftover test data, not app logic bugs."
+}

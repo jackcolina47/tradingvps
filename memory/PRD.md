@@ -482,6 +482,12 @@
 - **Ranking de pares**: `performance.pair_ranking(db, symbols, days, available)` + `GET /performance/pairs?days=N` (shared, 3 bots; días 1–365): PnL/ops/acierto/PF por par en los últimos N días, pares activos sin ops con ceros, pares disponibles apagados al final (`active=false`), `open_positions`. Frontend `performance/PairRanking.jsx` en pestaña «Pares 30d» (`tab-pairs`, solo Bybit): rangos 7/30/90, barra ± PnL, mejor/peor, toggle Activo/Apagado (PUT /settings symbols).
 - Tested: testing_agent iteration_74 (100 %): `tests/test_iter74_pairs_btc_shock.py` 17/17 + UI (pestaña, rangos, toggle HYPE ida y vuelta, campo BTC solo en Bybit).
 
+## Audit (2026-06, iteration 76 · auditoría completa)
+- Hallazgos reales corregidos: (1) la Emergent key solo admite 1 petición LLM simultánea → 124 errores `429 concurrent_request_limit` en el log (noticias FX ×2 + IA cripto + chat chocaban). Fix: `ai_advisor._serialized` (semáforo global + reintento 2/5/10 s) envolviendo `_ask` y `ask_tools`. (2) Barra de pestañas (10 en Bybit, 9 en FX) desbordaba en móvil sin scroll → `TabsList` con `w-full justify-start overflow-x-auto` en `App.js` y `FxDashboard.jsx`.
+- Ruido no-bug: `test_iter50_fx_candle_alignment` (pausa diaria de metales en Yahoo); Bybit geobloqueado en preview (espejo Bitget); imports sin usar (ruff F401) en engine.py/server.py/fx.
+- Incidente propio: ejecutar toda la suite pytest con `-n 4` dejó Bybit en modo REAL (testnet), símbolos reseteados y Pepperstone arrancado → restaurado (paper, 11 pares, params ZEC/HYPE, bots FX parados). Nota en `memory/testing_notes.md`.
+- Tested: testing_agent iteration_76 (100 %): `tests/test_iter76_audit.py` 20/20 (82 GET → 200, 401 sin token, backtests cripto/FX, aislamiento de historial, 3 llamadas IA simultáneas OK sin 429, unit `_serialized`), UI completa en los 3 bots (todas las pestañas sin errores de consola, Ajustes ida/vuelta, chat IA real 8,7 s, móvil sin overflow con pestañas desplazables).
+
 ## Fixed (2026-06 · AiSignals: mínimo de confianza solo en APROBADA)
 - `AiSignals.jsx`: `showMin = Number.isInteger(min) && s.ai_decision === "APROBADA"`; la línea vertical del umbral y el texto «(mín. XX %)» solo se muestran en señales APROBADAS (sugerencia del usuario). Compila OK.
 
