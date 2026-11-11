@@ -482,6 +482,10 @@
 - **Ranking de pares**: `performance.pair_ranking(db, symbols, days, available)` + `GET /performance/pairs?days=N` (shared, 3 bots; días 1–365): PnL/ops/acierto/PF por par en los últimos N días, pares activos sin ops con ceros, pares disponibles apagados al final (`active=false`), `open_positions`. Frontend `performance/PairRanking.jsx` en pestaña «Pares 30d» (`tab-pairs`, solo Bybit): rangos 7/30/90, barra ± PnL, mejor/peor, toggle Activo/Apagado (PUT /settings symbols).
 - Tested: testing_agent iteration_74 (100 %): `tests/test_iter74_pairs_btc_shock.py` 17/17 + UI (pestaña, rangos, toggle HYPE ida y vuelta, campo BTC solo en Bybit).
 
+## Fixed (2026-06 · AiSignals: mínimo de confianza solo en APROBADA)
+- `AiSignals.jsx`: `showMin = Number.isInteger(min) && s.ai_decision === "APROBADA"`; la línea vertical del umbral y el texto «(mín. XX %)» solo se muestran en señales APROBADAS (sugerencia del usuario). Compila OK.
+
+
 ## Implemented (2026-06, iteration 77 · Re-optimización semanal + Poda automática de pares — Bybit)
 - Nuevo `backend/housekeeping.py`, llamado desde `engine._monitor_once` vía `housekeeping.tick` (comprueba cada ≥ 5 min; sin cron externo ni cambios en el VPS). Estado en `db.meta` (`_id: reopt` / `prune`).
 - **Re-optimización semanal** (`reopt_enabled=True`, `reopt_symbols=["ZECUSDT","HYPEUSDT"]`, máx. 6): cada 7 días corre `optimizer.optimize` por par en un hilo; aplica el mejor resultado en `symbol_params` solo si `robust > 0` y cambia (comparación en float); `profitable` = ≥ 15 ops, retorno > 0, PF ≥ 1,1, robusto; Telegram (`review`) con resumen y «✅ X ha pasado a ser RENTABLE» si un par apagado se vuelve rentable (no lo activa solo). Evolución: source `reopt`.

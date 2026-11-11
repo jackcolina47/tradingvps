@@ -30,6 +30,7 @@ const GATE_TIP = "Se ejecuta solo si la IA aprueba y la confianza ≥ mínimo (A
 function SignalCard({ s, minConfidence }) {
   const min = s.ai_min_confidence ?? minConfidence;
   const belowMin = s.ai_decision === "APROBADA" && !s.executed && Number.isInteger(min) && s.ai_confidence < min;
+  const showMin = Number.isInteger(min) && s.ai_decision === "APROBADA";
   return (
     <article data-testid={`ai-signal-${s.id}`} className="border-b border-[#1E293B]/70 px-4 py-3.5">
       <div className="flex items-center justify-between gap-2">
@@ -52,10 +53,10 @@ function SignalCard({ s, minConfidence }) {
             <span className="uppercase tracking-wider text-slate-500">Confianza IA</span>
             <span className="relative h-1 flex-1 overflow-hidden rounded-full bg-[#1E293B]">
               <span className={`absolute inset-y-0 left-0 ${belowMin ? "bg-amber-400" : "bg-purple-500"}`} style={{ width: `${s.ai_confidence}%` }} />
-              {Number.isInteger(min) && <span className="absolute inset-y-0 w-px bg-slate-200/70" style={{ left: `${min}%` }} />}
+              {showMin && <span className="absolute inset-y-0 w-px bg-slate-200/70" style={{ left: `${min}%` }} />}
             </span>
             <span data-testid={`ai-confidence-${s.id}`} className={`num ${belowMin ? "text-amber-300" : "text-purple-300"}`}>
-              {s.ai_confidence}%{Number.isInteger(min) && <span className="text-slate-500"> (mín. {min}%)</span>}
+              {s.ai_confidence}%{showMin && <span className="text-slate-500"> (mín. {min}%)</span>}
             </span>
           </span>
           <span data-testid={`ai-risk-${s.id}`} className="uppercase tracking-wider text-slate-500">Riesgo <span className={RISK_CLS[s.ai_risk] || "text-slate-300"}>{s.ai_risk}</span></span>
