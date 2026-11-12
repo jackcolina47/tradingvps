@@ -16,10 +16,12 @@ const NUMS = [
   { k: "leverage", label: "Apalancamiento (x)", step: 1, min: 1, max: 20 },
   { k: "daily_loss_limit", label: "Límite pérdida diaria (%)", step: 0.5, min: 1, max: 20 },
   { k: "ai_min_confidence", label: "Confianza mínima IA (%)", step: 5, min: 0, max: 100 },
+  { k: "min_rr", label: "R:R mínimo (prefiltro)", step: 0.1, min: 0, max: 5, hint: "Etapa 0 gratis: señales de corto plazo con riesgo/beneficio por debajo se descartan antes de llamar a la IA (0 = apagado)" },
   { k: "scan_interval_sec", label: "Intervalo escaneo (seg)", step: 10, min: 30, max: 900 },
 ];
 const TOGGLES = [
   { k: "ai_enabled", label: "Confirmación con IA", hint: "La IA aprueba o rechaza cada señal" },
+  { k: "ai_funnel_enabled", label: "Embudo IA en 2 etapas", hint: "Primero un modelo rápido y barato descarta el ruido técnico (etapa 1); solo lo que pasa llega al modelo principal (etapa 2). Si el filtro rápido falla, la señal se rechaza" },
   { k: "trailing_enabled", label: "Breakeven + trailing stop", hint: "BE a +1R, trailing ATR desde +1.5R" },
   { k: "htf_filter", label: "Filtro de temporalidad superior", hint: "No operar contra la tendencia mayor" },
 ];

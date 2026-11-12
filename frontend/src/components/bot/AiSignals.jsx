@@ -21,9 +21,11 @@ const DECISION_CLS = {
   REGIMEN_USD: "bg-indigo-500/10 text-indigo-300 border-indigo-500/30",
   FOMC: "bg-red-500/10 text-red-300 border-red-500/30",
   PRECIO_EXTENDIDO: "bg-amber-500/10 text-amber-300 border-amber-500/30",
+  RR_BAJO: "bg-slate-500/10 text-slate-300 border-slate-500/30",
+  SPREAD: "bg-slate-500/10 text-slate-300 border-slate-500/30",
 };
 
-const NO_AI_BAR = ["SIN_IA", "ERROR", "BLOQUEADA", "NOTICIAS", "FUNDING", "MERCADO", "SESION", "REGIMEN", "ROTACION", "EXPOSICION", "ROLLOVER", "VOLATILIDAD", "ESTACIONAL", "REGIMEN_USD", "FOMC", "PRECIO_EXTENDIDO"];
+const NO_AI_BAR = ["SIN_IA", "ERROR", "BLOQUEADA", "NOTICIAS", "FUNDING", "MERCADO", "SESION", "REGIMEN", "ROTACION", "EXPOSICION", "ROLLOVER", "VOLATILIDAD", "ESTACIONAL", "REGIMEN_USD", "FOMC", "PRECIO_EXTENDIDO", "RR_BAJO", "SPREAD"];
 const RISK_CLS = { BAJO: "text-emerald-400", MEDIO: "text-amber-300", ALTO: "text-rose-400" };
 const GATE_TIP = "Se ejecuta solo si la IA aprueba y la confianza ≥ mínimo (Ajustes → confianza mínima). El riesgo es informativo: no decide la ejecución.";
 
@@ -63,6 +65,12 @@ function SignalCard({ s, minConfidence }) {
         </div>
       )}
       {s.ai_reasoning && <p className="mt-2 text-[12px] leading-relaxed text-slate-300">{s.ai_reasoning}</p>}
+      {s.ai_stage != null && (
+        <p data-testid={`ai-stage-${s.id}`} className="mt-1 font-mono text-[10px] text-slate-500">
+          Etapa {s.ai_stage} · {s.ai_model} · {s.ai_ms} ms
+          {(s.ai_adjusted_sl || s.ai_adjusted_tp) && <span className="text-sky-300"> · IA sugiere{s.ai_adjusted_sl ? ` SL ${fmtPrice(s.ai_adjusted_sl)}` : ""}{s.ai_adjusted_tp ? ` TP ${fmtPrice(s.ai_adjusted_tp)}` : ""} (solo registrado)</span>}
+        </p>
+      )}
       {s.note && <p className="mt-1.5 text-[11px] text-orange-300">{s.note}</p>}
       <div className="mt-2 flex flex-wrap gap-1">
         {s.reasons.map((r) => (

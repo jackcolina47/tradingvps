@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Panel } from "../Panel";
 import { http, errMsg } from "@/lib/api";
 import { Field, INPUT, BTN, BTN_OUT } from "./SecuritySection";
-import { ModelPicker } from "./ModelPicker";
+import { ModelPicker, modelLabel } from "./ModelPicker";
 
 const PROVIDER_LABEL = { anthropic: "Anthropic (Claude)", openai: "OpenAI (GPT)", gemini: "Google (Gemini)" };
 const SOURCES = [
@@ -23,7 +23,8 @@ const SourceCard = ({ s, active, onClick }) => (
   </button>
 );
 
-const fromConfig = (c) => ({ ai_source: c.ai_source, ai_provider: c.ai_provider, ai_model: c.ai_model, gemini_model: c.gemini_model, gemini_api_key: "", emergent_llm_key: "" });
+const fromConfig = (c) => ({ ai_source: c.ai_source, ai_provider: c.ai_provider, ai_model: c.ai_model, gemini_model: c.gemini_model, ai_fast_model: c.ai_fast_model || "", gemini_api_key: "", emergent_llm_key: "" });
+const AUTO = "__auto__";
 
 const emergentKeyLabel = (c) => {
   if (c.emergent_configured) return `Clave universal de Emergent · guardada ${c.emergent_llm_key}`;
@@ -45,7 +46,9 @@ export default function AiSection({ config, onSave }) {
   const gemini = form.ai_source === "gemini";
   const active = config.ai_active;
   // Keep the form in sync with the saved config (other bot / tab / background job) while the user has no unsaved edits.
-  useEffect(() => { if (!dirty) setForm(fromConfig(config)); }, [dirty, config.ai_source, config.ai_provider, config.ai_model, config.gemini_model]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!dirty) setForm(fromConfig(config)); }, [dirty, config.ai_source, config.ai_provider, config.ai_model, config.gemini_model, config.ai_fast_model]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fastProvider = gemini ? "gemini" : form.ai_provider;
+  const fastOptions = (config.fast_models || {})[fastProvider] || [];
 
   const save = async (extra = {}) => {
     setBusy("save");
@@ -116,6 +119,15 @@ export default function AiSection({ config, onSave }) {
           </div>
         </div>
       )}
+      <Field label="Modelo rápido del embudo (etapa 1)" hint={`Modelo barato que descarta el ruido técnico antes del modelo principal. Automático = ${modelLabel(config.fast_model_auto || "")} (${config.fast_model_auto}). Se activa por bot en Ajustes → «Embudo IA en 2 etapas».`}>
+        <Select value={form.ai_fast_model || AUTO} onValueChange={(v) => set("ai_fast_model", v === AUTO ? "" : v)}>
+          <SelectTrigger data-testid="ai-fast-model-select" className={INPUT}><SelectValue /></SelectTrigger>
+          <SelectContent className="border-[#1E293B] bg-[#0D111A]">
+            <SelectItem value={AUTO} className="font-mono text-xs">Automático según proveedor <span className="text-slate-500">· {config.fast_model_auto}</span></SelectItem>
+            {fastOptions.map((m) => <SelectItem key={m} value={m} className="font-mono text-xs">{modelLabel(m)} <span className="text-slate-500">· {m}</span></SelectItem>)}
+          </SelectContent>
+        </Select>
+      </Field>
       <div className="flex flex-wrap items-center gap-2">
         <Button data-testid="ai-save-button" onClick={() => save()} disabled={!!busy} className={BTN}>{busy === "save" && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />} Guardar</Button>
         <Button data-testid="ai-test-button" variant="outline" onClick={test} disabled={!!busy} className={BTN_OUT}>

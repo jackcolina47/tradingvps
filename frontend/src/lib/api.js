@@ -70,7 +70,7 @@ export const STRATEGY_LABELS = {
 };
 export const STRATEGY_KEYS = ["trend_ema", "mean_reversion", "breakout_turtle", "supertrend_momentum", "ema_pullback", "ema_cross"];
 export const LONG_HORIZON_KEYS = ["multi_horizon", "double_divergence", "fix_reversion"];
-export const BLOCK_LABELS = { EXPOSICION: "Bloqueadas exposición", ROLLOVER: "Bloqueadas rollover", VOLATILIDAD: "Bloqueadas volatilidad", ESTACIONAL: "Bloqueadas estacionalidad", REGIMEN_USD: "Bloqueadas régimen USD", FOMC: "Bloqueadas FOMC", PRECIO_EXTENDIDO: "Bloqueadas precio extendido" };
+export const BLOCK_LABELS = { EXPOSICION: "Bloqueadas exposición", ROLLOVER: "Bloqueadas rollover", VOLATILIDAD: "Bloqueadas volatilidad", ESTACIONAL: "Bloqueadas estacionalidad", REGIMEN_USD: "Bloqueadas régimen USD", FOMC: "Bloqueadas FOMC", PRECIO_EXTENDIDO: "Bloqueadas precio extendido", RR_BAJO: "Bloqueadas R:R bajo", SPREAD: "Bloqueadas spread", FILTRO_IA: "Filtro rápido IA" };
 export const MODE_LABELS = { strict: "Estrictos", relaxed: "Relajados", minimal: "Mínimos" };
 export const activeStrategies = (s, keys = STRATEGY_KEYS) => (s.strategy === "all" ? keys.filter((k) => !(s.disabled_strategies || []).includes(k)) : [s.strategy]);
 export const HORIZON_LABELS = { short: "Corto plazo", long: "Largo plazo" };

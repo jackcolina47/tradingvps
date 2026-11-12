@@ -11,6 +11,7 @@ from strategies_slow import SLOW_INFO, SLOW_KEYS, evaluate_slow
 from risk import FEE_RATE, MAKER_FEE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules, move_in_r, tp_in_r, partial_qty
 from ai_advisor import evaluate_signal, label as ai_label
 import price_action
+import ai_funnel
 import housekeeping
 import position_review
 import ai_rules
@@ -28,7 +29,8 @@ import broker_health
 from broker_health import fmt_duration
 
 STRATEGY_INFO = {**FAST_INFO, **SLOW_INFO}
-BLOCK_BY = {"NOTICIAS": "noticias", "FUNDING": "funding", "BLOQUEADA": "riesgo", "REGIMEN": "régimen de BTC", "ROTACION": "rotación semanal"}
+BLOCK_BY = {"NOTICIAS": "noticias", "FUNDING": "funding", "BLOQUEADA": "riesgo", "REGIMEN": "régimen de BTC", "ROTACION": "rotación semanal",
+            "RR_BAJO": "R:R insuficiente", "SPREAD": "spread"}
 HORIZON_LABEL = {"long": "largo plazo", "short": "corto plazo"}
 
 logger = logging.getLogger("engine")
@@ -715,6 +717,10 @@ class TradingEngine:
         f_block, f_factor = funding.gate(funding_rate, sig["side"], self.cfg, funding_h)
         if not block and f_block:
             block, kind = f_block, "FUNDING"
+        pf_block, pf_kind = ai_funnel.pre_filter(sig, settings.min_rr) if horizon == "short" else (None, None)
+        if not block and pf_block:
+            block, kind = pf_block, pf_kind
+            logger.info(f"[STAGE 0 REJECT] {symbol} {sig['side']} · {pf_block}")
         risk_reason = " y ".join(r for r, f in (("riesgo de noticias", risk_factor), ("funding alto en contra", f_factor), ("menor liquidez relativa del par", rot_factor)) if f < 1)
         risk_factor = min(risk_factor, f_factor) * rot_factor
         news_ctx = self.news.context(symbol) if self.news else None
@@ -756,21 +762,33 @@ class TradingEngine:
             }
             try:
                 signal.context = {**(signal.context or {}), "price_action": ctx["price_action"]}
-                res = await evaluate_signal(symbol, tf, sig, ctx)
-                signal.ai_decision, signal.ai_confidence = res["decision"], res["confidence"]
-                signal.ai_risk, signal.ai_reasoning = res["risk"], res["reasoning"]
-                signal.ai_min_confidence = settings.ai_min_confidence
-                approve = res["decision"] == "APROBADA" and res["confidence"] >= settings.ai_min_confidence  # risk is informative only
-                if res["decision"] == "APROBADA" and not approve:
-                    signal.note = f"Confianza {res['confidence']}% menor al mínimo ({settings.ai_min_confidence}%)"
-                    shadow_kind = "BAJA_CONFIANZA"
-                elif not approve:
-                    shadow_kind = "RECHAZADA"
+                fast = None
+                if settings.ai_funnel_enabled and horizon == "short":
+                    fast = await ai_funnel.quick_filter(symbol, tf, sig, ctx, "crypto", self.cfg.ai_fast_model)
+                if fast and not fast["pass"]:
+                    signal.ai_decision, signal.ai_confidence, signal.ai_stage, signal.ai_model, signal.ai_ms = "RECHAZADA", fast["confidence"], 1, fast["model"], fast["ms"]
+                    signal.ai_reasoning = f"[Filtro rápido] {fast['reason'] or 'sin alineación técnica'}"
+                    signal.ai_min_confidence = settings.ai_min_confidence
+                    approve, shadow_kind = False, "FILTRO_IA"
+                else:
+                    res = await ai_funnel.final_eval(evaluate_signal, symbol, tf, sig, ctx)
+                    signal.ai_decision, signal.ai_confidence = res["decision"], res["confidence"]
+                    signal.ai_risk, signal.ai_reasoning = res["risk"], res["reasoning"]
+                    signal.ai_min_confidence = settings.ai_min_confidence
+                    signal.ai_stage, signal.ai_model, signal.ai_ms = 2, res["model"], res["ms"] + (fast["ms"] if fast else 0)
+                    signal.ai_adjusted_sl, signal.ai_adjusted_tp = res.get("adjusted_sl"), res.get("adjusted_tp")
+                    approve = res["decision"] == "APROBADA" and res["confidence"] >= settings.ai_min_confidence  # risk is informative only
+                    if res["decision"] == "APROBADA" and not approve:
+                        signal.note = f"Confianza {res['confidence']}% menor al mínimo ({settings.ai_min_confidence}%)"
+                        shadow_kind = "BAJA_CONFIANZA"
+                    elif not approve:
+                        shadow_kind = "RECHAZADA"
             except Exception as e:
                 logger.exception("ai error")
                 signal.ai_decision, signal.note, approve, shadow_kind = "ERROR", f"Error IA: {str(e)[:180]}", False, "ERROR"
-            await self.log("AI_EVAL", f"{symbol}: {signal.ai_decision} · confianza {signal.ai_confidence}% · riesgo {signal.ai_risk}")
-            await tg(f"🤖 <b>{ai_label()} · {symbol} {sig['side'].upper()}</b>: {signal.ai_decision} ({signal.ai_confidence}% · riesgo {signal.ai_risk})\n"
+            await self.log("AI_EVAL", f"{symbol}: {signal.ai_decision} · confianza {signal.ai_confidence}% · riesgo {signal.ai_risk}"
+                           + (f" · etapa {signal.ai_stage} · {signal.ai_model} · {signal.ai_ms} ms" if signal.ai_stage else ""))
+            await tg(f"🤖 <b>{signal.ai_model or ai_label()} · {symbol} {sig['side'].upper()}</b>: {signal.ai_decision} ({signal.ai_confidence}% · riesgo {signal.ai_risk})\n"
                      f"{signal.ai_reasoning[:300] or signal.note}", "ai")
         res = await self.db.signals.insert_one(signal.to_mongo())
         sid = str(res.inserted_id)

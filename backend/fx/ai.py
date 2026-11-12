@@ -1,7 +1,7 @@
 """Claude prompts for the HotForex bot: signal validation (forex/metals context) and macro news-event trading assessment."""
 import json
 import logging
-from ai_advisor import _chat, _ask, _news_lines, parse_json
+from ai_advisor import _chat, _ask, _news_lines, parse_json, _num
 import price_action
 import ai_rules
 from fx.symbols import SPECS, pips
@@ -18,7 +18,8 @@ SYSTEM = (
     "justifica bajar la confianza o rechazar; un sesgo a favor es un punto positivo pero nunca suficiente por sí solo. "
     "Aprueba solo setups con confluencia clara. "
     "Responde EXCLUSIVAMENTE con un objeto JSON válido, sin texto adicional, con este formato: "
-    '{"decision":"APROBAR" o "RECHAZAR","confidence":entero 0-100,"risk":"BAJO"|"MEDIO"|"ALTO","reasoning":"máximo 3 frases en español"}'
+    '{"decision":"APROBAR" o "RECHAZAR","confidence":entero 0-100,"risk":"BAJO"|"MEDIO"|"ALTO","reasoning":"máximo 3 frases en español",'
+    '"adjusted_sl":número o null (solo si un stop distinto sería claramente mejor),"adjusted_tp":número o null}'
 )
 
 NEWS_SYSTEM = (
@@ -80,6 +81,7 @@ async def evaluate_signal(symbol: str, timeframe: str, sig: dict, ctx: dict, kin
         "confidence": int(max(0, min(100, int(data.get("confidence", 0))))),
         "risk": str(data.get("risk", "MEDIO")).upper(),
         "reasoning": str(data.get("reasoning", ""))[:600],
+        "adjusted_sl": _num(data.get("adjusted_sl")), "adjusted_tp": _num(data.get("adjusted_tp")),
     }
 
 

@@ -57,6 +57,7 @@ const EXTRA_NUMS = [
   { k: "seasonality_size_factor", label: "Tamaño contra sesgo estacional", step: 0.05, min: 0.25, max: 1 },
   { k: "price_action_max_candles", label: "Precio extendido: velas seguidas", step: 1, min: 2, max: 5, hint: "Nº de velas grandes consecutivas (≥ 2 ATR en total) a partir del cual la entrada se considera «perseguir el precio»" },
   { k: "price_action_swing_atr", label: "Precio extendido: swing a (ATR)", step: 0.25, min: 0.25, max: 3, hint: "Si el swing contrario más cercano está a menos de esta distancia en ATR, la entrada se bloquea" },
+  { k: "max_spread_sl_pct", label: "Spread máx. (% del stop)", step: 5, min: 0, max: 100, hint: "Etapa 0 gratis: si el spread del par supera este % de la distancia al stop, la señal se descarta antes de llamar a la IA (0 = apagado)" },
   { k: "be_start_r", label: "Breakeven a (R)", min: 0.5, max: 3, step: 0.25 }, { k: "trail_start_r", label: "Trailing desde (R)", min: 0.5, max: 3, step: 0.25 },
   { k: "trail_atr_mult", label: "Distancia trailing (ATR)", min: 0.5, max: 3, step: 0.25 }, { k: "partial_tp_r", label: "Cierre parcial a (R)", min: 0.5, max: 3, step: 0.25 },
   { k: "partial_tp_pct", label: "Cierre parcial (%)", min: 25, max: 75, step: 5 },

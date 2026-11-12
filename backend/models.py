@@ -49,6 +49,8 @@ class Settings(BaseModel):
     daily_loss_limit: float = 5.0
     ai_enabled: bool = True
     ai_min_confidence: int = 60
+    ai_funnel_enabled: bool = True
+    min_rr: float = 1.5
     ai_position_review_enabled: bool = False
     ai_position_review_minutes: int = 30
     ai_position_review_mode: str = "auto"
@@ -199,6 +201,8 @@ class SettingsUpdate(BaseModel):
     daily_loss_limit: Optional[float] = Field(default=None, ge=1, le=20)
     ai_enabled: Optional[bool] = None
     ai_min_confidence: Optional[int] = Field(default=None, ge=0, le=100)
+    ai_funnel_enabled: Optional[bool] = None
+    min_rr: Optional[float] = Field(default=None, ge=0, le=5)
     ai_position_review_enabled: Optional[bool] = None
     ai_position_review_minutes: Optional[int] = Field(default=None, ge=5, le=240)
     ai_position_review_mode: Optional[str] = Field(default=None, pattern="^(notify|auto)$")
@@ -318,6 +322,11 @@ class Signal(BaseDocument):
     ai_decision: str
     ai_confidence: int = 0
     ai_min_confidence: Optional[int] = None  # threshold in force when the AI evaluated it (the card shows «58 % (mín. 60 %)»)
+    ai_stage: Optional[int] = None  # funnel stage that decided: 0 pre-filter, 1 quick filter, 2 final evaluation
+    ai_model: Optional[str] = None
+    ai_ms: Optional[int] = None
+    ai_adjusted_sl: Optional[float] = None  # suggested by the AI, recorded only (not applied)
+    ai_adjusted_tp: Optional[float] = None
     ai_risk: str = "-"
     ai_reasoning: str = ""
     executed: bool = False

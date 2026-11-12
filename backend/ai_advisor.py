@@ -211,6 +211,14 @@ async def _ask(chat: LlmChat, prompt: str) -> str:
     return text
 
 
+def _num(v):
+    """Optional numeric field from the model (adjusted SL/TP): float or None."""
+    try:
+        return float(v) if v not in (None, "", "null") else None
+    except (TypeError, ValueError):
+        return None
+
+
 def parse_json(text: str, what: str = "IA") -> dict:
     """Tolerant JSON extraction; the full invalid answer goes to the server log (the panel only shows the first characters)."""
     data = parse_llm_json(text)
@@ -314,7 +322,8 @@ SYSTEM = (
     "una noticia grave sobre el par o un evento macro inminente justifican rechazar o bajar la confianza; un sentimiento favorable no basta por sí solo para aprobar. "
     "Aprueba solo setups con confluencia clara. "
     "Responde EXCLUSIVAMENTE con un objeto JSON válido, sin texto adicional, con este formato: "
-    '{"decision":"APROBAR" o "RECHAZAR","confidence":entero 0-100,"risk":"BAJO"|"MEDIO"|"ALTO","reasoning":"máximo 3 frases en español"}'
+    '{"decision":"APROBAR" o "RECHAZAR","confidence":entero 0-100,"risk":"BAJO"|"MEDIO"|"ALTO","reasoning":"máximo 3 frases en español",'
+    '"adjusted_sl":número o null (solo si un stop distinto sería claramente mejor),"adjusted_tp":número o null}'
 )
 
 
@@ -373,6 +382,7 @@ async def evaluate_signal(symbol: str, timeframe: str, sig: dict, ctx: dict) -> 
         "confidence": int(max(0, min(100, int(data.get("confidence", 0))))),
         "risk": str(data.get("risk", "MEDIO")).upper(),
         "reasoning": str(data.get("reasoning", ""))[:600],
+        "adjusted_sl": _num(data.get("adjusted_sl")), "adjusted_tp": _num(data.get("adjusted_tp")),
     }
 
 

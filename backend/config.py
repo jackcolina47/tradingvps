@@ -3,6 +3,7 @@ from typing import Optional, Dict
 from cryptography.fernet import Fernet, InvalidToken
 from pydantic import BaseModel, ConfigDict, Field
 import ai_advisor
+import ai_funnel
 import notify
 from auth import hash_password
 
@@ -37,6 +38,7 @@ class AppConfig(BaseModel):
     ai_model: str = "claude-sonnet-5-5"
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.1-pro-preview"
+    ai_fast_model: str = ""
     emergent_llm_key: str = ""
     telegram_enabled: bool = False
     telegram_bot_token: str = ""
@@ -99,6 +101,7 @@ class ConfigUpdate(BaseModel):
     ai_model: Optional[str] = Field(default=None, min_length=2, max_length=80)
     gemini_api_key: Optional[str] = Field(default=None, max_length=200)
     gemini_model: Optional[str] = Field(default=None, min_length=2, max_length=80)
+    ai_fast_model: Optional[str] = Field(default=None, max_length=80)
     emergent_llm_key: Optional[str] = Field(default=None, max_length=200)
     telegram_enabled: Optional[bool] = None
     telegram_bot_token: Optional[str] = None
@@ -180,6 +183,8 @@ class ConfigStore:
         d["ai_providers"] = AI_PROVIDERS
         d["ai_models"] = ai_advisor.EMERGENT_MODELS
         d["gemini_models"] = ai_advisor.GEMINI_MODELS
+        d["fast_models"] = ai_funnel.FAST_MODEL_OPTIONS
+        d["fast_model_auto"] = ai_funnel.fast_cfg()["model"]
         d["gemini_key_url"] = ai_advisor.GEMINI_KEY_URL
         d["gemini_configured"] = bool(self.cfg.gemini_api_key)
         d["emergent_configured"] = bool(self.cfg.emergent_llm_key)

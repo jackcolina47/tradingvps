@@ -22,6 +22,9 @@ class FxSettings(BaseModel):
     daily_loss_limit: float = 5.0
     ai_enabled: bool = True
     ai_min_confidence: int = 60
+    ai_funnel_enabled: bool = True
+    min_rr: float = 1.5
+    max_spread_sl_pct: float = 25.0
     ai_news_weight: str = "normal"
     ai_position_review_enabled: bool = False
     ai_position_review_minutes: int = 30
@@ -189,6 +192,9 @@ class FxSettingsUpdate(BaseModel):
     daily_loss_limit: Optional[float] = Field(default=None, ge=1, le=20)
     ai_enabled: Optional[bool] = None
     ai_min_confidence: Optional[int] = Field(default=None, ge=0, le=100)
+    ai_funnel_enabled: Optional[bool] = None
+    min_rr: Optional[float] = Field(default=None, ge=0, le=5)
+    max_spread_sl_pct: Optional[float] = Field(default=None, ge=0, le=100)
     ai_news_weight: Optional[str] = Field(default=None, pattern="^(normal|bajo)$")
     ai_position_review_enabled: Optional[bool] = None
     ai_position_review_minutes: Optional[int] = Field(default=None, ge=5, le=240)
