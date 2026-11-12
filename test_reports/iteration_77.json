@@ -1,0 +1,33 @@
+{
+  "summary": "3-stage AI signal funnel tested. Backend: new suite tests/test_iter77_ai_funnel.py (-n 0) 42/42 pass. It covers the unit tests for pre_filter, fast_cfg, quick_filter, final_eval, _num and the adjusted_sl/tp fields of both evaluate_signal functions. It also runs fake-engine integration tests for cases a–g on BOTH the crypto engine._handle_signal and fx engine_signals._handle_signal, and the API tests for settings defaults, 422 validation, pepper isolation and the config ai_fast_model round trip. One real stage-1 call: Claude Haiku 4.5, pass True, confidence 78, 2303 ms. Frontend: /bybit funnel switch is checked, min_rr is 1.5 and there is no spread input. /hotforex shows all three settings (max spread 25). The Admin ai-fast-model-select shows 'Automático según proveedor · claude-haiku-4-5-20251001'. Selecting Claude Sonnet 4.6 and saving persisted 'claude-sonnet-4-6', and switching back to Automático saved ''. A temporary signal card showed 'Etapa 2 · Claude Sonnet 5.5 · 4200 ms · IA sugiere SL 1.1000 (solo registrado)'. The Performance tab opens without page errors on both bots. Everything is back to its starting state: the temp signal is deleted, settings are 1.5/true/25 and config.ai_fast_model is ''. No bot was started.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "ai_funnel.quick_filter / final_eval", "issue": "The asyncio.wait_for timeout (20 s / 60 s) also counts the time spent waiting for the global ai_advisor._gate semaphore and the 2/5/10 s 429 retries. With 3 bots sharing the Emergent key (1 request at a time), a stage-1 call waiting behind another bot's stage-2 Sonnet evaluation (10–30 s) can time out → signal stored as ERROR (fail-safe reject) even though the provider is fine. ai_ms likewise includes queue time. Suggest applying the timeout only around the actual stream (inside _serialized), or giving stage 1 a timeout that does not include the queue."},
+      {"endpoint": "PUT /api/config ai_fast_model", "issue": "Not validated against the active provider or source. If the override is claude-* and the user switches to Gemini or OpenAI, every stage-1 call fails → all short-horizon signals become ERROR. Suggest validating against FAST_MODEL_OPTIONS[provider] or resetting the override to '' when the provider/source changes."},
+      {"endpoint": "pre_filter RR_BAJO (business)", "issue": "mean_reversion sets tp = bb_mid (strategies.py ~L68), so its R:R is often < 1.5. With the default min_rr 1.5 most mean_reversion short-horizon signals will now be blocked as RR_BAJO. Confirm this is intended or exempt strategies whose TP is not ATR-based."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter77_ai_funnel.py", "/app/test_reports/pytest/iter77.xml"],
+  "action_items": [
+    "Optional: exclude semaphore queue time from the stage-1 20 s timeout (risk of false ERROR rejections when bots evaluate at the same time)",
+    "Optional: validate or reset config.ai_fast_model when ai_provider/ai_source changes",
+    "Confirm the RR_BAJO impact on mean_reversion (TP at the BB middle band)"
+  ],
+  "critical_code_review_comments": [
+    "FX _handle_signal passes settings.timeframe (not tf) to quick_filter/final_eval. This matches the existing behaviour, but slow/long signals with their own tf would show the wrong TF (only matters if long horizon ever reaches the funnel; today stage 1 is short-only).",
+    "Stage 1 sets chat._probe=False, so a failure of the cheap model marks the main AI health as failing (AiHealthBanner) even when the main model is fine. Probably acceptable, but worth knowing.",
+    "Settings PUTs from tests generate change/restore events in changes/fx_changes/pep_changes (see testing_notes). They were not deleted here."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter77_ai_funnel.py"],
+  "success_rate": {"backend": "100% (42/42 + real LLM call)", "frontend": "100%"},
+  "seed_data_creation": "One temporary signal (key TEST_funnel_iter77) was inserted into `signals` for the UI check and then deleted (1 doc).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python3 -m pytest tests/test_iter77_ai_funnel.py -n 0. Its fake engines: run_fx uses FxSettings(price_action_block=False) with flat candles; run_crypto uses TradingEngine.__new__ with btc_regime_filter/rotation off, entry_order_type market, and engine.tg monkeypatched. The API module fixture restores min_rr 1.5, ai_funnel_enabled true, max_spread_sl_pct 25 and ai_fast_model ''. Only 1 real LLM call was made."
+}
