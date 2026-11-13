@@ -153,6 +153,7 @@ class ConfigStore:
     async def _apply(self):
         c = self.cfg
         ai_advisor.configure(**self.ai_runtime())
+        ai_funnel.configure(c.ai_fast_model)
         notify.configure(c.telegram_enabled, c.telegram_bot_token, c.telegram_chat_id, c.telegram_alerts, c.telegram_chat_id_2)
         for fn in self.listeners:
             await fn(c)

@@ -31,8 +31,17 @@ FAST_FORMAT = ('Responde EXCLUSIVAMENTE con JSON válido, sin texto adicional: {
                '"discard_reason":"máx. 12 palabras en español, vacío si pasa"}')
 
 
+_override = {"model": ""}
+
+
+def configure(fast_model: str = ""):
+    """Called by the global config store: user-chosen cheap model ('' = automatic by provider)."""
+    _override["model"] = fast_model or ""
+
+
 def fast_cfg(override: str = "") -> dict:
     """Runtime config for the cheap model: same key/provider as the main model, cheaper model (configurable override)."""
+    override = override or _override["model"]
     model = override or FAST_MODELS.get((_cfg["source"], _cfg["provider"]), _cfg["model"])
     return {**_cfg, "model": model}
 

@@ -764,7 +764,7 @@ class TradingEngine:
                 signal.context = {**(signal.context or {}), "price_action": ctx["price_action"]}
                 fast = None
                 if settings.ai_funnel_enabled and horizon == "short":
-                    fast = await ai_funnel.quick_filter(symbol, tf, sig, ctx, "crypto", self.cfg.ai_fast_model)
+                    fast = await ai_funnel.quick_filter(symbol, tf, sig, ctx, "crypto")
                 if fast and not fast["pass"]:
                     signal.ai_decision, signal.ai_confidence, signal.ai_stage, signal.ai_model, signal.ai_ms = "RECHAZADA", fast["confidence"], 1, fast["model"], fast["ms"]
                     signal.ai_reasoning = f"[Filtro rápido] {fast['reason'] or 'sin alineación técnica'}"
