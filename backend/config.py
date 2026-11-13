@@ -185,7 +185,7 @@ class ConfigStore:
         d["ai_models"] = ai_advisor.EMERGENT_MODELS
         d["gemini_models"] = ai_advisor.GEMINI_MODELS
         d["fast_models"] = ai_funnel.FAST_MODEL_OPTIONS
-        d["fast_model_auto"] = ai_funnel.fast_cfg()["model"]
+        d["fast_model_auto"] = ai_funnel.FAST_MODELS.get((ai_advisor._cfg["source"], ai_advisor._cfg["provider"]), ai_advisor._cfg["model"])
         d["gemini_key_url"] = ai_advisor.GEMINI_KEY_URL
         d["gemini_configured"] = bool(self.cfg.gemini_api_key)
         d["emergent_configured"] = bool(self.cfg.emergent_llm_key)

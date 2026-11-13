@@ -1,0 +1,27 @@
+{
+  "summary": "Regression testing of the bug where FX stage-1 failed with 'FxConfig' object has no attribute 'ai_fast_model'. The fix works. A grep finds no cfg.ai_fast_model in engine.py, fx/engine*.py or ai_funnel.py, and FxConfig has no such attribute. In the fake-engine tests the real ai_funnel.quick_filter ran with only _ask/_chat mocked. FX _handle_signal with e.cfg=FxConfig() produced an APROBADA signal at ai_stage 2, with no FxConfig text in the note, using model claude-haiku-4-5-20251001. Crypto _handle_signal with a cfg lacking the attribute also gave APROBADA at stage 2, using the runtime override gpt-5.4-mini. configure()/fast_cfg() precedence is correct (explicit override > module state > FAST_MODELS). The API round trip for ai_fast_model works. One real stage-1 call for EURUSD fx returned {pass: true, confidence: 78, model: 'Claude Haiku 4.5', ms: 1772}. The iter77 suite still passes (42/42). Frontend: /hotforex loads, the IA panel is empty and has no 'Error IA' or FxConfig text, and the DB has 0 signals with 'has no attribute' in signals, fx_signals or pep_signals. In Admin → IA the fast-model select works: Sonnet 4.6 → Guardar (PUT 200) → still set after reload → back to Automático (PUT 200). Found 1 new minor issue: fast_model_auto now includes the override.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/config (config.py:188)", "issue": "fast_model_auto = ai_funnel.fast_cfg()['model'] now returns the user's override, because fast_cfg() falls back to _override. With ai_fast_model='claude-sonnet-4-6', GET returns fast_model_auto='claude-sonnet-4-6'. As a result the Admin hint reads 'Automático = Claude Sonnet 4.6' and the 'Automático según proveedor · …' option shows the override instead of the provider default (Haiku). Fix: compute it as ai_funnel.FAST_MODELS.get((_cfg['source'], _cfg['provider']), _cfg['model']), for example with a helper ai_funnel.auto_model()."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AiSection fast-model hint / Automático option", "issue": "Shows the override model as the 'automatic' model after saving a non-auto choice (caused by the backend fast_model_auto issue above)", "selector": "[data-testid='ai-fast-model-select']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter78_fast_model_fxconfig.py", "/app/backend/tests/test_iter77_ai_funnel.py", "/app/test_reports/pytest/iter78.xml"],
+  "action_items": ["Make config.py:188 fast_model_auto ignore ai_funnel._override, so it always returns the provider default"],
+  "critical_code_review_comments": [
+    "ai_funnel._override is module-level state shared by all three bots. That is fine because the setting is global, but the fast_model_auto computation now mixes in the override (see the minor issue)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter78_fast_model_fxconfig.py"],
+  "success_rate": {"backend": "100% (6/6 new + 42/42 iter77)", "frontend": "100%"},
+  "seed_data_creation": "None. The iter77 run created 2 pep_changes events (ai_funnel/min_rr change and restore); they were deleted by _id. config.ai_fast_model is back to ''. No bots were started.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run test_iter78 with -n 0. Its fake engines reuse test_iter77 helpers (_DB, flat) and patch ai_funnel._ask/_chat, not quick_filter, so the real stage-1 path runs. Global Admin settings (AiSection) live under /bybit → settings-view-button. On login, wait for the login-page element to detach before navigating."
+}
