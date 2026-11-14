@@ -114,7 +114,7 @@ def teardown_module(module):
 class TestSettings:
     def test_defaults_and_validation(self):
         s = FxSettings()
-        assert s.ema_test_enabled is False and s.ema_test_symbols == ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD"] and s.ema_test_adx_filter is False and s.ema_test_adx_min == 20.0
+        assert s.ema_test_enabled is False and s.ema_test_symbols == ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD"] and s.ema_test_adx_filter is False and s.ema_test_adx_min == 20.0
         s = FxSettings(ema_test_symbols=["XAUUSD", "NOPE", "XAUUSD", "EURUSD"])
         assert s.ema_test_symbols == ["XAUUSD", "EURUSD"]
         assert "ema_test" not in FxSettings.model_fields["strategy"].annotation.__name__  # strategy keys untouched

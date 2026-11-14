@@ -71,6 +71,11 @@ export default function SettingsPanel({ settings, meta, profileActive, onSave, o
       body[k] = Math.min(max, Math.max(min, v || min));
       if (body[k] !== v) clamped.push(`${label.replace(/ \(.*\)$/, "")} → ${body[k]}`);
     });
+    if ("ema_test_adx_min" in body) {
+      const v = Number(body.ema_test_adx_min);
+      body.ema_test_adx_min = Math.min(60, Math.max(5, v || 20));
+      if (body.ema_test_adx_min !== v) clamped.push(`ADX mínimo (test EMA) → ${body.ema_test_adx_min}`);
+    }
     delete body.bot_running;
     delete body.symbol_params;
     const ok = await onSave(body);

@@ -67,7 +67,7 @@ class FxSettings(BaseModel):
     partial_tp_r: float = 1.5
     partial_tp_pct: int = 50
     ema_test_enabled: bool = False
-    ema_test_symbols: List[str] = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD"]
+    ema_test_symbols: List[str] = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD"]
     ema_test_adx_filter: bool = False
     ema_test_adx_min: float = 20.0
     bot_running: bool = False

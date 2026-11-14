@@ -1,0 +1,26 @@
+{
+  "summary": "Tested the EMA 10/20 EXPERIMENTAL test strategy ported to the HotForex (/api/fx) and Pepperstone (/api/pepper) bots. Engine pytest file test_iter83 plus regressions iter82 and iter79: 64/64 pass. New API file test_iter84 (settings GET/PUT, symbol cleanup and de-duplication, fx/pepper independence, ADX 5-60 bounds returning 422, meta strategies vs strategy_keys, ema_test backtest reasons and partial flag, Bybit regression): 14/14 pass. Manual check: with sessions_allowed=['sydney'], the ema_test backtest still has skipped_session=0 (27 trades, reasons CRUCE/SL/FIN_SEMANA), while trend_ema skips 7, so the session filter still applies to the other strategies. ADX filter settings reach the backtest (ADX min 33 cut trades from 27 to 1). UI: on /pepperstone and /hotforex the ema-test card shows the FX warning text, 12 chips, the chip toggle, the enabled switch, and the ADX switch that reveals the min input. Saving persisted on pepper only; fx and bybit were unchanged. The Backtest tab offers 'Test cruce EMA 10/20' and runs without errors on EURUSD. Bybit still shows its own card (18 chips, no FX session text). All settings were restored.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "FX Backtest tab", "issues": ["The default pair XAUUSD gives 0 trades with 'Test cruce EMA 10/20' on 1h with $500 capital: all 43 signals are rejected below the minimum lot because the 3×ATR SL is wide. XAUUSD is also in the default ema_test_symbols, so live/paper test entries on gold will probably also be refused at this capital. Consider a note or a different default."]},
+      {"screen": "SettingsPanel ema-test card", "issues": ["ADX mínimo outside 5-60 (e.g. 70) is not clamped like the other numeric fields; the save fails with the toast 'Valor inválido en: ema_test_adx_min' (a 422). This is acceptable but inconsistent with the clamping of the other NUMS fields."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter84_fx_ema_test_api.py", "/app/backend/tests/test_iter83_fx_ema_test.py", "/app/test_reports/pytest/iter84.xml"],
+  "action_items": [
+    "Optional: clamp ema_test_adx_min to 5-60 in SettingsPanel save (or add it to the NUMS clamping) instead of relying on the 422 toast",
+    "Optional: warn that XAUUSD ema_test trades may be rejected below the minimum lot with small accounts (3×ATR SL)"
+  ],
+  "critical_code_review_comments": [
+    "EmaTestSettings sends ema_test_adx_min as a string from the input (e.target.value); pydantic converts it, but an empty input gives '' and then a 422. Cast it with Number() before saving."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter84_fx_ema_test_api.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None. Settings on fx and pepper were temporarily changed (ema_test_*, sessions_allowed) and restored to the originals: enabled false, symbols EURUSD/GBPUSD/USDJPY/XAUUSD, adx_filter false, adx_min 20, sessions_allowed [].",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The forex market was closed (weekend), so live engine behaviour is covered only by the monkeypatched test_iter83. Backtest responses are flat (no 'result' key). Run the API tests with REACT_APP_BACKEND_URL exported and -n 0. Bots were never started."
+}
