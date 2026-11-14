@@ -35,6 +35,7 @@ class FxSettings(BaseModel):
     price_action_swing_atr: float = 1.0
     scan_interval_sec: int = 120
     trailing_enabled: bool = True
+    breakeven_enabled: bool = True
     htf_filter: bool = True
     symbol_params: Dict[str, Dict[str, float]] = {}
     signal_mode: str = "relaxed"
@@ -205,6 +206,7 @@ class FxSettingsUpdate(BaseModel):
     price_action_swing_atr: Optional[float] = Field(default=None, ge=0.25, le=3)
     scan_interval_sec: Optional[int] = Field(default=None, ge=30, le=900)
     trailing_enabled: Optional[bool] = None
+    breakeven_enabled: Optional[bool] = None
     htf_filter: Optional[bool] = None
     symbol_params: Optional[Dict[str, Dict[str, float]]] = None
     signal_mode: Optional[str] = None

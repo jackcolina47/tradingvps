@@ -7,6 +7,7 @@ from models import Position, Trade, now_iso
 from fx.models import FxSettings
 from fx.symbols import SPECS, fmt_price, pips
 from fx import risk
+from risk import be_allowed
 from fx.metaapi import MetaApiError, TRADE_DISABLED_CODES
 from fx.engine_core import logger, LIVE_GRACE_SEC, TRANSIENT_TG_SEC, PENDING_TTL_SEC, HORIZON_LABEL, FX_STRATEGY_INFO
 
@@ -48,9 +49,10 @@ class PositionsMixin:
             else:
                 updates["partial_done"] = True
                 await self.log("RISK", f"{p.symbol}: cierre parcial omitido · el lote mínimo (0.01) no permite dividir la posición")
-        if rules["trailing_enabled"]:
+        if rules["trailing_enabled"] or rules["breakeven_enabled"]:
             new_sl, be = risk.update_trailing(p.side, p.entry_price, p.sl, p.initial_sl, p.atr, price, SPECS[p.symbol]["spread"],
-                                              rules["be_start_r"], rules["trail_start_r"], rules["trail_atr_mult"])
+                                              rules["be_start_r"], rules["trail_start_r"], rules["trail_atr_mult"],
+                                              be_enabled=be_allowed(rules, p.partial_done or updates.get("partial_done", False)), trail_enabled=rules["trailing_enabled"])
             if new_sl != p.sl:
                 updates.update(sl=new_sl, breakeven=be)
                 if be and not p.breakeven:
@@ -146,9 +148,10 @@ class PositionsMixin:
             else:
                 updates["partial_done"] = True
                 await self.log("RISK", f"{p.symbol}: cierre parcial omitido · el lote mínimo del bróker no permite dividir la posición")
-        if rules["trailing_enabled"]:
+        if rules["trailing_enabled"] or rules["breakeven_enabled"]:
             new_sl, be = risk.update_trailing(p.side, p.entry_price, p.sl, p.initial_sl, p.atr, price, SPECS[p.symbol]["spread"],
-                                              rules["be_start_r"], rules["trail_start_r"], rules["trail_atr_mult"])
+                                              rules["be_start_r"], rules["trail_start_r"], rules["trail_atr_mult"],
+                                              be_enabled=be_allowed(rules, p.partial_done or updates.get("partial_done", False)), trail_enabled=rules["trailing_enabled"])
             new_sl = round(new_sl, SPECS[p.symbol]["digits"])
             if new_sl != p.sl and abs(new_sl - p.sl) >= SPECS[p.symbol]["pip"]:
                 try:

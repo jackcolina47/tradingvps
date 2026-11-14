@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from models import now_iso
 from fx import risk
 from fx.risk import MIN_LOT
+from shadow import shadow_be
 from fx.symbols import SPECS, pips
 from fx.market import closing_soon, market_status
 from shadow import _agg, _by, BUCKETS
@@ -69,9 +70,10 @@ async def monitor_shadows(engine, tickers: dict, settings, now: datetime):
             await engine.db.shadow_positions.delete_one({"_id": d["_id"]})
             continue
         upd = {"mark_price": price, "unrealized_pnl": round(risk.pnl(d["symbol"], d["side"], d["entry_price"], price, d["qty"], tickers), 4)}
-        if rules["trailing_enabled"]:
+        if rules["trailing_enabled"] or rules["breakeven_enabled"]:
             new_sl, be = risk.update_trailing(d["side"], d["entry_price"], d["sl"], d["initial_sl"], d["atr"], price, _costs(engine).spread(d["symbol"]),
-                                              rules["be_start_r"], rules["trail_start_r"], rules["trail_atr_mult"])
+                                              rules["be_start_r"], rules["trail_start_r"], rules["trail_atr_mult"],
+                                              be_enabled=shadow_be(rules, d, price), trail_enabled=rules["trailing_enabled"])
             if new_sl != d["sl"]:
                 upd.update(sl=new_sl, breakeven=be)
         await engine.db.shadow_positions.update_one({"_id": d["_id"]}, {"$set": upd})

@@ -17,12 +17,12 @@ import notify
 
 logger = logging.getLogger("review")
 ALLOWED_AI_KEYS = {"symbols", "disabled_strategies", "risk_per_trade", "max_positions", "leverage", "ai_min_confidence",
-                   "trailing_enabled", "htf_filter", "symbol_params"}
+                   "trailing_enabled", "breakeven_enabled", "htf_filter", "symbol_params"}
 CRYPTO_AI_KEYS = ALLOWED_AI_KEYS | {"btc_regime_filter", "btc_regime_sma", "rotation_enabled", "entry_order_type", "max_long_positions",
                                     "be_start_r", "trail_start_r", "trail_atr_mult", "partial_tp_enabled", "partial_tp_r", "partial_tp_pct"}
 EXIT_RANGES = {"be_start_r": (0.5, 3.0), "trail_start_r": (0.5, 3.0), "trail_atr_mult": (0.5, 3.0), "partial_tp_r": (0.5, 3.0), "partial_tp_pct": (25, 75)}
 LABELS = {"symbols": "Pares", "strategy": "Estrategia", "disabled_strategies": "Estrategias apagadas", "risk_per_trade": "Riesgo/op %",
-          "max_positions": "Máx. posiciones", "leverage": "Apalancamiento", "ai_min_confidence": "Confianza mín. IA", "trailing_enabled": "Trailing",
+          "max_positions": "Máx. posiciones", "leverage": "Apalancamiento", "ai_min_confidence": "Confianza mín. IA", "trailing_enabled": "Trailing", "breakeven_enabled": "Stop a breakeven",
           "htf_filter": "Filtro TF superior", "symbol_params": "Parámetros SL/TP", "sessions_allowed": "Sesiones permitidas", "ai_news_weight": "Peso de las noticias en la IA",
           "timeframe": "Temporalidad", "signal_mode": "Criterios de entrada", "daily_loss_limit": "Límite pérdida diaria %", "ai_enabled": "Filtro IA",
           "scan_interval_sec": "Intervalo de escaneo", "close_before_weekend": "Cierre fin de semana", "min_lot_max_risk": "Tope riesgo lote mínimo %",

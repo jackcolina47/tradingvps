@@ -22,7 +22,8 @@ const NUMS = [
 const TOGGLES = [
   { k: "ai_enabled", label: "Confirmación con IA", hint: "La IA aprueba o rechaza cada señal" },
   { k: "ai_funnel_enabled", label: "Embudo IA en 2 etapas", hint: "Primero un modelo rápido y barato descarta el ruido técnico (etapa 1); solo lo que pasa llega al modelo principal (etapa 2). Si el filtro rápido falla, la señal se rechaza" },
-  { k: "trailing_enabled", label: "Breakeven + trailing stop", hint: "BE a +1R, trailing ATR desde +1.5R" },
+  { k: "breakeven_enabled", label: "Stop a breakeven", hint: "Mueve el stop a la entrada al alcanzar el nivel en R, pero solo después de haber tomado el cierre parcial de beneficios (requiere «Cierre parcial» activado)" },
+  { k: "trailing_enabled", label: "Trailing stop", hint: "Trailing por ATR desde el nivel en R configurado; independiente del breakeven" },
   { k: "htf_filter", label: "Filtro de temporalidad superior", hint: "No operar contra la tendencia mayor" },
 ];
 const CHIP = "relative rounded-sm border px-2 py-1 font-mono text-[10px] transition-colors";
@@ -51,8 +52,8 @@ export default function SettingsPanel({ settings, meta, profileActive, onSave, o
   const toggleIn = (k, id) => { const cur = form[k] || []; set(k, cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]); };
   const active = activeStrategies(form, strategyKeys);
   const nums = [...NUMS.map((n) => (n.k === "leverage" ? { ...n, max: leverageMax } : n.k === "max_positions" ? { ...n, max: maxPositions } : n)), ...extraNums];
-  const toggles = [...TOGGLES.map((t) => (t.k === "trailing_enabled" && extraNums.some((n) => n.k === "be_start_r")
-    ? { ...t, hint: "Stop a breakeven y trailing por ATR según los niveles en R de los campos superiores" } : t)), ...extraToggles];
+  const toggles = [...TOGGLES.map((t) => (t.k === "breakeven_enabled" && form.partial_tp_enabled === false
+    ? { ...t, hint: "Sin efecto ahora: el breakeven solo actúa tras el cierre parcial y «Cierre parcial de beneficios» está apagado" } : t)), ...extraToggles];
   const toggleStrat = (k) => {
     const next = active.includes(k) ? active.filter((x) => x !== k) : [...active, k];
     if (!next.length) return;

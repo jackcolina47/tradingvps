@@ -1,6 +1,11 @@
 from datetime import datetime, timezone
 from models import now_iso
-from risk import FEE_RATE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules
+from risk import FEE_RATE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules, move_in_r
+
+
+def shadow_be(rules: dict, d: dict, price: float) -> bool:
+    """Shadows don't take partials: breakeven is allowed once the partial level would have been reached (mirrors the real rule)."""
+    return bool(rules["breakeven_enabled"] and rules["partial_tp_enabled"] and move_in_r(d["side"], d["entry_price"], d["initial_sl"], price) >= rules["partial_tp_r"])
 
 MAX_AGE_H = 72
 KINDS = ("RECHAZADA", "BAJA_CONFIANZA", "FILTRO_IA", "BLOQUEADA", "NOTICIAS", "FUNDING", "REGIMEN", "ROTACION", "RR_BAJO", "SPREAD", "ERROR", "NO_EJECUTADA")
@@ -49,9 +54,10 @@ async def monitor_shadows(engine, tickers: dict, rules):
             await engine.db.shadow_positions.delete_one({"_id": d["_id"]})
             continue
         upd = {"mark_price": price, "unrealized_pnl": round(pnl(d["side"], d["entry_price"], price, d["qty"]), 4)}
-        if rules["trailing_enabled"]:
+        if rules["trailing_enabled"] or rules["breakeven_enabled"]:
             new_sl, be = update_trailing(d["side"], d["entry_price"], d["sl"], d["initial_sl"], d["atr"], price,
-                                         rules["be_start_r"], rules["trail_start_r"], rules["trail_atr_mult"])
+                                         rules["be_start_r"], rules["trail_start_r"], rules["trail_atr_mult"],
+                                         be_enabled=shadow_be(rules, d, price), trail_enabled=rules["trailing_enabled"])
             if new_sl != d["sl"]:
                 upd.update(sl=new_sl, breakeven=be)
         await engine.db.shadow_positions.update_one({"_id": d["_id"]}, {"$set": upd})

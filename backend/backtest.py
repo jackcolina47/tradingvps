@@ -80,9 +80,10 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
                         gross = pnl(pos["side"], pos["entry"], level, part)
                         balance += gross - fee
                         pos.update(qty=round(pos["qty"] - part, 8), fee=pos["fee"] + fee, partial_gross=pos["partial_gross"] + gross, partial=True)
-                if use_trailing:
+                if use_trailing or rules["breakeven_enabled"]:
                     pos["sl"], pos["be"] = update_trailing(pos["side"], pos["entry"], pos["sl"], pos["init_sl"], pos["atr"], closes[i],
-                                                           rules["be_start_r"], rules["trail_start_r"], rules["trail_atr_mult"])
+                                                           rules["be_start_r"], rules["trail_start_r"], rules["trail_atr_mult"],
+                                                           be_enabled=rules["breakeven_enabled"] and pos["partial"], trail_enabled=use_trailing)
         if not pos and i in signals:
             sig = signals[i]
             sl, tp = _levels(sig, sl_atr, tp_atr)

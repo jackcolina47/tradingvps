@@ -63,6 +63,7 @@ class Settings(BaseModel):
     auto_prune_min_trades: int = 10
     scan_interval_sec: int = 60
     trailing_enabled: bool = True
+    breakeven_enabled: bool = True
     htf_filter: bool = True
     symbol_params: Dict[str, Dict[str, float]] = {}
     signal_mode: str = "strict"
@@ -215,6 +216,7 @@ class SettingsUpdate(BaseModel):
     auto_prune_min_trades: Optional[int] = Field(default=None, ge=3, le=100)
     scan_interval_sec: Optional[int] = Field(default=None, ge=30, le=900)
     trailing_enabled: Optional[bool] = None
+    breakeven_enabled: Optional[bool] = None
     htf_filter: Optional[bool] = None
     symbol_params: Optional[Dict[str, Dict[str, float]]] = None
     signal_mode: Optional[str] = None

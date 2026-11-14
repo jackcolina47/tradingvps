@@ -8,7 +8,7 @@ from market import MarketData, HTF
 from indicators import build_df, trend_label, htf_trend
 from strategies import evaluate, exit_signal, EXIT_ON_CROSS, EXIT_REASON, STRATEGY_INFO as FAST_INFO
 from strategies_slow import SLOW_INFO, SLOW_KEYS, evaluate_slow
-from risk import FEE_RATE, MAKER_FEE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules, move_in_r, tp_in_r, partial_qty
+from risk import FEE_RATE, MAKER_FEE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules, move_in_r, tp_in_r, partial_qty, be_allowed
 from ai_advisor import evaluate_signal, label as ai_label
 import price_action
 import ai_funnel
@@ -312,8 +312,9 @@ class TradingEngine:
             else:
                 updates["partial_done"] = True
                 await self.log("RISK", f"{p.symbol}: cierre parcial omitido · el lote mínimo de Bybit no permite dividir la posición")
-        if rules["trailing_enabled"]:
-            new_sl, be = update_trailing(p.side, p.entry_price, p.sl, p.initial_sl, p.atr, price, rules["be_start_r"], rules["trail_start_r"], rules["trail_atr_mult"])
+        if rules["trailing_enabled"] or rules["breakeven_enabled"]:
+            new_sl, be = update_trailing(p.side, p.entry_price, p.sl, p.initial_sl, p.atr, price, rules["be_start_r"], rules["trail_start_r"], rules["trail_atr_mult"],
+                                         be_enabled=be_allowed(rules, p.partial_done or updates.get("partial_done", False)), trail_enabled=rules["trailing_enabled"])
             if new_sl != p.sl:
                 updates.update(sl=new_sl, breakeven=be)
                 if be and not p.breakeven:
@@ -364,8 +365,9 @@ class TradingEngine:
             else:
                 updates["partial_done"] = True
                 await self.log("RISK", f"{p.symbol}: cierre parcial omitido · el lote mínimo de Bybit no permite dividir la posición")
-        if rules["trailing_enabled"]:
-            new_sl, be = update_trailing(p.side, p.entry_price, p.sl, p.initial_sl, p.atr, price, rules["be_start_r"], rules["trail_start_r"], rules["trail_atr_mult"])
+        if rules["trailing_enabled"] or rules["breakeven_enabled"]:
+            new_sl, be = update_trailing(p.side, p.entry_price, p.sl, p.initial_sl, p.atr, price, rules["be_start_r"], rules["trail_start_r"], rules["trail_atr_mult"],
+                                         be_enabled=be_allowed(rules, p.partial_done or updates.get("partial_done", False)), trail_enabled=rules["trailing_enabled"])
             if new_sl != p.sl and abs(new_sl - p.sl) / p.sl > 0.0005:
                 try:
                     await self.broker.set_stop(p.symbol, new_sl)
