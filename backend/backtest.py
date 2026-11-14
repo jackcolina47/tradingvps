@@ -67,7 +67,7 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
             adv = (pos["entry"] - lows[i]) if pos["side"] == "long" else (highs[i] - pos["entry"])
             pos["mfe"], pos["mae"] = max(pos["mfe"], fav / r_dist), max(pos["mae"], adv / r_dist)
             cross_only = pos["strategy"] in CROSS_ONLY
-            price, reason = (None, None) if cross_only else check_exit(pos["side"], pos["sl"], pos["tp"], highs[i], lows[i])
+            price, reason = check_exit(pos["side"], pos["sl"], (float("inf") if pos["side"] == "long" else 0.0) if cross_only else pos["tp"], highs[i], lows[i])
             if price is not None:
                 close(price, reason, i)
             elif exit_signal(pos["strategy"], pos["side"], e10[i], e20[i]):

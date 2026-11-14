@@ -1,7 +1,17 @@
 from datetime import datetime, timezone
 from typing import Annotated, Optional, List, Dict, Any
 from bson import ObjectId
-from pydantic import BaseModel, BeforeValidator, Field, ConfigDict, field_validator
+from pydantic import BaseModel, BeforeValidator, Field, ConfigDict, field_validator, model_validator
+from fx.symbols import SPECS as FX_SPECS
+
+
+def pips_for(symbol: str, side: str, entry: float, price: float):
+    """FX: real pips (SPECS pip size). Crypto: 1 pip = 0,01 % of the entry price (comparable across pairs, like a major FX pip)."""
+    if not entry or price is None:
+        return None
+    d = (price - entry) if side == "long" else (entry - price)
+    pip = FX_SPECS.get(symbol, {}).get("pip")
+    return round(d / pip, 1) if pip else round(d / entry * 10000, 1)
 
 PyObjectId = Annotated[str, BeforeValidator(lambda v: str(v) if isinstance(v, ObjectId) else v)]
 
@@ -277,6 +287,12 @@ class Position(BaseDocument):
     expires_at: Optional[str] = None
     horizon: str = "short"
     exit_mode: Optional[str] = None  # "cross": no SL/TP, closes on the opposite EMA cross (Test cruce EMA 10/20)
+    pips: Optional[float] = None
+
+    @model_validator(mode="after")
+    def _pips(self):
+        self.pips = pips_for(self.symbol, self.side, self.entry_price, self.mark_price)
+        return self
     entry_type: str = "market"
     initial_qty: Optional[float] = None
     mfe_r: float = 0.0
@@ -306,6 +322,13 @@ class Trade(BaseDocument):
     period: str = ""
     horizon: str = "short"
     exit_mode: Optional[str] = None  # "cross": no SL/TP, closes on the opposite EMA cross (Test cruce EMA 10/20)
+    pips: Optional[float] = None
+
+    @model_validator(mode="after")
+    def _pips(self):
+        if self.pips is None:
+            self.pips = pips_for(self.symbol, self.side, self.entry_price, self.exit_price)
+        return self
     entry_type: str = "market"
     mfe_r: float = 0.0
     mae_r: float = 0.0

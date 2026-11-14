@@ -5,7 +5,7 @@ import { TH, TD } from "./PositionsTable";
 import TradeDetailDialog from "./TradeDetailDialog";
 import TradeFilters, { EMPTY_FILTERS, applyFilters } from "./TradeFilters";
 import { downloadCsv } from "./tradesCsv";
-import { http, fmtPrice, fmtSignedUsd, fmtDateTime, pnlClass, REASON_LABELS, STRATEGY_LABELS } from "@/lib/api";
+import { http, fmtPrice, fmtSignedUsd, fmtDateTime, pnlClass, REASON_LABELS, STRATEGY_LABELS, fmtPips, PIPS_HINT } from "@/lib/api";
 
 const botLabel = () => {
   const b = http.defaults.baseURL || "";
@@ -46,7 +46,7 @@ function TradeRow({ t, onOpen }) {
       <TD right className="text-slate-500">{t.fees.toFixed(2)}</TD>
       <TD right className={pnlClass(t.pnl)}>
         {fmtSignedUsd(t.pnl)}
-        <span className="block text-[10px]">{t.pnl_pct > 0 ? "+" : ""}{t.pnl_pct.toFixed(2)}%</span>
+        <span className="block text-[10px]">{t.pnl_pct > 0 ? "+" : ""}{t.pnl_pct.toFixed(2)}%{t.pips != null && <span data-testid={`trade-pips-${t.id}`} className="ml-1" title={PIPS_HINT}>= {fmtPips(t.pips)}</span>}</span>
       </TD>
       <TD right>
         <span className="inline-flex items-center gap-1.5">

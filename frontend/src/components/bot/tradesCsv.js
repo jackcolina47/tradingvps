@@ -12,7 +12,7 @@ const COLUMNS = [
   ["Estrategia", (t) => STRATEGY_LABELS[t.strategy] || t.strategy], ["Tipo entrada", (t) => t.entry_type || ""], ["Horizonte", (t) => t.horizon || ""],
   ["Entrada", (t) => num(t.entry_price)], ["Salida", (t) => num(t.exit_price)], ["SL inicial", (t) => num(t.initial_sl)], ["SL final", (t) => num(t.sl)], ["TP", (t) => num(t.tp)], ["ATR", (t) => num(t.atr)],
   ["Cantidad", (t) => num(t.qty)], ["Apalancamiento", (t) => num(t.leverage)], ["Margen", (t) => num(t.margin)], ["Comisiones", (t) => num(t.fees)],
-  ["PnL", (t) => num(t.pnl)], ["PnL %", (t) => num(t.pnl_pct)], ["Motivo cierre", (t) => REASON_LABELS[t.reason] || t.reason], ["Duración (min)", (t) => num(t.hold_min)],
+  ["PnL", (t) => num(t.pnl)], ["PnL %", (t) => num(t.pnl_pct)], ["Pips", (t) => num(t.pips)], ["Motivo cierre", (t) => REASON_LABELS[t.reason] || t.reason], ["Duración (min)", (t) => num(t.hold_min)],
   ["MFE (R)", (t) => num(t.mfe_r)], ["MAE (R)", (t) => num(t.mae_r)], ["% camino al TP", (t) => num(t.mfe_tp_pct)], ["Breakeven", (t) => (t.breakeven ? "sí" : "no")], ["Cierre parcial", (t) => (t.partial_tp ? "sí" : "no")],
   ["Modo", (t) => (t.live ? "Real" : "Simulado")], ["Etiquetas", (t) => (t.tags || []).join(", ")], ["Nota", (t) => t.note || ""],
   ["Veredicto IA", (t) => t.ai_review?.verdict || ""], ["Confianza IA", (t) => num(t.ai_review?.confidence)], ["Motivo veredicto IA", (t) => t.ai_review?.verdict_reason || ""],

@@ -6,7 +6,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { http, errMsg, fmtPrice, fmtSignedUsd, fmtUsd, fmtQty, pnlClass, STRATEGY_LABELS, ENTRY_LABELS } from "@/lib/api";
+import { http, errMsg, fmtPrice, fmtSignedUsd, fmtUsd, fmtQty, pnlClass, STRATEGY_LABELS, ENTRY_LABELS, fmtPips, PIPS_HINT } from "@/lib/api";
 
 const AI_CLS = { MANTENER: "border-emerald-500/40 text-emerald-300", BREAKEVEN: "border-amber-500/40 text-amber-300", CERRAR: "border-rose-500/40 text-rose-300" };
 
@@ -100,7 +100,7 @@ export default function PositionsTable({ positions, onClose, onCloseAll }) {
                 <TD right>{fmtUsd(p.margin)}</TD>
                 <TD right className={pnlClass(p.unrealized_pnl)}>
                   <span data-testid={`position-pnl-${p.id}`}>{fmtSignedUsd(p.unrealized_pnl)}</span>
-                  <span className="block text-[10px]">{pct.toFixed(2)}%{p.mfe_r > 0 && <span data-testid={`position-mfe-${p.id}`} className="ml-1 text-slate-500" title="Máximo recorrido a favor (en R)">· máx +{p.mfe_r.toFixed(1)}R</span>}</span>
+                  <span className="block text-[10px]">{pct.toFixed(2)}%{p.pips != null && <span data-testid={`position-pips-${p.id}`} className="ml-1" title={PIPS_HINT}>· {fmtPips(p.pips)}</span>}{p.mfe_r > 0 && <span data-testid={`position-mfe-${p.id}`} className="ml-1 text-slate-500" title="Máximo recorrido a favor (en R)">· máx +{p.mfe_r.toFixed(1)}R</span>}</span>
                 </TD>
                 <TD right>
                   <button data-testid={`close-position-${p.id}`} onClick={() => onClose(p.id)}

@@ -55,6 +55,9 @@ export const fmtDateTime = (iso) =>
     : "—";
 export const pnlClass = (v) => (v > 0 ? "text-emerald-400" : v < 0 ? "text-rose-400" : "text-slate-400");
 
+export const fmtPips = (v) => (v == null ? "—" : `${v > 0 ? "+" : ""}${Number(v).toLocaleString("es-ES", { maximumFractionDigits: 1 })} pips`);
+export const PIPS_HINT = "FX: pips reales del par · Cripto: 1 pip = 0,01 % del precio de entrada";
+
 export const STRATEGY_LABELS = {
   all: "Multi-estrategia",
   trend_ema: "Tendencia EMA",

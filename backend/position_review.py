@@ -78,6 +78,9 @@ async def review_open_positions(engine, settings, currency: str, bot_name: str, 
     tf = getattr(settings, "timeframe", "1h")
     mode, min_conf = settings.ai_position_review_mode, int(settings.ai_position_review_min_confidence)
     crypto = currency == "USDT"
+    docs = [d for d in docs if d.get("exit_mode") != "cross"]  # Test cruce EMA positions are immune to the AI review
+    if not docs:
+        return []
     if trigger:
         docs = [d for d in docs if not d["symbol"].startswith("BTC")]
         await engine.log("AI_REVIEW", f"{trigger} Revisión extraordinaria de {len(docs)} altcoin(s) abierta(s).")

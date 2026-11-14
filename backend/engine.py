@@ -289,7 +289,11 @@ class TradingEngine:
         """One monitor tick for a PAPER position: exits, partial take-profit, trailing and MFE/MAE tracking."""
         updates = self._excursion(p, price)
         p.mfe_r, p.mae_r = updates["mfe_r"], updates["mae_r"]
-        if p.exit_mode == "cross":  # Test cruce EMA: no SL/TP/partial/trailing, only the opposite cross closes it
+        if p.exit_mode == "cross":  # Test cruce EMA: only the safety SL (no TP/partial/BE/trailing); the opposite cross is the normal exit
+            if (price <= p.sl) if p.side == "long" else (price >= p.sl):
+                await self.log("RISK", f"{p.symbol}: SL de seguridad del test cruce EMA alcanzado ({p.sl:.6g}) · movimiento violento antes del cierre de vela")
+                await self.close_position(p.id, p.sl, "SL")
+                return
             updates.update(mark_price=price, unrealized_pnl=round(pnl(p.side, p.entry_price, price, p.qty), 4))
             await self.db.positions.update_one({"_id": ObjectId(p.id)}, {"$set": updates})
             return
@@ -504,7 +508,7 @@ class TradingEngine:
                         size = await self.live_size(symbol, entry, sl, risk_pct, settings.leverage)
                         if not size:
                             return None
-                        r = await self.broker.open(symbol, sig["side"], size["qty"], None if cross else sl, None if cross else tp, settings.leverage)
+                        r = await self.broker.open(symbol, sig["side"], size["qty"], sl, None if cross else tp, settings.leverage)
                     except Exception as e:
                         await self.log("ERROR", f"{symbol}: orden REAL rechazada por Bybit · {str(e)[:160]}")
                         await tg(f"⚠️ <b>Orden REAL rechazada · {symbol}</b>\n{str(e)[:300]}", "orders")
@@ -543,7 +547,7 @@ class TradingEngine:
         reduced = f" · tamaño reducido al {int(risk_factor * 100)}% por {risk_reason}" if risk_factor < 1 else ""
         how = {"maker": " · entrada límite maker (comisión 0,02 %)", "market_fallback": " · a mercado tras no llenarse la orden límite"}.get(entry_type, "")
         lp = " · LARGO PLAZO" if horizon == "long" else ""
-        levels = f"sin SL/TP · cierre en el cruce contrario · ⚠️ {EMA_TEST_TAG}" if cross else f"SL {sl:.6g} · TP {tp:.6g}"
+        levels = f"SL de seguridad {sl:.6g} · sin TP · cierre en el cruce contrario · ⚠️ {EMA_TEST_TAG}" if cross else f"SL {sl:.6g} · TP {tp:.6g}"
         await self.log("ORDER", f"ABIERTA {tag}{sig['side'].upper()} {symbol} @ {entry:.6g} · qty {qty:.6g} · {settings.leverage}x · {levels}{reduced}{how}{lp}")
         await tg(f"{'🟢' if long else '🔴'} <b>ABIERTA {tag}{sig['side'].upper()} {symbol}</b> @ {entry:.6g}{lp}\n"
                  f"Cantidad {qty:.6g} · {settings.leverage}x · margen ${margin:,.2f}\n{levels}\n"

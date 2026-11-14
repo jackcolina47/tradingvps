@@ -276,10 +276,12 @@ def ema_cross(df, i, htf=None, params=None, m=None) -> Optional[dict]:
 
 EMA_TEST = "ema_test"
 EMA_TEST_TAG = "Cruce EMAs Especial"
+SAFETY_SL_ATR = 3.0  # wide emergency stop: only a violent move against the position closes it before the opposite cross
 STRATEGY_INFO[EMA_TEST] = {
     "name": "Test cruce EMA 10/20",
-    "rules": "EXPERIMENTAL · Cruce puro de EMA10/EMA20 al cierre de la vela: al alza abre largo, a la baja abre corto. Sin SL ni TP: la posición se cierra "
-             "(y se invierte) en el siguiente cruce contrario. Sin filtros, sin IA de aprobación. Solo en los pares del test.",
+    "rules": "EXPERIMENTAL · Cruce puro de EMA10/EMA20 al cierre de la vela: al alza abre largo, a la baja abre corto. Sin TP: la posición se cierra "
+             "(y se invierte) en el siguiente cruce contrario. Solo un SL de seguridad a 3×ATR contra movimientos violentos entre cierres de vela. "
+             "Sin filtros (salvo el ADX opcional), sin IA de aprobación ni revisión. Solo en los pares del test.",
     "basis": "Sistema stop-and-reverse clásico de medias móviles para medir la rentabilidad bruta del cruce antes de añadirle filtros.",
 }
 
@@ -298,9 +300,9 @@ def ema_test(df, i, htf=None, params=None, m=None) -> Optional[dict]:
     adx = float(a["adx"]) if "adx" in a else 0.0
     if adx_min and adx < adx_min:
         return None  # sideways filter: ignore the cross (the exit on the opposite cross still applies to open positions)
-    sl, tp = _atr_levels(a, long, None, 2.0, 6.0)
+    sl, tp = _atr_levels(a, long, None, SAFETY_SL_ATR, 6.0)  # SL = safety net only (executed); TP virtual (never executed)
     reasons = [f"EMA10 cruza {'al alza' if long else 'a la baja'} la EMA20 al cierre de la vela",
-               (f"Filtro de lateral: ADX {adx:.1f} ≥ {adx_min:g}" if adx_min else "Test experimental: sin filtros, sin SL/TP · salida y giro en el siguiente cruce contrario")]
+               (f"Filtro de lateral: ADX {adx:.1f} ≥ {adx_min:g} · " if adx_min else "Test experimental · ") + f"SL de seguridad {SAFETY_SL_ATR:g}×ATR · salida y giro en el siguiente cruce contrario"]
     return {**_signal(side, a, sl, tp, EMA_TEST, reasons, 3, int(a["ts"])), "exit_mode": "cross"}
 
 

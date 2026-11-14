@@ -7,7 +7,7 @@ import TradeNoteEditor from "./TradeNoteEditor";
 import TradeAiReview from "./TradeAiReview";
 import {
   http, errMsg, fmtPrice, fmtQty, fmtSignedUsd, fmtPct, pnlClass,
-  REASON_LABELS, STRATEGY_LABELS, HORIZON_LABELS, ENTRY_LABELS,
+  REASON_LABELS, STRATEGY_LABELS, HORIZON_LABELS, ENTRY_LABELS, fmtPips, PIPS_HINT,
 } from "@/lib/api";
 
 const fmtFull = (iso) =>
@@ -83,6 +83,7 @@ function TradeDetailBody({ trade: t, signal: s, currency, onSaved, autoAnalyze }
         <Row label="Comisiones" value={`${Number(t.fees).toFixed(4)} ${currency}`} />
         <Row label="PnL neto" value={`${fmtSignedUsd(t.pnl)} ${currency}`} className={pnlClass(t.pnl)} />
         <Row label="PnL sobre margen" value={fmtPct(t.pnl_pct)} className={pnlClass(t.pnl)} />
+        <Row label="Recorrido en pips" value={<span data-testid="trade-detail-pips" title={PIPS_HINT}>{fmtPips(t.pips)}</span>} className={pnlClass(t.pips)} />
       </Section>
 
       <Section title="Ejecución y recorrido" testId="trade-detail-exec">
