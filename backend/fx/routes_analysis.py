@@ -13,6 +13,7 @@ from fx.strategies_slow import fix_window, last_business_day
 from fx.symbols import SPECS, AVAILABLE, pips
 from fx.market import LONDON
 from fx.backtest import run_backtest
+from strategies import EMA_TEST
 from fx.optimizer import optimize, walk_forward, WF_CANDLES
 from fx import review as fx_review
 from fx import plan as fx_plan
@@ -29,10 +30,13 @@ def register(router, engine, store, news):
 
     @router.post("/backtest")
     async def backtest(req: FxBacktestRequest):
-        if req.symbol not in AVAILABLE or req.timeframe not in FX_TIMEFRAMES or req.strategy not in FX_STRATEGY_KEYS:
+        if req.symbol not in AVAILABLE or req.timeframe not in FX_TIMEFRAMES or req.strategy not in FX_STRATEGY_KEYS + [EMA_TEST]:
             raise HTTPException(400, "Parámetros inválidos")
         s = await engine.get_settings()
         tf = req.timeframe
+        params = dict(s.symbol_params.get(req.symbol) or {})
+        if req.strategy == EMA_TEST and s.ema_test_adx_filter:
+            params["ema_test_adx_min"] = s.ema_test_adx_min
         if req.strategy == "fix_reversion":
             if SPECS[req.symbol]["group"] == "Metales":
                 raise HTTPException(400, "La reversión del fix de fin de mes no opera metales")
@@ -47,9 +51,9 @@ def register(router, engine, store, news):
             klines = await engine.market.fetch_klines(req.symbol, req.timeframe, 1000, cache_sec=60)
         result = await asyncio.to_thread(run_backtest, klines, req.strategy, req.risk_per_trade, req.leverage, trade_rules(s), await _initial_balance(),
                                          req.symbol, s.signal_mode, s.disabled_strategies, dict(engine.market.tickers), s.min_lot_max_risk, s.close_before_weekend,
-                                         tuple(s.sessions_allowed), engine.costs)
+                                         tuple(s.sessions_allowed), engine.costs, params or None)
         result.pop("r_multiples", None)
-        return {"symbol": req.symbol, "strategy": req.strategy, "timeframe": tf, "spread_pips": round(pips(req.symbol, engine.costs.spread(req.symbol)), 1), "commission_lot_usd": engine.costs.commission_lot_usd,
+        return {"symbol": req.symbol, "strategy": req.strategy, "timeframe": tf, "params": params or None, "spread_pips": round(pips(req.symbol, engine.costs.spread(req.symbol)), 1), "commission_lot_usd": engine.costs.commission_lot_usd,
                 "sessions_allowed": s.sessions_allowed, **result}
 
     @router.post("/optimize")

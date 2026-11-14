@@ -10,7 +10,7 @@ from fastapi import HTTPException, Request, Query
 from bson import ObjectId
 
 from models import Position, Trade, Signal, LogEntry, ResetRequest, SIGNAL_MODES
-from strategies import MODE_INFO
+from strategies import MODE_INFO, EMA_TEST
 import chart
 from performance import performance
 from fx.shadow import shadow_stats as fx_shadow_stats
@@ -51,7 +51,7 @@ def register(router, engine, store, news):
     @router.get("/meta")
     async def meta():
         return {"symbols": AVAILABLE, "symbol_info": {s: {k: v for k, v in SPECS[s].items() if k in ("name", "group", "digits", "pip")} for s in AVAILABLE},
-                "timeframes": FX_TIMEFRAMES, "strategies": FX_STRATEGY_KEYS, "strategy_keys": FX_STRATEGY_KEYS[1:], "long_horizon_keys": list(FX_SLOW_KEYS),
+                "timeframes": FX_TIMEFRAMES, "strategies": FX_STRATEGY_KEYS + [EMA_TEST], "strategy_keys": FX_STRATEGY_KEYS[1:], "long_horizon_keys": list(FX_SLOW_KEYS),
                 "strategy_info": FX_STRATEGY_INFO, "signal_modes": SIGNAL_MODES, "mode_info": MODE_INFO,
                 "profiles": PROFILES, "currencies": CURRENCIES, "currency_names": CURRENCY_NAMES, "sessions": SESSION_LIST}
 

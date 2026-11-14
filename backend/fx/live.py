@@ -265,10 +265,11 @@ class FxLiveBroker:
         vol = min(vol, lot["max"])
         d = lot["digits"]
         links = []
+        tp_r = round(tp, d) if tp else None  # None = no take profit (Test cruce EMA)
 
         async def send():
             links.append(new_link())
-            return await self.api.market_order(self.account_id, lot["symbol"], side, vol, round(sl, d), round(tp, d), links[-1], self.region)
+            return await self.api.market_order(self.account_id, lot["symbol"], side, vol, round(sl, d), tp_r, links[-1], self.region)
 
         async def on_unknown():
             found = await self._reconcile_open(links[-1])
@@ -284,7 +285,7 @@ class FxLiveBroker:
         pos = await self._wait_position(res.get("positionId")) if res.get("positionId") else None
         return {"position_id": str(res.get("positionId") or ""), "order_id": str(res.get("orderId") or ""), "link_id": link, "lots": pos["volume"] if pos else vol,
                 "entry": pos["entry"] if pos else 0.0, "commission": pos["commission"] if pos else 0.0, "filled": bool(pos),
-                "sl": float(pos["sl"]) if pos and pos.get("sl") else round(sl, d), "tp": float(pos["tp"]) if pos and pos.get("tp") else round(tp, d),
+                "sl": float(pos["sl"]) if pos and pos.get("sl") else round(sl, d), "tp": float(pos["tp"]) if pos and pos.get("tp") else tp_r,
                 "attempts": attempts, "note": note}
 
     async def close(self, position_id: str, link_id: str = "") -> dict:

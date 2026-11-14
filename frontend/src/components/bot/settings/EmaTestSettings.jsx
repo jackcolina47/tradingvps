@@ -7,6 +7,7 @@ const CHIP = "relative rounded-sm border px-2 py-1 font-mono text-[11px] transit
 export default function EmaTestSettings({ form, set, meta }) {
   if (!("ema_test_enabled" in form)) return null;
   const on = !!form.ema_test_enabled;
+  const fx = !!meta?.sessions;
   const syms = form.ema_test_symbols || [];
   const toggleSym = (s) => set("ema_test_symbols", syms.includes(s) ? syms.filter((x) => x !== s) : [...syms, s]);
   return (
@@ -16,26 +17,26 @@ export default function EmaTestSettings({ form, set, meta }) {
           <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-fuchsia-300" />
           <span>
             <span className="block font-display text-[13px] font-semibold uppercase tracking-wide text-fuchsia-200">Test Cruce EMA 10/20 <span className="ml-1 rounded-sm bg-fuchsia-500/30 px-1 text-[9px] text-fuchsia-100">EXPERIMENTAL</span></span>
-            <span className="block text-[11px] text-slate-400">EMA10 cruza EMA20 al cierre de la vela ({form.timeframe}) → largo al alza, corto a la baja. Sin SL ni TP: cierra y se invierte en el siguiente cruce contrario.</span>
+            <span className="block text-[11px] text-slate-400">EMA10 cruza EMA20 al cierre de la vela ({form.timeframe}) → largo al alza, corto a la baja. Sin TP ni stop normal (solo SL de seguridad 3×ATR): cierra y se invierte en el siguiente cruce contrario.</span>
           </span>
         </span>
         <Switch data-testid="settings-ema-test-enabled-switch" checked={on} onCheckedChange={(v) => set("ema_test_enabled", v)} className="data-[state=checked]:bg-fuchsia-500" />
       </label>
       <p data-testid="ema-test-warning" className="mt-2 flex items-start gap-1.5 rounded-sm border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-200">
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <span>Riesgo alto: estas operaciones no tienen take profit ni stop normal, solo un SL de seguridad a 3×ATR (ni paper ni REAL), ignoran la IA de aprobación, el embudo y los filtros de mercado, y no cuentan en «Máx. posiciones». El tamaño se calcula con ese SL de 3×ATR y tu riesgo por operación. Rentabilidad no comprobada: úsalo con capital que puedas arriesgar. Son inmunes también a la revisión IA de posiciones abiertas. Al apagar el test, las posiciones abiertas siguen hasta su cruce de cierre.</span>
+        <span>Riesgo alto: estas operaciones no tienen take profit ni stop normal, solo un SL de seguridad a 3×ATR (ni paper ni REAL), ignoran la IA de aprobación, el embudo{fx ? ", las sesiones permitidas" : ""} y los filtros de mercado, y no cuentan en «Máx. posiciones». El tamaño se calcula con ese SL de 3×ATR y tu riesgo por operación. Rentabilidad no comprobada: úsalo con capital que puedas arriesgar. Son inmunes también a la revisión IA de posiciones abiertas. Al apagar el test, las posiciones abiertas siguen hasta su cruce de cierre.{fx ? " Solo el límite de pérdida diaria y el cierre de fin de semana (si está activo) las cierran antes." : ""}</span>
       </p>
       <div className="mt-2">
         <p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-slate-500">Pares del test ({syms.length})</p>
         <div className="flex flex-wrap gap-1.5">
           {(meta?.symbols || []).map((s) => (
-            <button key={s} data-testid={`settings-ema-test-symbol-${s}`} onClick={() => toggleSym(s)}
+            <button key={s} data-testid={`settings-ema-test-symbol-${s}`} onClick={() => toggleSym(s)} title={meta?.symbol_info?.[s]?.name}
               className={`${CHIP} ${syms.includes(s) ? "border-fuchsia-400/70 bg-fuchsia-500/20 text-fuchsia-100" : "border-[#1E293B] text-slate-500 hover:border-[#334155]"}`}>
               {s.replace("USDT", "")}
             </button>
           ))}
         </div>
-        <p className="mt-1 text-[11px] text-slate-500">Operan aunque no estén en «Pares a operar». Las operaciones del test llevan la etiqueta «Cruce EMAs Especial» en posiciones e historial.</p>
+        <p className="text-[11px] text-slate-500">Pulsa un par para encenderlo o apagarlo en el test. Operan aunque no estén en «Pares a operar». Las operaciones del test llevan la etiqueta «Cruce EMAs Especial» en posiciones e historial.</p>
       </div>
       <div className="mt-3 rounded-sm border border-[#1E293B] bg-[#07090E]/60 p-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">

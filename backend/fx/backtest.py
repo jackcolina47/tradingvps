@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import numpy as np
 from indicators import build_df
 from backtest import scan_signals, _levels, _iso
-from strategies import exit_signal, EXIT_REASON
+from strategies import exit_signal, EXIT_REASON, CROSS_ONLY
 from risk import check_exit as bar_exit
 from fx import risk
 from fx.market import sessions as fx_sessions
@@ -75,13 +75,16 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
             adv = (pos["entry"] - lows[i]) if pos["side"] == "long" else (highs[i] - pos["entry"])
             if r_dist:
                 pos["mfe"], pos["mae"] = max(pos["mfe"], fav / r_dist), max(pos["mae"], adv / r_dist)
-            price, reason = bar_exit(pos["side"], pos["sl"], pos["tp"], highs[i], lows[i])
+            cross_only = pos["strategy"] in CROSS_ONLY  # Test cruce EMA: only the safety SL, no TP / partial / trailing
+            price, reason = bar_exit(pos["side"], pos["sl"], (float("inf") if pos["side"] == "long" else 0.0) if cross_only else pos["tp"], highs[i], lows[i])
             if price is not None:
                 close(price, reason, i)
             elif pos.get("expires_ts") and ts[i] / 1000 >= pos["expires_ts"]:
                 close(closes[i], "TIEMPO", i)
             elif exit_signal(pos["strategy"], pos["side"], e10[i], e20[i]):
                 close(closes[i], EXIT_REASON, i)
+            elif cross_only:
+                pass
             else:
                 if use_partial and not pos["partial"] and r_dist and fav >= rules["partial_tp_r"] * r_dist:
                     part = risk.partial_lots(pos["lots"], rules["partial_tp_pct"])
@@ -177,12 +180,14 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
 
 
 def run_backtest(klines: list, strategy: str, risk_pct: float, leverage: int, trailing, initial: float, symbol: str,
-                 mode: str, disabled, tickers: dict, min_lot_max_risk: float, weekend_flat: bool, sessions_allowed=(), costs=None) -> dict:
-    df = build_fx_df(klines)
+                 mode: str, disabled, tickers: dict, min_lot_max_risk: float, weekend_flat: bool, sessions_allowed=(), costs=None, params: dict = None) -> dict:
+    df = build_fx_df(klines, int((params or {}).get("atr_period", 14)))
     if strategy == "fix_reversion":
         from fx.strategies_slow import scan_fix
         sigs = scan_fix(klines, df["atr"].values)
         return simulate(df, sigs, risk_pct, leverage, trailing, initial, symbol, start=min(210, max(0, len(df) - 2)),
                         tickers=tickers, min_lot_max_risk=min_lot_max_risk, weekend_flat=False, sessions_allowed=(), costs=costs)
-    return simulate(df, scan_signals(df, strategy, None, mode, disabled), risk_pct, leverage, trailing, initial, symbol,
+    if strategy in CROSS_ONLY:
+        sessions_allowed = ()  # the test ignores the session filter, like the live engine
+    return simulate(df, scan_signals(df, strategy, params, mode, disabled), risk_pct, leverage, trailing, initial, symbol,
                     tickers=tickers, min_lot_max_risk=min_lot_max_risk, weekend_flat=weekend_flat, sessions_allowed=sessions_allowed, costs=costs)

@@ -9,6 +9,7 @@ from fx.symbols import SPECS, fmt_price, pips
 from fx import risk
 from risk import be_allowed
 from fx.metaapi import MetaApiError, TRADE_DISABLED_CODES
+from strategies import EMA_TEST_TAG
 from fx.engine_core import logger, LIVE_GRACE_SEC, TRANSIENT_TG_SEC, PENDING_TTL_SEC, HORIZON_LABEL, FX_STRATEGY_INFO
 
 
@@ -22,6 +23,14 @@ class PositionsMixin:
         tickers = self.market.tickers
         updates = self._excursion(p, price)
         p.mfe_r, p.mae_r = updates["mfe_r"], updates["mae_r"]
+        if p.exit_mode == "cross":  # Test cruce EMA: only the safety SL (no TP/partial/BE/trailing); the opposite cross is the normal exit
+            if not rollover and ((price <= p.sl) if p.side == "long" else (price >= p.sl)):
+                await self.log("RISK", f"{p.symbol}: SL de seguridad del test cruce EMA alcanzado ({fmt_price(p.symbol, p.sl)}) · movimiento violento antes del cierre de vela")
+                await self.close_position(p.id, p.sl, "SL")
+                return
+            updates.update(mark_price=price, unrealized_pnl=round(risk.pnl(p.symbol, p.side, p.entry_price, price, p.qty, tickers), 4))
+            await self.db.positions.update_one({"_id": ObjectId(p.id)}, {"$set": updates})
+            return
         if not rollover:
             hit, reason = risk.check_exit(p.side, p.sl, p.tp, price)
             if hit is not None:
@@ -86,7 +95,7 @@ class PositionsMixin:
             pos = Position(symbol=symbol, side=xp["side"], strategy=pend.get("strategy") or "adoptada", entry_price=entry, qty=xp["volume"], leverage=leverage,
                            margin=margin, sl=sl, tp=tp, initial_sl=sl, atr=float(pend.get("atr") or abs(entry - sl) or SPECS[symbol]["pip"] * 10), fees=abs(xp["commission"]),
                            mark_price=xp["mark"] or entry, signal_id=pend.get("signal_id"), expires_at=pend.get("expires_at"), live=True, order_id=pid,
-                           link_id=xp["client_id"], opened_at=str(xp.get("time") or now_iso()).replace("Z", "+00:00"))
+                           link_id=xp["client_id"], opened_at=str(xp.get("time") or now_iso()).replace("Z", "+00:00"), exit_mode=pend.get("exit_mode"))
             res = await self.db.positions.insert_one(pos.to_mongo())
             pos.id = str(res.inserted_id)
             if pend.get("signal_id"):
@@ -127,6 +136,9 @@ class PositionsMixin:
         if abs(ex["volume"] - p.qty) > 1e-9:
             updates["qty"] = ex["volume"]
             p.qty = ex["volume"]
+        if p.exit_mode == "cross":  # Test cruce EMA: no time stop / partial / breakeven / trailing at the broker (safety SL travels in the order)
+            await self.db.positions.update_one({"_id": ObjectId(p.id)}, {"$set": updates})
+            return
         if p.expires_at and now >= datetime.fromisoformat(p.expires_at):
             await self.db.positions.update_one({"_id": ObjectId(p.id)}, {"$set": updates})
             await self.close_position(p.id, price, "TIEMPO")
@@ -183,7 +195,7 @@ class PositionsMixin:
             price = (cr or {}).get("exit") or p.mark_price
             fees = cr["fees"] if cr else p.fees + p.partial_fees
             net = cr["pnl"] if cr else risk.pnl(p.symbol, p.side, p.entry_price, price, p.qty, self.market.tickers) + p.partial_gross - p.fees - p.partial_fees
-            reason = (cr or {}).get("reason") or ("TP" if abs(price - p.tp) <= abs(price - p.sl) else ("TRAILING" if p.breakeven else "SL"))
+            reason = (cr or {}).get("reason") or ("SL" if p.exit_mode == "cross" else "TP" if abs(price - p.tp) <= abs(price - p.sl) else ("TRAILING" if p.breakeven else "SL"))
             if reason == "SL" and p.breakeven:
                 reason = "TRAILING"
             await self.db.positions.delete_one({"_id": ObjectId(p.id)})
@@ -207,29 +219,32 @@ class PositionsMixin:
                       fees=round(fees, 4), reason=reason, opened_at=p.opened_at, live=p.live, horizon=p.horizon, entry_type=p.entry_type,
                       mfe_r=round(mfe, 2), mae_r=round(p.mae_r, 2), mfe_tp_pct=round(mfe / tp_r * 100, 1) if tp_r else 0.0,
                       partial_tp=p.partial_done and bool(p.partial_gross), hold_min=round(hold, 1),
-                      sl=p.sl, tp=p.tp, initial_sl=p.initial_sl, atr=p.atr, breakeven=p.breakeven, signal_id=p.signal_id, order_id=p.order_id)
+                      sl=p.sl, tp=p.tp, initial_sl=p.initial_sl, atr=p.atr, breakeven=p.breakeven, signal_id=p.signal_id, order_id=p.order_id,
+                      exit_mode=p.exit_mode, tags=[EMA_TEST_TAG] if p.exit_mode == "cross" else [])
         res = await self.db.trades.insert_one(trade.to_mongo())
         trade.id = str(res.inserted_id)
         return trade
 
     # ---------- execution ----------
     def _slot_block(self, open_docs: list, settings: FxSettings, horizon: str):
-        """Long-horizon positions (fix reversion) have their own cap and do not count towards «Máx. posiciones»."""
-        same = [p for p in open_docs if (p.get("horizon") or "short") == horizon]
+        """Long-horizon positions (fix reversion) have their own cap and do not count towards «Máx. posiciones». Test cruce EMA positions use no slot."""
+        same = [p for p in open_docs if (p.get("horizon") or "short") == horizon and p.get("exit_mode") != "cross"]
         cap = settings.max_long_positions if horizon == "long" else settings.max_positions
         if len(same) >= cap:
             return f"máximo de posiciones de {HORIZON_LABEL[horizon]} alcanzado ({cap})"
         return None
 
     async def open_position(self, symbol: str, sig: dict, settings: FxSettings, signal_id: str, risk_factor: float = 1.0,
-                            risk_reason: str = "noticias", expires_at: str = None, horizon: str = "short"):
-        """Returns (Position | None, reason) — reason explains why nothing was opened."""
+                            risk_reason: str = "noticias", expires_at: str = None, horizon: str = "short", exit_mode: str = None):
+        """Returns (Position | None, reason) — reason explains why nothing was opened.
+        `exit_mode="cross"` (Test cruce EMA): only the 3×ATR safety SL is sent (no TP), the position uses no slot and closes on the opposite cross."""
         risk_pct = settings.risk_per_trade * risk_factor
+        cross = exit_mode == "cross"
         tickers = self.market.tickers
         async with self.lock:
-            open_docs = await self.db.positions.find({}, {"symbol": 1, "side": 1, "horizon": 1}).to_list(100)
+            open_docs = await self.db.positions.find({}, {"symbol": 1, "side": 1, "horizon": 1, "exit_mode": 1}).to_list(100)
             open_syms = [p["symbol"] for p in open_docs]
-            slot = self._slot_block(open_docs, settings, horizon)
+            slot = None if cross else self._slot_block(open_docs, settings, horizon)
             if symbol in open_syms or slot:
                 await self.log("RISK", f"{symbol}: apertura cancelada · {slot or 'par ya abierto'}")
                 return None, slot or "par ya abierto"
@@ -260,13 +275,13 @@ class PositionsMixin:
                                   f"(objetivo {risk_pct:g}%, tope {settings.min_lot_max_risk:g}%)")
                         await self.log("RISK", f"{symbol}: {reason}")
                         return None, reason
-                    r = await self.broker.open(symbol, sig["side"], lots, sl, tp)
+                    r = await self.broker.open(symbol, sig["side"], lots, sl, None if cross else tp)
                 except MetaApiError as e:
                     if e.kind == "unknown":
                         link = getattr(e, "link_id", "") or ""
                         if link:
                             await self.db.pending_orders.update_one({"_id": link}, {"$set": {
-                                "symbol": symbol, "side": sig["side"], "strategy": sig["strategy"], "signal_id": signal_id, "atr": sig["atr"], "sl": sl, "tp": tp,
+                                "symbol": symbol, "side": sig["side"], "strategy": sig["strategy"], "signal_id": signal_id, "atr": sig["atr"], "sl": sl, "tp": tp, "exit_mode": exit_mode,
                                 "lots": lots, "leverage": leverage, "expires_at": expires_at, "created_at": now_iso()}}, upsert=True)
                         reason = f"resultado desconocido: {e.msg[:120]}"
                         await self.log("ERROR", f"{symbol}: orden REAL con resultado desconocido · {e.msg[:160]} · si {self.bk} la ejecutó, el bot la adoptará por su identificador {link}")
@@ -294,11 +309,11 @@ class PositionsMixin:
                 elif r.get("attempts", 1) > 1:
                     await self.log("RISK", f"{symbol}: orden REAL ejecutada en el intento {r['attempts']} tras fallos temporales de {self.bk}/MetaApi")
                 entry, lots, fee = (r["entry"] or entry), r["lots"], abs(r["commission"])
-                sl, tp = r["sl"], r["tp"]
+                sl, tp = r["sl"], (tp if cross else r["tp"])  # cross: TP stays virtual (R metrics only), nothing at the broker
                 margin = lots * SPECS[symbol]["contract"] * risk.base_usd(symbol, tickers, entry) / leverage
                 pos = Position(symbol=symbol, side=sig["side"], strategy=sig["strategy"], entry_price=entry, qty=lots, initial_qty=lots, leverage=leverage, margin=margin,
                                sl=sl, tp=tp, initial_sl=sl, atr=sig["atr"], fees=fee, mark_price=price, signal_id=signal_id, expires_at=expires_at,
-                               live=True, order_id=r["position_id"], link_id=r["link_id"], horizon=horizon)
+                               live=True, order_id=r["position_id"], link_id=r["link_id"], horizon=horizon, exit_mode=exit_mode)
                 res = await self.db.positions.insert_one(pos.to_mongo())
                 pos.id = str(res.inserted_id)
                 if not r["filled"]:
@@ -316,7 +331,8 @@ class PositionsMixin:
                     return None, reason
                 fee = risk.spread_cost(symbol, lots, tickers)
                 pos = Position(symbol=symbol, side=sig["side"], strategy=sig["strategy"], entry_price=entry, qty=lots, initial_qty=lots, leverage=settings.leverage,
-                               margin=margin, sl=sl, tp=tp, initial_sl=sl, atr=sig["atr"], fees=fee, mark_price=price, signal_id=signal_id, expires_at=expires_at, horizon=horizon)
+                               margin=margin, sl=sl, tp=tp, initial_sl=sl, atr=sig["atr"], fees=fee, mark_price=price, signal_id=signal_id, expires_at=expires_at, horizon=horizon,
+                               exit_mode=exit_mode)
                 res = await self.db.positions.insert_one(pos.to_mongo())
                 pos.id = str(res.inserted_id)
                 await self.db.account.update_one({"_id": "main"}, {"$inc": {"balance": -fee}})
@@ -326,9 +342,11 @@ class PositionsMixin:
         if real_risk > risk_pct + 0.05:
             reduced += f" · lote mínimo: riesgo real {real_risk:g}% (objetivo {risk_pct:g}%)"
         f = lambda v: fmt_price(symbol, v)  # noqa: E731
-        await self.log("ORDER", f"ABIERTA {tag}{sig['side'].upper()} {symbol} @ {f(entry)} · {lots:.2f} lotes · 1:{leverage} · SL {f(sl)} ({pips(symbol, abs(entry - sl)):.1f} pips) · TP {f(tp)}{reduced}")
+        levels = (f"SL de seguridad {f(sl)} ({pips(symbol, abs(entry - sl)):.1f} pips) · sin TP · cierre en el cruce contrario · ⚠️ {EMA_TEST_TAG}" if cross
+                  else f"SL {f(sl)} ({pips(symbol, abs(entry - sl)):.1f} pips) · TP {f(tp)}")
+        await self.log("ORDER", f"ABIERTA {tag}{sig['side'].upper()} {symbol} @ {f(entry)} · {lots:.2f} lotes · 1:{leverage} · {levels}{reduced}")
         await self.tg(f"{'🟢' if long else '🔴'} <b>ABIERTA {tag}{sig['side'].upper()} {symbol}</b> @ {f(entry)}\n"
-                      f"{lots:.2f} lotes · 1:{leverage} · margen ${margin:,.2f}\nSL {f(sl)} · TP {f(tp)}\n"
+                      f"{lots:.2f} lotes · 1:{leverage} · margen ${margin:,.2f}\n{levels}\n"
                       f"Estrategia: {FX_STRATEGY_INFO.get(sig['strategy'], {}).get('name', sig['strategy'])}{reduced}", "orders")
         return pos, None
 

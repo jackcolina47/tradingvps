@@ -66,7 +66,16 @@ class FxSettings(BaseModel):
     partial_tp_enabled: bool = True
     partial_tp_r: float = 1.5
     partial_tp_pct: int = 50
+    ema_test_enabled: bool = False
+    ema_test_symbols: List[str] = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD"]
+    ema_test_adx_filter: bool = False
+    ema_test_adx_min: float = 20.0
     bot_running: bool = False
+
+    @field_validator("ema_test_symbols")
+    @classmethod
+    def _ema_test_symbols(cls, v):
+        return [s for s in dict.fromkeys(v or []) if s in AVAILABLE]
 
     @field_validator("seasonality_block_pairs")
     @classmethod
@@ -236,6 +245,10 @@ class FxSettingsUpdate(BaseModel):
     partial_tp_enabled: Optional[bool] = None
     partial_tp_r: Optional[float] = Field(default=None, ge=0.5, le=3.0)
     partial_tp_pct: Optional[int] = Field(default=None, ge=25, le=75)
+    ema_test_enabled: Optional[bool] = None
+    ema_test_symbols: Optional[List[str]] = None
+    ema_test_adx_filter: Optional[bool] = None
+    ema_test_adx_min: Optional[float] = Field(default=None, ge=5, le=60)
 
 
 class HfmTestRequest(BaseModel):

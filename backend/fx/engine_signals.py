@@ -4,9 +4,9 @@ import asyncio
 from datetime import datetime, timezone, timedelta
 from models import Signal, now_iso
 from indicators import trend_label, htf_trend, snapshot
-from strategies import evaluate, exit_signal, EXIT_ON_CROSS, EXIT_REASON
+from strategies import evaluate, exit_signal, ema_test, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST
 from fx.models import FxSettings
-from fx.market import HTF, market_open, market_status, in_sessions, session_names
+from fx.market import HTF, market_open, market_status, in_sessions, session_names, closing_soon
 from fx.symbols import SPECS, pips
 from fx import filters
 from fx import regime as fx_regime
@@ -55,18 +55,28 @@ class SignalsMixin:
         self.scanning = True
         found = 0
         htf_tf = HTF[settings.timeframe]
+        test_syms = set(settings.ema_test_symbols) if settings.ema_test_enabled else set()
+        # pairs with an open test position keep being scanned (even with the toggle off) so the opposite cross can still close them
+        open_test = {d["symbol"] for d in await self.db.positions.find({"exit_mode": "cross"}, {"symbol": 1}).to_list(100)}
         try:
-            for symbol in settings.symbols:
+            for symbol in list(dict.fromkeys([*settings.symbols, *test_syms, *open_test])):
                 try:
                     params = settings.symbol_params.get(symbol) or {}
                     df = self._df(await self.market.fetch_klines(symbol, settings.timeframe, 300, cache_sec=60), int(params.get("atr_period", 14)))
                     i = len(df) - 2
                     row = df.iloc[i]
                     htf = None
-                    if settings.htf_filter:
+                    if settings.htf_filter and symbol in settings.symbols:
                         htf = htf_trend(self._df(await self.market.fetch_klines(symbol, htf_tf, 200, cache_sec=300)))
                     if self.running:
                         await self._exit_on_cross(symbol, df, i)
+                    if symbol in test_syms:
+                        tsig = ema_test(df, i, params={"ema_test_adx_min": settings.ema_test_adx_min if settings.ema_test_adx_filter else 0})
+                        if tsig and self.running:
+                            found += 1
+                            await self._handle_test_signal(symbol, tsig, settings)
+                    if symbol not in settings.symbols:
+                        continue  # test-only pair: no regular strategies
                     sig = evaluate(df, i, settings.strategy, htf, params, settings.signal_mode, settings.disabled_strategies)
                     vol_pct = filters.vol_percentile(df["atr"].values, i)
                     self.analysis[symbol] = {
@@ -94,8 +104,35 @@ class SignalsMixin:
         row = df.iloc[i]
         async for d in self.db.positions.find({"symbol": symbol, "strategy": {"$in": list(EXIT_ON_CROSS)}}, {"_id": 1, "side": 1, "strategy": 1}):
             if exit_signal(d["strategy"], d["side"], float(row["ema10"]), float(row["ema20"])):
-                await self.log("INFO", f"{symbol}: la EMA10 volvió a cruzar la EMA20 en contra de la posición {d['side'].upper()} · cierre por regla de la estrategia")
+                await self.log("INFO", f"{symbol}: la EMA10 volvió a cruzar la EMA20 en contra de la posición {d['side'].upper()} · cierre por regla de la estrategia"
+                               + (" (test cruce EMA: se invierte si el test sigue activo)" if d["strategy"] == EMA_TEST else ""))
                 await self.close_position(str(d["_id"]), None, EXIT_REASON)
+
+    async def _handle_test_signal(self, symbol: str, sig: dict, settings: FxSettings):
+        """«Test cruce EMA 10/20»: stop-and-reverse on the raw cross. Immune to AI approval, funnel, sessions, market gates and «Máx. posiciones»;
+        only the daily-loss limit, one position per pair, the broker link and the weekend close apply. The opposite position was already closed by _exit_on_cross."""
+        key = f"{symbol}:{EMA_TEST}:{sig['side']}:{sig['key_ts']}"
+        if key in self.signal_keys or await self.db.signals.find_one({"key": key}, {"_id": 1}):
+            return
+        self.signal_keys.add(key)
+        signal = Signal(symbol=symbol, side=sig["side"], strategy=EMA_TEST, timeframe=settings.timeframe, price=sig["price"], sl=sig["sl"], tp=sig["tp"],
+                        score=sig["score"], reasons=sig["reasons"], indicators=sig["indicators"], key=key, ai_decision="SIN_IA",
+                        ai_reasoning="Test cruce EMA 10/20: entrada directa por cruce, inmune a la aprobación de la IA", context={"exit_mode": "cross"})
+        acc = await self.account_summary()
+        open_syms = [p["symbol"] async for p in self.db.positions.find({}, {"symbol": 1})]
+        block = ("límite de pérdida diaria alcanzado" if acc["daily_paused"] else "ya existe una posición abierta en el par" if symbol in open_syms
+                 else "cierre de fin de semana inminente" if settings.close_before_weekend and closing_soon(30)
+                 else f"cuenta {self.bk} sin conexión con MetaApi" if self.live and self.hfm["down_since"]
+                 else f"par no operable en {self.bk} con el sufijo de símbolos configurado" if self.live and self.cfg and symbol in (self.cfg.hfm_symbols_bad or []) else None)
+        if block:
+            signal.ai_decision, signal.note = "BLOQUEADA", f"Bloqueada por riesgo: {block}"
+            await self.db.signals.insert_one(signal.to_mongo())
+            await self.log("RISK", f"{symbol}: cruce EMA (test) no operado · {block}")
+            return
+        res = await self.db.signals.insert_one(signal.to_mongo())
+        await self.log("SIGNAL", f"{symbol} {sig['side'].upper()} · Test cruce EMA 10/20 · {sig['reasons'][0]}")
+        pos, reason = await self.open_position(symbol, sig, settings, str(res.inserted_id), exit_mode="cross")
+        await self.db.signals.update_one({"_id": res.inserted_id}, {"$set": {"executed": True} if pos else {"note": f"No ejecutada: {reason}"}})
 
     async def _blocks(self, symbol: str, settings: FxSettings, acc: dict, side: str = None, horizon: str = "short"):
         open_docs = await self.db.positions.find({}, {"symbol": 1, "side": 1, "horizon": 1}).to_list(100)

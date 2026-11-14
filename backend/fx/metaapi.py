@@ -286,7 +286,9 @@ class MetaApi:
 
     async def market_order(self, account_id: str, symbol: str, side: str, volume: float, sl: float, tp: float, client_id: str, region: str = None) -> dict:
         payload = {"actionType": "ORDER_TYPE_BUY" if side == "long" else "ORDER_TYPE_SELL", "symbol": symbol, "volume": volume,
-                   "stopLoss": sl, "takeProfit": tp, "clientId": client_id, "magic": MAGIC}
+                   "stopLoss": sl, "clientId": client_id, "magic": MAGIC}
+        if tp:
+            payload["takeProfit"] = tp
         return await self.trade(account_id, payload, region)
 
     async def close_position(self, account_id: str, position_id: str, region: str = None, client_id: str = "AIT_close_c") -> dict:
