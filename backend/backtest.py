@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 import numpy as np
-from strategies import evaluate, exit_signal, EXIT_REASON
+from strategies import evaluate, exit_signal, EXIT_REASON, CROSS_ONLY
 from risk import FEE_RATE, position_size, pnl, check_exit, update_trailing, trade_rules, partial_qty, tp_in_r
 
 
@@ -66,11 +66,14 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
             fav = (highs[i] - pos["entry"]) if pos["side"] == "long" else (pos["entry"] - lows[i])
             adv = (pos["entry"] - lows[i]) if pos["side"] == "long" else (highs[i] - pos["entry"])
             pos["mfe"], pos["mae"] = max(pos["mfe"], fav / r_dist), max(pos["mae"], adv / r_dist)
-            price, reason = check_exit(pos["side"], pos["sl"], pos["tp"], highs[i], lows[i])
+            cross_only = pos["strategy"] in CROSS_ONLY
+            price, reason = (None, None) if cross_only else check_exit(pos["side"], pos["sl"], pos["tp"], highs[i], lows[i])
             if price is not None:
                 close(price, reason, i)
             elif exit_signal(pos["strategy"], pos["side"], e10[i], e20[i]):
                 close(closes[i], EXIT_REASON, i)
+            elif cross_only:
+                pass
             else:
                 if use_partial and not pos["partial"] and fav >= rules["partial_tp_r"] * r_dist:
                     part = partial_qty(symbol, pos["qty"], rules["partial_tp_pct"]) if symbol else round(pos["qty"] * rules["partial_tp_pct"] / 100, 8)

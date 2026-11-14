@@ -30,6 +30,7 @@ function TradeRow({ t, onOpen }) {
       <TD>
         <p className="font-display text-[13px] font-semibold text-slate-100">{t.symbol}</p>
         <p className="text-[10px] text-slate-500">{STRATEGY_LABELS[t.strategy]}</p>
+        {t.exit_mode === "cross" && <span data-testid={`trade-ema-test-${t.id}`} className="mt-0.5 inline-block rounded-sm border border-fuchsia-400/60 bg-fuchsia-500/20 px-1 font-mono text-[9px] font-semibold uppercase text-fuchsia-200">Cruce EMAs Especial</span>}
       </TD>
       <TD><SideBadge side={t.side} /></TD>
       <TD right>{fmtPrice(t.entry_price)}</TD>

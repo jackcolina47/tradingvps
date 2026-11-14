@@ -57,7 +57,7 @@ class LiveBroker:
         await self.client.set_leverage(symbol, leverage)
         link = f"bot-{uuid.uuid4().hex[:18]}"
         res = await self.client.market_order(symbol, "Buy" if side == "long" else "Sell", q,
-                                             sl=round_step(sl, inst["tick_size"]), tp=round_step(tp, inst["tick_size"]), link_id=link)
+                                             sl=round_step(sl, inst["tick_size"]) if sl else None, tp=round_step(tp, inst["tick_size"]) if tp else None, link_id=link)
         order_id = res.get("orderId")
         fill = await self._wait_fill(symbol, order_id)
         self.invalidate()

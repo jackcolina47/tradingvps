@@ -63,6 +63,7 @@ export const STRATEGY_LABELS = {
   supertrend_momentum: "Supertrend + momentum",
   ema_pullback: "Pullback EMA21",
   ema_cross: "Cruce EMA 10/20",
+  ema_test: "Test cruce EMA 10/20",
   multi_horizon: "Tendencia Multi-Horizonte",
   double_divergence: "Divergencia doble RSI+MACD",
   fix_reversion: "Reversión fin de mes (fix)",

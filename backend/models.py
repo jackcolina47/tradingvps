@@ -51,6 +51,8 @@ class Settings(BaseModel):
     ai_min_confidence: int = 60
     ai_funnel_enabled: bool = True
     min_rr: float = 1.5
+    ema_test_enabled: bool = False
+    ema_test_symbols: List[str] = ["ENAUSDT", "ONDOUSDT", "ARBUSDT", "UNIUSDT"]
     ai_position_review_enabled: bool = False
     ai_position_review_minutes: int = 30
     ai_position_review_mode: str = "auto"
@@ -191,6 +193,11 @@ class Settings(BaseModel):
     def _reopt_symbols(cls, v):
         return [s for s in dict.fromkeys(v or []) if s in AVAILABLE_SYMBOLS][:6]
 
+    @field_validator("ema_test_symbols")
+    @classmethod
+    def _ema_test_symbols(cls, v):
+        return [s for s in dict.fromkeys(v or []) if s in AVAILABLE_SYMBOLS]
+
 
 class SettingsUpdate(BaseModel):
     strategy: Optional[str] = None
@@ -204,6 +211,8 @@ class SettingsUpdate(BaseModel):
     ai_min_confidence: Optional[int] = Field(default=None, ge=0, le=100)
     ai_funnel_enabled: Optional[bool] = None
     min_rr: Optional[float] = Field(default=None, ge=0, le=5)
+    ema_test_enabled: Optional[bool] = None
+    ema_test_symbols: Optional[List[str]] = None
     ai_position_review_enabled: Optional[bool] = None
     ai_position_review_minutes: Optional[int] = Field(default=None, ge=5, le=240)
     ai_position_review_mode: Optional[str] = Field(default=None, pattern="^(notify|auto)$")
@@ -263,6 +272,7 @@ class Position(BaseDocument):
     link_id: Optional[str] = None
     expires_at: Optional[str] = None
     horizon: str = "short"
+    exit_mode: Optional[str] = None  # "cross": no SL/TP, closes on the opposite EMA cross (Test cruce EMA 10/20)
     entry_type: str = "market"
     initial_qty: Optional[float] = None
     mfe_r: float = 0.0
@@ -291,6 +301,7 @@ class Trade(BaseDocument):
     live: bool = False
     period: str = ""
     horizon: str = "short"
+    exit_mode: Optional[str] = None  # "cross": no SL/TP, closes on the opposite EMA cross (Test cruce EMA 10/20)
     entry_type: str = "market"
     mfe_r: float = 0.0
     mae_r: float = 0.0

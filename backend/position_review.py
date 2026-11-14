@@ -109,6 +109,8 @@ async def review_open_positions(engine, settings, currency: str, bot_name: str, 
         if mode == "auto" and strong and review["action"] == "CERRAR":
             await engine.close_position(p.id, reason="IA_REVISION")
             acted = "cerrada"
+        elif mode == "auto" and strong and review["action"] == "BREAKEVEN" and getattr(p, "exit_mode", None) == "cross":
+            acted = "breakeven no aplicable (test cruce EMA: sin stop, solo cierre por cruce o CERRAR)"
         elif mode == "auto" and strong and review["action"] == "BREAKEVEN" and not p.breakeven:
             acted = "stop a breakeven" if await _breakeven(engine, p, price) else "breakeven no aplicable (precio no a favor)"
         review["acted"] = acted

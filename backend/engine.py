@@ -6,7 +6,7 @@ from bson import ObjectId
 from models import Settings, Position, Trade, Signal, LogEntry, now_iso
 from market import MarketData, HTF
 from indicators import build_df, trend_label, htf_trend
-from strategies import evaluate, exit_signal, EXIT_ON_CROSS, EXIT_REASON, STRATEGY_INFO as FAST_INFO
+from strategies import evaluate, exit_signal, ema_test, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST, EMA_TEST_TAG, STRATEGY_INFO as FAST_INFO
 from strategies_slow import SLOW_INFO, SLOW_KEYS, evaluate_slow
 from risk import FEE_RATE, MAKER_FEE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules, move_in_r, tp_in_r, partial_qty, be_allowed
 from ai_advisor import evaluate_signal, label as ai_label
@@ -289,6 +289,10 @@ class TradingEngine:
         """One monitor tick for a PAPER position: exits, partial take-profit, trailing and MFE/MAE tracking."""
         updates = self._excursion(p, price)
         p.mfe_r, p.mae_r = updates["mfe_r"], updates["mae_r"]
+        if p.exit_mode == "cross":  # Test cruce EMA: no SL/TP/partial/trailing, only the opposite cross closes it
+            updates.update(mark_price=price, unrealized_pnl=round(pnl(p.side, p.entry_price, price, p.qty), 4))
+            await self.db.positions.update_one({"_id": ObjectId(p.id)}, {"$set": updates})
+            return
         hit, reason = check_exit(p.side, p.sl, p.tp, price, price)
         if hit is not None:
             await self.db.positions.update_one({"_id": ObjectId(p.id)}, {"$set": updates})
@@ -349,6 +353,9 @@ class TradingEngine:
         p.mfe_r, p.mae_r = updates["mfe_r"], updates["mae_r"]
         if abs(ex["size"] - p.qty) > 1e-9:
             updates["qty"] = ex["size"]
+        if p.exit_mode == "cross":  # Test cruce EMA: no partial / breakeven / trailing on the exchange
+            await self.db.positions.update_one({"_id": ObjectId(p.id)}, {"$set": updates})
+            return
         if rules["partial_tp_enabled"] and not p.partial_done and p.mfe_r >= rules["partial_tp_r"]:
             part = partial_qty(p.symbol, p.qty, rules["partial_tp_pct"])
             if part > 0:
@@ -405,7 +412,8 @@ class TradingEngine:
                       reason=reason, opened_at=p.opened_at, live=p.live, horizon=p.horizon, entry_type=p.entry_type,
                       mfe_r=round(mfe, 2), mae_r=round(p.mae_r, 2), mfe_tp_pct=round(mfe / tp_r * 100, 1) if tp_r else 0.0,
                       partial_tp=p.partial_done and bool(p.partial_gross), hold_min=round(hold, 1),
-                      sl=p.sl, tp=p.tp, initial_sl=p.initial_sl, atr=p.atr, breakeven=p.breakeven, signal_id=p.signal_id, order_id=p.order_id)
+                      sl=p.sl, tp=p.tp, initial_sl=p.initial_sl, atr=p.atr, breakeven=p.breakeven, signal_id=p.signal_id, order_id=p.order_id,
+                      exit_mode=p.exit_mode, tags=[EMA_TEST_TAG] if p.exit_mode == "cross" else [])
         res = await self.db.trades.insert_one(trade.to_mongo())
         trade.id = str(res.inserted_id)
         return trade
@@ -460,12 +468,14 @@ class TradingEngine:
         return {"qty": qty, "margin": margin}
 
     async def open_position(self, symbol: str, sig: dict, settings: Settings, signal_id: str, risk_factor: float = 1.0, risk_reason: str = "noticias",
-                            horizon: str = "short", entry_type: str = "market", fill: dict = None):
-        """`fill` = an already executed maker order ({entry, qty, fee, order_id, link_id} in REAL; {entry} in PAPER): no new order is sent."""
+                            horizon: str = "short", entry_type: str = "market", fill: dict = None, exit_mode: str = None):
+        """`fill` = an already executed maker order ({entry, qty, fee, order_id, link_id} in REAL; {entry} in PAPER): no new order is sent.
+        `exit_mode="cross"` (Test cruce EMA): the SL/TP are virtual (sizing only), nothing is sent to Bybit and the position doesn't use a slot."""
         risk_pct = settings.risk_per_trade * risk_factor
+        cross = exit_mode == "cross"
         async with self.lock:
             open_docs = await self._open_and_pending(exclude_symbol=symbol)
-            slot = self._slot_block(open_docs, settings, horizon)
+            slot = None if cross else self._slot_block(open_docs, settings, horizon)
             # a REAL maker fill is already a live position: it must be recorded even if the cap was reached meanwhile
             if symbol in [p["symbol"] for p in open_docs if not p.get("pending")] or (slot and not (fill and self.live)):
                 await self.log("RISK", f"{symbol}: apertura cancelada · {slot or 'par ya abierto'}")
@@ -494,7 +504,7 @@ class TradingEngine:
                         size = await self.live_size(symbol, entry, sl, risk_pct, settings.leverage)
                         if not size:
                             return None
-                        r = await self.broker.open(symbol, sig["side"], size["qty"], sl, tp, settings.leverage)
+                        r = await self.broker.open(symbol, sig["side"], size["qty"], None if cross else sl, None if cross else tp, settings.leverage)
                     except Exception as e:
                         await self.log("ERROR", f"{symbol}: orden REAL rechazada por Bybit · {str(e)[:160]}")
                         await tg(f"⚠️ <b>Orden REAL rechazada · {symbol}</b>\n{str(e)[:300]}", "orders")
@@ -505,7 +515,7 @@ class TradingEngine:
                 pos = Position(symbol=symbol, side=sig["side"], strategy=sig["strategy"], entry_price=entry, qty=qty, initial_qty=qty,
                                leverage=settings.leverage, margin=margin, sl=sl, tp=tp, initial_sl=sl, atr=sig["atr"],
                                fees=fee, mark_price=price, signal_id=signal_id, live=True, order_id=r["order_id"], link_id=r["link_id"],
-                               horizon=horizon, entry_type=entry_type)
+                               horizon=horizon, entry_type=entry_type, exit_mode=exit_mode)
                 res = await self.db.positions.insert_one(pos.to_mongo())
                 pos.id = str(res.inserted_id)
                 if not r["filled"]:
@@ -520,7 +530,7 @@ class TradingEngine:
                 fee = entry * qty * fee_rate
                 pos = Position(symbol=symbol, side=sig["side"], strategy=sig["strategy"], entry_price=entry, qty=qty, initial_qty=qty,
                                leverage=settings.leverage, margin=margin, sl=sl, tp=tp, initial_sl=sl, atr=sig["atr"],
-                               fees=fee, mark_price=price, signal_id=signal_id, horizon=horizon, entry_type=entry_type)
+                               fees=fee, mark_price=price, signal_id=signal_id, horizon=horizon, entry_type=entry_type, exit_mode=exit_mode)
                 res = await self.db.positions.insert_one(pos.to_mongo())
                 pos.id = str(res.inserted_id)
                 await self.db.account.update_one({"_id": "main"}, {"$inc": {"balance": -fee}})
@@ -533,9 +543,10 @@ class TradingEngine:
         reduced = f" · tamaño reducido al {int(risk_factor * 100)}% por {risk_reason}" if risk_factor < 1 else ""
         how = {"maker": " · entrada límite maker (comisión 0,02 %)", "market_fallback": " · a mercado tras no llenarse la orden límite"}.get(entry_type, "")
         lp = " · LARGO PLAZO" if horizon == "long" else ""
-        await self.log("ORDER", f"ABIERTA {tag}{sig['side'].upper()} {symbol} @ {entry:.6g} · qty {qty:.6g} · {settings.leverage}x · SL {sl:.6g} · TP {tp:.6g}{reduced}{how}{lp}")
+        levels = f"sin SL/TP · cierre en el cruce contrario · ⚠️ {EMA_TEST_TAG}" if cross else f"SL {sl:.6g} · TP {tp:.6g}"
+        await self.log("ORDER", f"ABIERTA {tag}{sig['side'].upper()} {symbol} @ {entry:.6g} · qty {qty:.6g} · {settings.leverage}x · {levels}{reduced}{how}{lp}")
         await tg(f"{'🟢' if long else '🔴'} <b>ABIERTA {tag}{sig['side'].upper()} {symbol}</b> @ {entry:.6g}{lp}\n"
-                 f"Cantidad {qty:.6g} · {settings.leverage}x · margen ${margin:,.2f}\nSL {sl:.6g} · TP {tp:.6g}\n"
+                 f"Cantidad {qty:.6g} · {settings.leverage}x · margen ${margin:,.2f}\n{levels}\n"
                  f"Estrategia: {STRATEGY_INFO[sig['strategy']]['name']}{reduced}{how}", "orders")
         return pos
 
@@ -600,8 +611,9 @@ class TradingEngine:
         self.scanning = True
         found = 0
         htf_tf = HTF[settings.timeframe]
+        test_syms = set(settings.ema_test_symbols) if settings.ema_test_enabled else set()
         try:
-            for symbol in settings.symbols:
+            for symbol in list(dict.fromkeys([*settings.symbols, *test_syms])):
                 try:
                     params = settings.symbol_params.get(symbol) or {}
                     df = build_df(await self.market.fetch_klines(symbol, settings.timeframe, 300), int(params.get("atr_period", 14)))
@@ -612,6 +624,13 @@ class TradingEngine:
                         htf = htf_trend(build_df(await self.market.fetch_klines(symbol, htf_tf, 200, cache_sec=120)))
                     if self.running:
                         await self._exit_on_cross(symbol, df, i)
+                    if symbol in test_syms:
+                        tsig = ema_test(df, i)
+                        if tsig and self.running:
+                            found += 1
+                            await self._handle_test_signal(symbol, tsig, settings, df)
+                    if symbol not in settings.symbols:
+                        continue
                     sig = evaluate(df, i, settings.strategy, htf, params, settings.signal_mode, settings.disabled_strategies)
                     self.analysis[symbol] = {
                         "trend": trend_label(row), "rsi": round(float(row["rsi"]), 1),
@@ -633,12 +652,36 @@ class TradingEngine:
             self.scanning = False
 
     async def _exit_on_cross(self, symbol: str, df, i: int):
-        """Strategy exits decided at candle close (ema_cross: the EMAs crossed back against the position)."""
+        """Strategy exits decided at candle close (ema_cross / ema_test: the EMAs crossed back against the position)."""
         row = df.iloc[i]
         async for d in self.db.positions.find({"symbol": symbol, "strategy": {"$in": list(EXIT_ON_CROSS)}}, {"_id": 1, "side": 1, "strategy": 1}):
             if exit_signal(d["strategy"], d["side"], float(row["ema10"]), float(row["ema20"])):
-                await self.log("INFO", f"{symbol}: la EMA10 volvió a cruzar la EMA20 en contra de la posición {d['side'].upper()} · cierre por regla de la estrategia")
+                await self.log("INFO", f"{symbol}: la EMA10 volvió a cruzar la EMA20 en contra de la posición {d['side'].upper()} · cierre por regla de la estrategia"
+                               + (" (test cruce EMA: se invierte si el test sigue activo)" if d["strategy"] == EMA_TEST else ""))
                 await self.close_position(str(d["_id"]), None, EXIT_REASON)
+
+    async def _handle_test_signal(self, symbol: str, sig: dict, settings: Settings, df):
+        """«Test cruce EMA 10/20»: stop-and-reverse on the raw cross. Immune to AI approval, funnel, market gates and «Máx. posiciones»;
+        only the daily-loss limit and one position per pair apply. The opposite position was already closed by _exit_on_cross."""
+        key = f"{symbol}:{EMA_TEST}:{sig['side']}:{sig['key_ts']}"
+        if key in self.signal_keys or await self.db.signals.find_one({"key": key}, {"_id": 1}):
+            return
+        self.signal_keys.add(key)
+        signal = Signal(symbol=symbol, side=sig["side"], strategy=EMA_TEST, timeframe=settings.timeframe, price=sig["price"], sl=sig["sl"], tp=sig["tp"],
+                        score=sig["score"], reasons=sig["reasons"], indicators=sig["indicators"], key=key, ai_decision="SIN_IA",
+                        ai_reasoning="Test cruce EMA 10/20: entrada directa por cruce, inmune a la aprobación de la IA", context={"exit_mode": "cross"})
+        acc = await self.account_summary()
+        open_syms = [p["symbol"] for p in await self._open_and_pending()]
+        block = ("límite de pérdida diaria alcanzado" if acc["daily_paused"] else "ya existe una posición abierta en el par" if symbol in open_syms
+                 else "Bybit sin respuesta · sin conexión con el exchange" if self.live and self.bybit["down_since"] else None)
+        if block:
+            signal.ai_decision, signal.note = "BLOQUEADA", f"Bloqueada por riesgo: {block}"
+            await self.db.signals.insert_one(signal.to_mongo())
+            await self.log("RISK", f"{symbol}: cruce EMA (test) no operado · {block}")
+            return
+        res = await self.db.signals.insert_one(signal.to_mongo())
+        await self.log("SIGNAL", f"{symbol} {sig['side'].upper()} · Test cruce EMA 10/20 · {sig['reasons'][0]}")
+        await self.open_position(symbol, sig, settings, str(res.inserted_id), exit_mode="cross")
 
     def slow_active(self, settings: Settings) -> list:
         if settings.strategy != "all":
@@ -670,7 +713,7 @@ class TradingEngine:
 
     def _slot_block(self, open_docs: list, settings: Settings, horizon: str):
         """Long-horizon positions have their own cap and do not count towards «Máx. posiciones». `open_docs` includes pending maker entries."""
-        same = [p for p in open_docs if (p.get("horizon") or "short") == horizon]
+        same = [p for p in open_docs if (p.get("horizon") or "short") == horizon and p.get("exit_mode") != "cross"]  # test positions use no slot
         cap = settings.max_long_positions if horizon == "long" else settings.max_positions
         if len(same) >= cap:
             return f"máximo de posiciones de {HORIZON_LABEL[horizon]} alcanzado ({cap})"

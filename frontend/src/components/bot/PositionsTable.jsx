@@ -79,6 +79,7 @@ export default function PositionsTable({ positions, onClose, onCloseAll }) {
                   <p className="font-display text-[13px] font-semibold text-slate-100">{p.symbol}</p>
                   <p className="text-[10px] text-slate-500">
                     {STRATEGY_LABELS[p.strategy]} · {p.leverage}x
+                    {p.exit_mode === "cross" && <span data-testid={`position-ema-test-${p.id}`} className="ml-1 rounded-sm border border-fuchsia-400/60 bg-fuchsia-500/20 px-1 text-[9px] font-semibold uppercase text-fuchsia-200" title="Test cruce EMA 10/20: sin SL/TP, cierra en el cruce contrario">Cruce EMAs Especial</span>}
                     {p.horizon === "long" && <span data-testid={`position-horizon-${p.id}`} className="ml-1 rounded-sm bg-sky-500/20 px-1 text-[9px] text-sky-300" title="Largo plazo: no cuenta en Máx. posiciones">LP</span>}
                     {p.expires_at && <span data-testid={`position-expires-${p.id}`} className="ml-1 text-[9px] text-slate-500" title="Cierre por tiempo programado">⏱ {new Date(p.expires_at).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })}</span>}
                     {p.entry_type && p.entry_type !== "market" && <span data-testid={`position-entry-${p.id}`} className="ml-1 rounded-sm bg-slate-700/60 px-1 text-[9px] text-slate-300" title={ENTRY_LABELS[p.entry_type]}>{p.entry_type === "maker" ? "maker" : "mkt↩"}</span>}
@@ -93,8 +94,8 @@ export default function PositionsTable({ positions, onClose, onCloseAll }) {
                 <TD><SideBadge side={p.side} /></TD>
                 <TD right>{fmtPrice(p.entry_price)}</TD>
                 <TD right className="text-slate-100">{fmtPrice(p.mark_price)}</TD>
-                <TD right className="text-rose-400">{fmtPrice(p.sl)}{p.breakeven && <span className="ml-1 text-[9px] text-amber-400">BE</span>}</TD>
-                <TD right className="text-emerald-400">{fmtPrice(p.tp)}</TD>
+                <TD right className="text-rose-400">{p.exit_mode === "cross" ? <span className="text-slate-500" title="Sin stop: cierra en el cruce contrario">— cruce</span> : <>{fmtPrice(p.sl)}{p.breakeven && <span className="ml-1 text-[9px] text-amber-400">BE</span>}</>}</TD>
+                <TD right className="text-emerald-400">{p.exit_mode === "cross" ? <span className="text-slate-500">— cruce</span> : fmtPrice(p.tp)}</TD>
                 <TD right>{fmtQty(p.qty)}{p.partial_done && p.partial_gross ? <span data-testid={`position-partial-${p.id}`} className="ml-1 rounded-sm bg-emerald-500/20 px-1 text-[9px] text-emerald-300" title={`Cierre parcial ejecutado · ${fmtSignedUsd(p.partial_gross - (p.partial_fees || 0))} realizados`}>½</span> : null}</TD>
                 <TD right>{fmtUsd(p.margin)}</TD>
                 <TD right className={pnlClass(p.unrealized_pnl)}>

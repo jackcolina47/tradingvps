@@ -9,6 +9,7 @@ import { Panel } from "./Panel";
 import RiskProfileBar from "./RiskProfileBar";
 import { STRATEGY_LABELS, STRATEGY_KEYS, MODE_LABELS, activeStrategies } from "@/lib/api";
 import AiPositionReviewSettings from "./settings/AiPositionReviewSettings";
+import EmaTestSettings from "./settings/EmaTestSettings";
 
 const NUMS = [
   { k: "risk_per_trade", label: "Riesgo por operación (%)", step: 0.1, min: 0.1, max: 5 },
@@ -170,6 +171,7 @@ export default function SettingsPanel({ settings, meta, profileActive, onSave, o
           </label>
         ))}
         <AiPositionReviewSettings form={form} set={set} />
+        <EmaTestSettings form={form} set={set} meta={meta} />
       </div>
     </Panel>
   );

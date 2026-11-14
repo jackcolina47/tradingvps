@@ -6,6 +6,7 @@ from indicators import build_df
 from backtest import run_backtest, simulate
 from risk import trade_rules
 from strategies_slow import SLOW_INFO, scan_slow
+from strategies import EMA_TEST
 from plan import build_plan, SCENARIOS
 from optimizer import optimize
 from review import plan_stats
@@ -70,7 +71,7 @@ async def optimize_symbol(req: OptimizeRequest):
 
 @router.post("/backtest")
 async def backtest(req: BacktestRequest):
-    if req.symbol not in AVAILABLE_SYMBOLS or req.strategy not in CRYPTO_STRATEGY_KEYS or (req.strategy not in SLOW_INFO and req.timeframe not in TIMEFRAMES):
+    if req.symbol not in AVAILABLE_SYMBOLS or req.strategy not in CRYPTO_STRATEGY_KEYS + [EMA_TEST] or (req.strategy not in SLOW_INFO and req.timeframe not in TIMEFRAMES):
         raise HTTPException(400, "Parámetros inválidos")
     acc = await db.account.find_one({"_id": "main"}, {"initial_balance": 1})
     s = await engine.get_settings()

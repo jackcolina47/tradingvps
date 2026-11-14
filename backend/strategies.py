@@ -274,9 +274,37 @@ def ema_cross(df, i, htf=None, params=None, m=None) -> Optional[dict]:
     return _signal(side, r, sl, tp, "ema_cross", reasons, score, key_ts)
 
 
+EMA_TEST = "ema_test"
+EMA_TEST_TAG = "Cruce EMAs Especial"
+STRATEGY_INFO[EMA_TEST] = {
+    "name": "Test cruce EMA 10/20",
+    "rules": "EXPERIMENTAL · Cruce puro de EMA10/EMA20 al cierre de la vela: al alza abre largo, a la baja abre corto. Sin SL ni TP: la posición se cierra "
+             "(y se invierte) en el siguiente cruce contrario. Sin filtros, sin IA de aprobación. Solo en los pares del test.",
+    "basis": "Sistema stop-and-reverse clásico de medias móviles para medir la rentabilidad bruta del cruce antes de añadirle filtros.",
+}
+
+
+def ema_test(df, i, htf=None, params=None, m=None) -> Optional[dict]:
+    """Raw EMA10/EMA20 cross on the closed candle `i`. The SL/TP returned are VIRTUAL (2×ATR / 6×ATR): used only for position sizing and R metrics, never executed."""
+    a, b = df.iloc[i], df.iloc[i - 1]
+    if a["ema10"] > a["ema20"] and b["ema10"] <= b["ema20"]:
+        side = "long"
+    elif a["ema10"] < a["ema20"] and b["ema10"] >= b["ema20"]:
+        side = "short"
+    else:
+        return None
+    long = side == "long"
+    sl, tp = _atr_levels(a, long, None, 2.0, 6.0)
+    reasons = [f"EMA10 cruza {'al alza' if long else 'a la baja'} la EMA20 al cierre de la vela",
+               "Test experimental: sin filtros, sin SL/TP · salida y giro en el siguiente cruce contrario"]
+    return {**_signal(side, a, sl, tp, EMA_TEST, reasons, 3, int(a["ts"])), "exit_mode": "cross"}
+
+
 STRATEGIES = {"trend_ema": trend_ema, "mean_reversion": mean_reversion, "breakout_turtle": breakout_turtle,
-              "supertrend_momentum": supertrend_momentum, "ema_pullback": ema_pullback, "ema_cross": ema_cross}
-EXIT_ON_CROSS = {"ema_cross"}
+              "supertrend_momentum": supertrend_momentum, "ema_pullback": ema_pullback, "ema_cross": ema_cross, EMA_TEST: ema_test}
+TEST_ONLY = {EMA_TEST}  # never part of «all»: only via its own toggle
+EXIT_ON_CROSS = {"ema_cross", EMA_TEST}
+CROSS_ONLY = {EMA_TEST}  # no SL/TP at all: the opposite cross is the only exit
 EXIT_REASON = "CRUCE"
 
 
@@ -290,7 +318,7 @@ def exit_signal(strategy: str, side: str, ema10: float, ema20: float) -> bool:
 def active_strategies(strategy: str, disabled=()) -> list:
     if strategy != "all":
         return [strategy] if strategy in STRATEGIES else []
-    return [k for k in STRATEGIES if k not in set(disabled or ())]
+    return [k for k in STRATEGIES if k not in set(disabled or ()) and k not in TEST_ONLY]
 
 
 def evaluate(df, i, strategy: str, htf=None, params=None, mode: str = "strict", disabled=()) -> Optional[dict]:
