@@ -482,6 +482,11 @@
 - **Ranking de pares**: `performance.pair_ranking(db, symbols, days, available)` + `GET /performance/pairs?days=N` (shared, 3 bots; días 1–365): PnL/ops/acierto/PF por par en los últimos N días, pares activos sin ops con ceros, pares disponibles apagados al final (`active=false`), `open_positions`. Frontend `performance/PairRanking.jsx` en pestaña «Pares 30d» (`tab-pairs`, solo Bybit): rangos 7/30/90, barra ± PnL, mejor/peor, toggle Activo/Apagado (PUT /settings symbols).
 - Tested: testing_agent iteration_74 (100 %): `tests/test_iter74_pairs_btc_shock.py` 17/17 + UI (pestaña, rangos, toggle HYPE ida y vuelta, campo BTC solo en Bybit).
 
+## Implemented (2026-06, iteration 80 · Breakeven y trailing en toggles separados; BE solo tras el cierre parcial)
+- `settings.breakeven_enabled` (default true) separado de `trailing_enabled` en cripto y FX (+ Update models). `risk.update_trailing` / `fx.risk.update_trailing` con `be_enabled` / `trail_enabled`; `risk.be_allowed(rules, partial_done)` = toggle BE **y** parcial ya tomado. Aplicado en paper + REAL (engine.py, fx/engine_positions.py), sombras (`shadow.shadow_be`: BE cuando se habría alcanzado el nivel del parcial) y backtests (`be_enabled = breakeven_enabled and pos["partial"]`). Consecuencia: con «Cierre parcial» apagado el BE nunca actúa (la UI lo avisa); el trailing es independiente.
+- UI: toggles «Stop a breakeven» y «Trailing stop» (SettingsPanel, 3 bots); etiquetas en review.py / AiAdvice.
+- Tested: testing_agent iteration_79 (100 %): `tests/test_iter79_breakeven_split.py` 30/30 (matriz update_trailing cripto/FX, motor paper falso casos a–e, sombras, backtest, API aislada por bot) + UI.
+
 ## Fixed (2026-06 · revisión IA de posiciones FX solo con mercado abierto)
 - `fx/engine.py` monitor: `if market_open(now) and position_review.due(...)` → sin llamadas a la IA en fin de semana / mercado cerrado (precios estáticos). Sugerencia del usuario; verificado `market_open` sábado False / martes True. Backend recargado OK.
 

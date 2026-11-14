@@ -1,0 +1,20 @@
+{
+  "summary": "Split of 'Breakeven + trailing stop' into independent 'Stop a breakeven' (breakeven_enabled) and 'Trailing stop' (trailing_enabled) toggles, with breakeven gated on partial_done. New suite tests/test_iter79_breakeven_split.py (-n 0): 30/30 passed. It covers the update_trailing matrix for crypto (long) and FX (short with spread), be_allowed, trade_rules(Settings/FxSettings/dict/bool) and shadow_be. It also runs fake-engine integration on the crypto TradingEngine._manage_paper_position for cases a-e and on the FX PositionsMixin._manage_paper_position for cases b, c and e (EURUSD 0.10 lots, partial 0.05, BE = entry+spread 1.10012, trailing 1.1035/1.1051). backtest.simulate on a synthetic df: with BE on, the position takes the partial and closes at 100.11 (TRAILING). With BE off it stays open. The API part checks defaults on /api, /api/fx and /api/pepper; a PUT to /api/pepper/settings stays isolated from fx and crypto and is then restored; POST /api/backtest SOLUSDT and POST /api/fx/backtest EURUSD both return 200. I read the code of the live-sync paths (engine._sync_live_position line 368-370, fx/engine_positions.py line 151-154): both pass be_allowed(rules, p.partial_done or updates.get('partial_done')) and trail_enabled. Frontend at /bybit and /hotforex: both switches are on the main panel (not the 'Ajustes' system view) and both are checked. The new labels are present and the old label is gone. Turning off 'Cierre parcial de beneficios' without saving changes the breakeven hint to 'Sin efecto ahora…'. On /bybit, turning BE off and saving persisted false (GET /api/settings), and it was restored to true. Final state: breakeven/trailing/partial all true on all 3 bots.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter79_breakeven_split.py", "/app/test_reports/pytest/iter79.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Behaviour change to tell the user about: with partial_tp_enabled false (the DEFAULT_RULES default), breakeven is silently never applied, even with the toggle on. The UI hint explains this. Positions already open before the change with partial_done False lose BE until they take a partial.",
+    "be_start_r is now effectively max(be_start_r, partial_tp_r), because BE requires partial_done, which happens at partial_tp_r. If partial_tp_r is greater than be_start_r, the 'BE at R' setting has no visible effect. Consider updating the be_start_r hint and docs.",
+    "Crypto partial skipped due to min lot sets partial_done=True without a partial, which then enables BE. That is acceptable but worth noting.",
+    "fx/risk.py has no be_allowed. The FX code imports it from the crypto risk module, which is fine, but fx/risk.trade_rules' docstring still says only 'trailing + partial'.",
+    "Saving settings from the UI creates change events (changes collection); see testing_notes for cleanup."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter79_breakeven_split.py"],
+  "success_rate": {"backend": "100% (30/30)", "frontend": "100%"},
+  "seed_data_creation": "None. Settings toggled and restored: pepper breakeven via the API, crypto breakeven via the UI. This creates a pair of change→restore events in 'changes' for each.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python3 -m pytest tests/test_iter79_breakeven_split.py -n 0. The fake-engine pattern (TradingEngine.__new__ / FxEngine.__new__ with a fake db that records update_one) is in the file. The strategy/risk SettingsPanel is on the main dashboard; the header 'Ajustes' button opens the system settings. Bots are stopped and in paper mode."
+}
