@@ -79,6 +79,15 @@ class TestStrategyUnit:
         df = build_df(_rows("up"))
         assert st.ema_test(df, len(df) - 5) is None
 
+    def test_adx_filter(self):
+        """Sideways filter: with params ema_test_adx_min above the candle's ADX the cross is ignored; below (or 0) it passes."""
+        df = build_df(_rows("up")); i = len(df) - 2
+        adx = float(df.iloc[i]["adx"])
+        assert st.ema_test(df, i, params={"ema_test_adx_min": adx + 5}) is None
+        sig = st.ema_test(df, i, params={"ema_test_adx_min": max(adx - 5, 1)})
+        assert sig and sig["side"] == "long" and "ADX" in sig["reasons"][1]
+        assert st.ema_test(df, i, params={"ema_test_adx_min": 0}) is not None
+
     def test_registry(self):
         assert "ema_test" not in st.active_strategies("all")
         assert st.active_strategies("ema_test") == ["ema_test"]

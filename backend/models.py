@@ -53,6 +53,8 @@ class Settings(BaseModel):
     min_rr: float = 1.5
     ema_test_enabled: bool = False
     ema_test_symbols: List[str] = ["ENAUSDT", "ONDOUSDT", "ARBUSDT", "UNIUSDT"]
+    ema_test_adx_filter: bool = False
+    ema_test_adx_min: float = 20.0
     ai_position_review_enabled: bool = False
     ai_position_review_minutes: int = 30
     ai_position_review_mode: str = "auto"
@@ -213,6 +215,8 @@ class SettingsUpdate(BaseModel):
     min_rr: Optional[float] = Field(default=None, ge=0, le=5)
     ema_test_enabled: Optional[bool] = None
     ema_test_symbols: Optional[List[str]] = None
+    ema_test_adx_filter: Optional[bool] = None
+    ema_test_adx_min: Optional[float] = Field(default=None, ge=5, le=60)
     ai_position_review_enabled: Optional[bool] = None
     ai_position_review_minutes: Optional[int] = Field(default=None, ge=5, le=240)
     ai_position_review_mode: Optional[str] = Field(default=None, pattern="^(notify|auto)$")

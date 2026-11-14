@@ -294,9 +294,13 @@ def ema_test(df, i, htf=None, params=None, m=None) -> Optional[dict]:
     else:
         return None
     long = side == "long"
+    adx_min = float((params or {}).get("ema_test_adx_min") or 0)
+    adx = float(a["adx"]) if "adx" in a else 0.0
+    if adx_min and adx < adx_min:
+        return None  # sideways filter: ignore the cross (the exit on the opposite cross still applies to open positions)
     sl, tp = _atr_levels(a, long, None, 2.0, 6.0)
     reasons = [f"EMA10 cruza {'al alza' if long else 'a la baja'} la EMA20 al cierre de la vela",
-               "Test experimental: sin filtros, sin SL/TP · salida y giro en el siguiente cruce contrario"]
+               (f"Filtro de lateral: ADX {adx:.1f} ≥ {adx_min:g}" if adx_min else "Test experimental: sin filtros, sin SL/TP · salida y giro en el siguiente cruce contrario")]
     return {**_signal(side, a, sl, tp, EMA_TEST, reasons, 3, int(a["ts"])), "exit_mode": "cross"}
 
 

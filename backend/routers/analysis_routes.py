@@ -84,6 +84,8 @@ async def backtest(req: BacktestRequest):
         result.pop("r_multiples", None)
         return {"symbol": req.symbol, "strategy": req.strategy, "timeframe": tf, **result}
     params = s.symbol_params.get(req.symbol) or {}
+    if req.strategy == EMA_TEST and s.ema_test_adx_filter:
+        params = {**params, "ema_test_adx_min": s.ema_test_adx_min}
     df = build_df(await engine.market.fetch_klines(req.symbol, req.timeframe, 1000, cache_sec=60), int(params.get("atr_period", 14)))
     result = run_backtest(df, req.strategy, req.risk_per_trade, req.leverage, trade_rules(s), initial=acc["initial_balance"], symbol=req.symbol,
                           params=params or None, mode=s.signal_mode, disabled=s.disabled_strategies)

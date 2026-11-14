@@ -1,5 +1,6 @@
 import { AlertTriangle, FlaskConical } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 
 const CHIP = "relative rounded-sm border px-2 py-1 font-mono text-[11px] transition-colors";
 
@@ -35,6 +36,23 @@ export default function EmaTestSettings({ form, set, meta }) {
           ))}
         </div>
         <p className="mt-1 text-[11px] text-slate-500">Operan aunque no estén en «Pares a operar». Las operaciones del test llevan la etiqueta «Cruce EMAs Especial» en posiciones e historial.</p>
+      </div>
+      <div className="mt-3 rounded-sm border border-[#1E293B] bg-[#07090E]/60 p-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm text-slate-200">Filtro de lateral (ADX)</p>
+            <p className="text-[11px] text-slate-500">Ignora los cruces de entrada cuando el ADX de la vela está por debajo del umbral (mercado sin tendencia = serrucho). La salida en el cruce contrario no se filtra: una posición abierta se cierra igual y, si el ADX es bajo, no se invierte hasta el siguiente cruce con tendencia.</p>
+          </div>
+          <Switch data-testid="settings-ema-test-adx-filter-switch" checked={!!form.ema_test_adx_filter} onCheckedChange={(v) => set("ema_test_adx_filter", v)} className="data-[state=checked]:bg-fuchsia-500" />
+        </div>
+        {form.ema_test_adx_filter && (
+          <div className="mt-2 flex items-center gap-3">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-slate-500">ADX mínimo</p>
+            <Input data-testid="settings-ema-test-adx-min-input" type="number" step={1} min={5} max={60} value={form.ema_test_adx_min ?? 20}
+              onChange={(e) => set("ema_test_adx_min", e.target.value)} className="num h-8 w-24 border-[#1E293B] bg-[#07090E] text-xs" />
+            <p className="text-[11px] text-slate-500">Típico 20–25 (ADX 14). Compruébalo en Backtest con «Test cruce EMA 10/20» antes y después.</p>
+          </div>
+        )}
       </div>
     </div>
   );

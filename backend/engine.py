@@ -627,7 +627,7 @@ class TradingEngine:
                     if self.running:
                         await self._exit_on_cross(symbol, df, i)
                     if symbol in test_syms:
-                        tsig = ema_test(df, i)
+                        tsig = ema_test(df, i, params={"ema_test_adx_min": settings.ema_test_adx_min if settings.ema_test_adx_filter else 0})
                         if tsig and self.running:
                             found += 1
                             await self._handle_test_signal(symbol, tsig, settings, df)
