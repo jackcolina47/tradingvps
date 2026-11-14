@@ -1,0 +1,17 @@
+{
+  "summary": "Retest of the two iteration_80 fixes in 'Test Cruce EMA 10/20'. Both are verified. tests/test_iter80_ema_test.py: 22/22 pass serially (-n 0). New tests/test_iter81_ema_fixes.py: 6/6 pass. It runs against a throwaway Mongo db that is dropped at the end. Fix 1: the _open_and_pending projection now includes exit_mode, so _slot_block ignores the cross position when max_positions=1 and a normal SOLUSDT open succeeds. A NORMAL open position still blocks at cap 1, both in _slot_block and in open_position. With cap 1, one cross position plus one normal position is blocked; with cap 2 it is not. Fix 2: with the toggle off and symbols=['BTCUSDT'], the open UNIUSDT ema_test LONG is fetched and closed on a downward cross (reason CRUCE, exit_mode cross, tags ['Cruce EMAs Especial']). No new signal or position is created. A patched engine.evaluate is called only once (for BTCUSDT, never for UNIUSDT). With the toggle ON the position closes and reverses to a SHORT cross position. With the toggle off and no cross, the position stays open. Smoke checks: GET /api/settings returns ema_test_enabled=false with the 4 default pairs. POST /api/backtest ARBUSDT ema_test 5m returns 200 with 25 trades, all with reason CRUCE. On /bybit the ema-test-card renders with the switch unchecked and 'Pares del test (4)' (ENA/ONDO/ARB/UNI selected; 18 chips in total). The bot stayed stopped in paper mode.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter80_ema_test.py", "/app/backend/tests/test_iter81_ema_fixes.py", "/app/test_reports/pytest/iter81.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "scan_once gates _exit_on_cross on self.running, so while the bot is stopped, open cross positions are not closed on the opposite cross. This is consistent with the rest of the engine; just noting it.",
+    "The SCAN log message counts only len(settings.symbols); pairs scanned only because of the test or an open test position are not counted (cosmetic)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter81_ema_fixes.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None in the real db. The engine tests use an isolated test_iter80_ema_<uuid> db, dropped by the iter81 module fixture; checked that no test_iter8* dbs remain.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run cd /app/backend && export REACT_APP_BACKEND_URL=... && python3 -m pytest tests/test_iter80_ema_test.py tests/test_iter81_ema_fixes.py -n 0. iter81 imports the helpers from iter80 (run/_settings/_pos_doc/_rows) and patches engine_mod.evaluate to count calls to the regular strategies. Settings left at ema_test_enabled=false with the 4 default pairs; bot stopped, paper mode."
+}
