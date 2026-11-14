@@ -1,0 +1,38 @@
+{
+  "summary": "Iter82: ema_test immune to AI review + executed 3×ATR safety SL (paper/real/backtest) + 'pips' everywhere. New suite tests/test_iter82_safety_sl_pips.py: 18/18 PASS (-n 0). (a) review_open_positions: only-cross → [] with no LLM call and no kline fetch; cross+normal → only normal reviewed. (b) ema_test SL = close ∓ 3×ATR (== _atr_levels), reasons[1] has 'SL de seguridad'. (c) paper monitor long/short: price beyond SL → close_position(id, p.sl, 'SL') + RISK log; inside → mark/unrealized updated; beyond virtual TP → not closed, no partial/BE. (d) REAL: broker.open gets float sl (distance preserved after slippage) and tp None. (e) backtest: violent df → SL trades, no TP; smooth → all CRUCE. (f) pips_for examples (22 / -125 / 150), Trade.from_mongo w/o pips computes, explicit kept, Position recomputed from mark. API: /api/fx/dashboard trades XAUUSD -50.0 / EURUSD 20.0 pips; /api/dashboard, /api/trades, /api/fx/trades include pips; POST /api/backtest ema_test UNIUSDT 5m → 200, reasons {CRUCE}. Frontend: /hotforex Historial '= -50 pips' / '= +20 pips' with PIPS_HINT tooltip; detail dialog 'Recorrido en pips' = '-50 pips'; CSV header has 'Pips' with -50 / 20. /bybit: temp cross position shows 'Cruce EMAs Especial' badge and position-pips '+3817,5 pips' (correct for live mark 4.946 vs entry 8, short), BUT SL column still shows '— cruce' and badge tooltip still says 'sin SL/TP'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "strategies.ema_test / engine.open_position docstrings", "issue": "Stale docstrings: ema_test says 'SL/TP are VIRTUAL (2×ATR / 6×ATR) never executed'; open_position says 'nothing is sent to Bybit' for cross — both now wrong (SL 3×ATR is executed/sent)."},
+      {"endpoint": "position_review.review_open_positions", "issue": "BREAKEVEN 'no aplicable' branch for exit_mode cross is now dead code (cross positions are filtered out earlier). Harmless."},
+      {"endpoint": "tests/test_iter80_ema_test.py", "issue": "7 stale regression tests now fail by design: test_long/short_on_*_cross (expect 2×ATR), test_f_paper_tick_no_exit (expects no close at price 5 < SL 9), test_h_real_path_no_sl_tp (expects sl None), TestPositionReview x2 (expect cross reviewed), TestApi::test_backtest_api[1h] (expects only CRUCE; real data now yields SL too). Update them to the new spec."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PositionsTable SL column", "issue": "Cross (ema_test) positions still render '— cruce' (title 'Sin stop: cierra en el cruce contrario') in the SL column although the 3×ATR safety SL is now real; should show fmtPrice(p.sl) (optionally with a 'seguridad' hint). TP '— cruce' is correct.", "selector": "PositionsTable.jsx line ~97", "priority": "MEDIUM"},
+      {"component": "PositionsTable badge tooltip", "issue": "Badge title 'Test cruce EMA 10/20: sin SL/TP, cierra en el cruce contrario' is outdated (now has safety SL).", "selector": "[data-testid=position-ema-test-<id>]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Trade filters (Historial)", "issues": ["Desde/Hasta use the browser native date picker (mm/dd/yyyy) instead of shadcn calendar (pre-existing)"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter82_safety_sl_pips.py", "/app/backend/tests/iter82_tmp_position.py", "/app/test_reports/pytest/iter82.xml"],
+  "action_items": [
+    "PositionsTable: show the real safety SL price for exit_mode 'cross' positions instead of '— cruce'; update the badge tooltip text",
+    "Update stale assertions in tests/test_iter80_ema_test.py (7 tests) to the new 3×ATR executed-SL / AI-immunity spec",
+    "Fix stale docstrings in strategies.ema_test and engine.open_position"
+  ],
+  "critical_code_review_comments": [
+    "The paper monitor runs even with the bot STOPPED and closes cross positions at the safety SL: inserting the requested UI test doc (long, sl 7.5) was immediately closed because live UNIUSDT ≈ 4.95 (trade reason SL, pips -626.9, balance -0.52). This is correct behaviour, but means the review_request's suggested test doc is not viable while the price is below 7.5.",
+    "SL close in paper uses p.sl (+ slippage in close_position) — on a gap the real fill would be worse; acceptable for paper but slightly optimistic.",
+    "Position.pips stored in Mongo on insert goes stale, but is recomputed on every model read; any endpoint returning raw position docs without Position model would show stale pips (dashboard verified OK)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter82_safety_sl_pips.py", "/app/backend/tests/iter82_tmp_position.py"],
+  "success_rate": {"backend": "100% (18/18 new); iter80 legacy 22/29 (7 stale by spec)", "frontend": "90% (all pips UI OK; SL column for cross shows '— cruce')"},
+  "seed_data_creation": "Temp positions inserted and removed. Side effect cleaned up: the first temp long (sl 7.5) was auto-closed by the safety SL → deleted that trade, its 2 logs (RISK + ORDER CERRADA), reset account main balance 500 / peak_equity 500 / max_drawdown 0.0, fixed equity snapshot 6af8af00… back to 500 and deleted snapshot 6af8af2d… (503.05). Second temp short (sl 100) deleted. Settings unchanged (ema_test_enabled false). Prior max_drawdown assumed 0.0 (account had 0 trades).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run tests/test_iter82_safety_sl_pips.py with -n 0. To UI-test cross positions in /bybit, insert with an SL far from the live price (monitor runs with bot stopped and will hit the SL); iter82_tmp_position.py inserts a short with sl 100 (insert / delete <id>). Clean equity snapshots + account peak/max_drawdown after."
+}

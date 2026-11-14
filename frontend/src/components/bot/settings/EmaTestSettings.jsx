@@ -23,7 +23,7 @@ export default function EmaTestSettings({ form, set, meta }) {
       </label>
       <p data-testid="ema-test-warning" className="mt-2 flex items-start gap-1.5 rounded-sm border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-200">
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <span>Riesgo alto: estas operaciones no tienen stop loss (ni paper ni REAL), ignoran la IA de aprobación, el embudo y los filtros de mercado, y no cuentan en «Máx. posiciones». El tamaño se calcula con un stop virtual de 2×ATR y tu riesgo por operación. Rentabilidad no comprobada: úsalo con capital que puedas arriesgar. La revisión IA de posiciones abiertas sí las vigila (puede cerrarlas). Al apagar el test, las posiciones abiertas siguen hasta su cruce de cierre.</span>
+        <span>Riesgo alto: estas operaciones no tienen take profit ni stop normal, solo un SL de seguridad a 3×ATR (ni paper ni REAL), ignoran la IA de aprobación, el embudo y los filtros de mercado, y no cuentan en «Máx. posiciones». El tamaño se calcula con ese SL de 3×ATR y tu riesgo por operación. Rentabilidad no comprobada: úsalo con capital que puedas arriesgar. Son inmunes también a la revisión IA de posiciones abiertas. Al apagar el test, las posiciones abiertas siguen hasta su cruce de cierre.</span>
       </p>
       <div className="mt-2">
         <p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-slate-500">Pares del test ({syms.length})</p>
