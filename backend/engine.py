@@ -612,8 +612,10 @@ class TradingEngine:
         found = 0
         htf_tf = HTF[settings.timeframe]
         test_syms = set(settings.ema_test_symbols) if settings.ema_test_enabled else set()
+        # pairs with an open test position keep being scanned (even with the toggle off) so the opposite cross can still close them
+        open_test = {d["symbol"] for d in await self.db.positions.find({"exit_mode": "cross"}, {"symbol": 1}).to_list(100)}
         try:
-            for symbol in list(dict.fromkeys([*settings.symbols, *test_syms])):
+            for symbol in list(dict.fromkeys([*settings.symbols, *test_syms, *open_test])):
                 try:
                     params = settings.symbol_params.get(symbol) or {}
                     df = build_df(await self.market.fetch_klines(symbol, settings.timeframe, 300), int(params.get("atr_period", 14)))
@@ -630,7 +632,7 @@ class TradingEngine:
                             found += 1
                             await self._handle_test_signal(symbol, tsig, settings, df)
                     if symbol not in settings.symbols:
-                        continue
+                        continue  # test-only pair: no regular strategies
                     sig = evaluate(df, i, settings.strategy, htf, params, settings.signal_mode, settings.disabled_strategies)
                     self.analysis[symbol] = {
                         "trend": trend_label(row), "rsi": round(float(row["rsi"]), 1),
@@ -720,7 +722,7 @@ class TradingEngine:
         return None
 
     async def _open_and_pending(self, exclude_symbol: str = None) -> list:
-        docs = await self.db.positions.find({}, {"symbol": 1, "horizon": 1}).to_list(100)
+        docs = await self.db.positions.find({}, {"symbol": 1, "horizon": 1, "exit_mode": 1}).to_list(100)
         q = {"symbol": {"$ne": exclude_symbol}} if exclude_symbol else {}
         docs += [{**d, "pending": True} for d in await self.db.pending_entries.find(q, {"symbol": 1, "horizon": 1}).to_list(100)]
         return docs

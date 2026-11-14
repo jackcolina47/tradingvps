@@ -1,0 +1,40 @@
+{
+  "summary": "Tested the 'Test Cruce EMA 10/20' feature (ema_test). New suite /app/backend/tests/test_iter80_ema_test.py with 22 tests: strategy unit tests, engine integration on a separate throwaway Mongo db (dropped afterwards), position_review, backtest, and API settings/meta/backtest. 20 passed, 2 failed, and both failures come from the same bug: cross positions still use up a 'Máx. posiciones' slot. Case (c) is CONFIRMED: once the toggle is off, a test position whose pair is not in settings.symbols is never closed. Frontend: the ema-test card, warning, switch, chips, Guardar persistence, Backtest option and results ('Cruce EMA contrario' only), the position and trade badges, '— cruce' in the SL/TP columns, and its absence on /hotforex all work.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "engine._open_and_pending → _slot_block (used by open_position and _handle_signal)", "issue": "_open_and_pending reads positions with the projection {symbol:1, horizon:1}, so exit_mode is never loaded. The check p.get('exit_mode') != 'cross' in _slot_block is therefore always true, and ema_test positions DO use a 'Máx. posiciones' slot. Reproduced: with max_positions=1 and one open cross position, _slot_block returns 'máximo de posiciones de corto plazo alcanzado (1)' and a normal open_position('SOLUSDT') is cancelled. Fix: add 'exit_mode': 1 to the positions projection in _open_and_pending.", "priority": "HIGH"},
+      {"endpoint": "engine.scan_once (case c)", "issue": "CONFIRMED FINDING: test_syms = set(ema_test_symbols) if ema_test_enabled else set(), and the scan only iterates settings.symbols ∪ test_syms. With the toggle off and the pair only in ema_test_symbols (e.g. UNIUSDT; the defaults ENA/ONDO/ARB/UNI are not in settings.symbols), the pair is never fetched, _exit_on_cross never runs, and the position stays open forever with no SL/TP (in REAL nothing protects it on the exchange). The same happens if the user removes a chip while a test position is open. This contradicts the UI warning ('Al apagar el test, las posiciones abiertas siguen hasta su cruce de cierre'). Fix: add the symbols of open positions with exit_mode 'cross' (or strategy ema_test) to the scan set, and run _exit_on_cross for them even when the toggle is off.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "engine.scan_once", "issue": "_exit_on_cross only runs when self.running. With the bot stopped, open cross positions have no exit at all (no SL), even in REAL. At least document this, or warn when the bot is stopped while cross positions are open."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Backtest with 'Test cruce EMA 10/20'", "issues": ["The intro text still says '... y trailing stop', which does not apply to this cross-only strategy", "The metric 'Rozaron el TP sin tocarlo 9 (28.1%)' is computed against the VIRTUAL 6×ATR TP, which is meaningless for ema_test. Hide it, or mark it as not applicable, for CROSS_ONLY strategies"]},
+      {"screen": "EmaTestSettings warning", "issues": ["The text promises that positions continue until the closing cross after the toggle is turned off. This is false for pairs not in 'Pares a operar' (see the case (c) bug)"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter80_ema_test.py", "/app/test_reports/pytest/iter80.xml"],
+  "action_items": [
+    "In engine._open_and_pending, add 'exit_mode': 1 to the positions projection so that _slot_block really ignores cross positions (makes test_e_slot_ignores_cross and test_e2 pass)",
+    "Case (c): make scan_once also scan the symbols of open exit_mode=='cross' positions (even when the toggle is off or the chip was removed), so that _exit_on_cross can close them",
+    "Optionally: adjust the Backtest intro and the near-miss TP metric for ema_test; make the warning text accurate"
+  ],
+  "critical_code_review_comments": [
+    "_open_and_pending projection drops exit_mode (root cause of the slot bug)",
+    "scan_once symbol set does not include orphan cross positions (case c)",
+    "Cross exits depend on self.running; cross positions have no exit while the bot is stopped",
+    "Verified by code and test: LiveBroker.open sends sl/tp None to market_order when the engine passes None; the REAL path in open_position passes None/None for cross and numbers for normal signals",
+    "Verified: _manage_paper_position and _sync_live_position return early for cross positions; the monitor updated mark/PnL of a real temp doc without closing it"
+  ],
+  "updated_files": ["/app/backend/tests/test_iter80_ema_test.py"],
+  "success_rate": {"backend": "91% (20/22; both failures are the same slot bug)", "frontend": "100%"},
+  "seed_data_creation": "Temporary docs inserted for the UI check: position 6af80a8fc7707ced3d3e2f1b and trade 6af80a8fc7707ced3d3e2f1c. Both were deleted. The paper monitor marked the temp position at the real UNI price, which changed account.max_drawdown to 0.89 and wrote one equity snapshot at 495.55. I restored max_drawdown to 0 (the equity history never went below 500 before) and deleted that one snapshot. I also deleted the 6 'changes' events created by the settings toggles in the test. The engine tests used the separate db test_iter80_ema_<rand>, which was dropped afterwards. Final state: ema_test_enabled false, ema_test_symbols [ENAUSDT, ONDOUSDT, ARBUSDT, UNIUSDT], 0 positions, 0 trades, 2 signals (the same as before), bot stopped, paper mode.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python3 -m pytest tests/test_iter80_ema_test.py -n 0. The engine tests use a separate Mongo db via motor (real queries, which is how the projection bug was caught). test_c2 asserts the CURRENT buggy behaviour of case (c): it is expected to FAIL once the fix lands, so invert it to assert the position is closed. test_e and test_e2 should pass after the projection fix. On the Bybit dashboard the tabs use testids tab-history and tab-backtest (not fx-tab-*). Inserting a temp position into the real db affects account.max_drawdown and equity snapshots: restore them afterwards.",
+  "rca of the issue": "Slot bug: _slot_block filters on p.get('exit_mode'), but its input comes from _open_and_pending, whose Mongo projection is {symbol, horizon}, so exit_mode is always None. Case (c): scan_once only builds its symbol list from settings.symbols plus ema_test_symbols when the test is enabled, so _exit_on_cross never sees pairs that only belong to the disabled test."
+}
