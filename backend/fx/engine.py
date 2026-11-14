@@ -225,7 +225,7 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
             await self._expire_pending(now)
         await monitor_shadows(self, tickers, settings, now)
         await self._update_account_metrics(settings)
-        if position_review.due(self, settings):
+        if market_open(now) and position_review.due(self, settings):
             await position_review.review_open_positions(self, settings, "USD", self.profile.bot_name)
 
     async def _hfm_health(self, synced: bool):

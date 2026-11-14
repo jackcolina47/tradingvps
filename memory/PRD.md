@@ -482,6 +482,9 @@
 - **Ranking de pares**: `performance.pair_ranking(db, symbols, days, available)` + `GET /performance/pairs?days=N` (shared, 3 bots; días 1–365): PnL/ops/acierto/PF por par en los últimos N días, pares activos sin ops con ceros, pares disponibles apagados al final (`active=false`), `open_positions`. Frontend `performance/PairRanking.jsx` en pestaña «Pares 30d» (`tab-pairs`, solo Bybit): rangos 7/30/90, barra ± PnL, mejor/peor, toggle Activo/Apagado (PUT /settings symbols).
 - Tested: testing_agent iteration_74 (100 %): `tests/test_iter74_pairs_btc_shock.py` 17/17 + UI (pestaña, rangos, toggle HYPE ida y vuelta, campo BTC solo en Bybit).
 
+## Fixed (2026-06 · revisión IA de posiciones FX solo con mercado abierto)
+- `fx/engine.py` monitor: `if market_open(now) and position_review.due(...)` → sin llamadas a la IA en fin de semana / mercado cerrado (precios estáticos). Sugerencia del usuario; verificado `market_open` sábado False / martes True. Backend recargado OK.
+
 ## Fixed (2026-06, iteration 79 · «Error IA: 'FxConfig' object has no attribute 'ai_fast_model'»)
 - Causa: la etapa 1 leía el modelo rápido desde `engine.cfg.ai_fast_model`, pero los motores FX usan `FxConfig` (por bot) y el campo vive en `AppConfig` (global) → toda señal FX que llegaba a la etapa 1 acababa en ERROR (rechazo seguro).
 - Fix: `ai_funnel.configure(fast_model)` + estado de módulo `_override`, llamado desde `ConfigStore._apply()`; `fast_cfg()` usa override explícito > módulo > `FAST_MODELS`; los motores llaman `quick_filter(symbol, tf, sig, ctx, kind)` sin cfg. `fast_model_auto` en `/config` muestra siempre el automático (no el override).
