@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime, timezone, timedelta
 from models import Signal, now_iso
 from indicators import trend_label, htf_trend, snapshot
-from strategies import evaluate, exit_signal, ema_test, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST
+from strategies import evaluate, exit_signal, ema_test, ema_test_params, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST
 from fx.models import FxSettings
 from fx.market import HTF, market_open, market_status, in_sessions, session_names, closing_soon
 from fx.symbols import SPECS, pips
@@ -71,7 +71,7 @@ class SignalsMixin:
                     if self.running:
                         await self._exit_on_cross(symbol, df, i)
                     if symbol in test_syms:
-                        tsig = ema_test(df, i, params={"ema_test_adx_min": settings.ema_test_adx_min if settings.ema_test_adx_filter else 0})
+                        tsig = ema_test(df, i, params=ema_test_params(settings))
                         if tsig and self.running:
                             found += 1
                             await self._handle_test_signal(symbol, tsig, settings)

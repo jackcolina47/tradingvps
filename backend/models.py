@@ -67,6 +67,10 @@ class Settings(BaseModel):
     ema_test_adx_min: float = 20.0
     ema_test_partial_enabled: bool = False
     ema_test_partial_atr: float = 1.5
+    ema_test_confirm_enabled: bool = False
+    ema_test_confirm_adx: float = 24.0
+    ema_test_confirm_dist_atr: float = 0.5
+    ema_test_confirm_bars: int = 20
     ai_position_review_enabled: bool = False
     ai_position_review_minutes: int = 30
     ai_position_review_mode: str = "auto"
@@ -231,6 +235,10 @@ class SettingsUpdate(BaseModel):
     ema_test_adx_min: Optional[float] = Field(default=None, ge=5, le=60)
     ema_test_partial_enabled: Optional[bool] = None
     ema_test_partial_atr: Optional[float] = Field(default=None, ge=0.5, le=3.0)
+    ema_test_confirm_enabled: Optional[bool] = None
+    ema_test_confirm_adx: Optional[float] = Field(default=None, ge=5, le=60)
+    ema_test_confirm_dist_atr: Optional[float] = Field(default=None, ge=0.1, le=3.0)
+    ema_test_confirm_bars: Optional[int] = Field(default=None, ge=1, le=100)
     ai_position_review_enabled: Optional[bool] = None
     ai_position_review_minutes: Optional[int] = Field(default=None, ge=5, le=240)
     ai_position_review_mode: Optional[str] = Field(default=None, pattern="^(notify|auto)$")

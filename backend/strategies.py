@@ -286,8 +286,39 @@ STRATEGY_INFO[EMA_TEST] = {
 }
 
 
+def ema_test_params(settings) -> dict:
+    """Entry params of the test from a Settings / FxSettings object (the confirmed entry replaces the plain ADX filter)."""
+    if settings.ema_test_confirm_enabled:
+        return {"ema_test_confirm": {"adx": settings.ema_test_confirm_adx, "dist_atr": settings.ema_test_confirm_dist_atr, "bars": settings.ema_test_confirm_bars}}
+    return {"ema_test_adx_min": settings.ema_test_adx_min} if settings.ema_test_adx_filter else {}
+
+
+def _ema_test_confirmed(df, i, c: dict) -> Optional[dict]:
+    """Confirmed entry: after an EMA10/20 cross, enter on the FIRST candle (within `bars` of the cross) whose ADX exceeds `adx`,
+    and only if the EMAs are still closer than `dist_atr` × ATR on that candle; otherwise the cross is discarded."""
+    e10, e20, adx = df["ema10"].values, df["ema20"].values, df["adx"].values
+    up = e10[i] > e20[i]
+    if e10[i] == e20[i]:
+        return None
+    cross = next((j for j in range(i, max(i - int(c["bars"]), 0) - 1, -1) if (e10[j - 1] <= e20[j - 1] if up else e10[j - 1] >= e20[j - 1])), None)
+    if cross is None or not adx[i] > c["adx"] or any(adx[k] > c["adx"] for k in range(cross, i)):
+        return None
+    a = df.iloc[i]
+    gap = abs(e10[i] - e20[i]) / a["atr"] if a["atr"] > 0 else float("inf")
+    if gap >= c["dist_atr"]:
+        return None
+    long = bool(up)
+    sl, tp = _atr_levels(a, long, None, SAFETY_SL_ATR, 6.0)
+    reasons = [f"EMA10 cruzó {'al alza' if long else 'a la baja'} la EMA20 hace {i - cross} vela(s) (máx. {int(c['bars'])})",
+               f"Entrada confirmada: ADX {adx[i]:.1f} > {c['adx']:g} con las EMAs a {gap:.2f}×ATR (máx. {c['dist_atr']:g}×ATR)",
+               f"SL de seguridad {SAFETY_SL_ATR:g}×ATR · salida en el siguiente cruce contrario"]
+    return {**_signal("long" if long else "short", a, sl, tp, EMA_TEST, reasons, 3, int(a["ts"])), "exit_mode": "cross"}
+
+
 def ema_test(df, i, htf=None, params=None, m=None) -> Optional[dict]:
     """Raw EMA10/EMA20 cross on the closed candle `i`. The SL/TP returned are VIRTUAL (2×ATR / 6×ATR): used only for position sizing and R metrics, never executed."""
+    if (params or {}).get("ema_test_confirm"):
+        return _ema_test_confirmed(df, i, params["ema_test_confirm"])
     a, b = df.iloc[i], df.iloc[i - 1]
     if a["ema10"] > a["ema20"] and b["ema10"] <= b["ema20"]:
         side = "long"

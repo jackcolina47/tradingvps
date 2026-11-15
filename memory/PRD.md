@@ -564,3 +564,7 @@
 - **Telegram por bot**: `telegram_chat_bots` / `telegram_chat_bots_2` (bybit, hfm, pepperstone). `notify.notify(text, kind, bot=...)` filtra los chats; avisos sin bot (IA caída, copias, prueba) van a todos. UI: caja de selección bajo cada chat ID en Alertas de Telegram.
 - Tests: `tests/test_iter85_ema_partial_tg.py`, `tests/test_iter85_extra.py` · informe `/app/test_reports/iteration_85.json` (107/107, frontend 100%).
 - Nota: `tests/test_iter80_ema_test.py` está obsoleto (afirma el comportamiento previo al SL de seguridad y al port FX).
+
+## Iteración 86 (jun 2026) — Entrada confirmada en Test cruce EMA (3 bots)
+- Toggle `ema_test_confirm_enabled` + `ema_test_confirm_adx` (24), `ema_test_confirm_dist_atr` (0.5×ATR), `ema_test_confirm_bars` (20 velas, 1–100). Tras un cruce EMA10/20 entra en la PRIMERA vela (dentro del plazo) con ADX > umbral, solo si |EMA10−EMA20| < dist×ATR en esa vela; si no, el cruce se descarta. Sustituye al filtro ADX simple mientras está encendido. Salida sin cambios. Aplica en paper, REAL y Backtest.
+- Código: `strategies._ema_test_confirmed`, `strategies.ema_test_params(settings)` (usado por ambos motores y ambas rutas de backtest). Tests: `tests/test_iter86_ema_confirm.py`.

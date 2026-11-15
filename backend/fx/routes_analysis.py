@@ -13,7 +13,7 @@ from fx.strategies_slow import fix_window, last_business_day
 from fx.symbols import SPECS, AVAILABLE, pips
 from fx.market import LONDON
 from fx.backtest import run_backtest
-from strategies import EMA_TEST
+from strategies import EMA_TEST, ema_test_params
 from fx.optimizer import optimize, walk_forward, WF_CANDLES
 from fx import review as fx_review
 from fx import plan as fx_plan
@@ -35,8 +35,8 @@ def register(router, engine, store, news):
         s = await engine.get_settings()
         tf = req.timeframe
         params = dict(s.symbol_params.get(req.symbol) or {})
-        if req.strategy == EMA_TEST and s.ema_test_adx_filter:
-            params["ema_test_adx_min"] = s.ema_test_adx_min
+        if req.strategy == EMA_TEST:
+            params.update(ema_test_params(s))
         if req.strategy == "fix_reversion":
             if SPECS[req.symbol]["group"] == "Metales":
                 raise HTTPException(400, "La reversión del fix de fin de mes no opera metales")

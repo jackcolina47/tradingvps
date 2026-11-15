@@ -81,6 +81,12 @@ export default function SettingsPanel({ settings, meta, profileActive, onSave, o
       body.ema_test_partial_atr = Math.min(3, Math.max(0.5, v || 1.5));
       if (body.ema_test_partial_atr !== v) clamped.push(`Parcial test EMA (×ATR) → ${body.ema_test_partial_atr}`);
     }
+    [["ema_test_confirm_adx", 5, 60, 24, "ADX entrada confirmada"], ["ema_test_confirm_dist_atr", 0.1, 3, 0.5, "Distancia EMAs (×ATR)"], ["ema_test_confirm_bars", 1, 100, 20, "Plazo de velas"]].forEach(([k, min, max, def, label]) => {
+      if (!(k in body)) return;
+      const v = Number(body[k]);
+      body[k] = Math.min(max, Math.max(min, (k.endsWith("bars") ? Math.round(v) : v) || def));
+      if (body[k] !== v) clamped.push(`${label} → ${body[k]}`);
+    });
     delete body.bot_running;
     delete body.symbol_params;
     const ok = await onSave(body);

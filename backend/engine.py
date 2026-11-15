@@ -6,7 +6,7 @@ from bson import ObjectId
 from models import Settings, Position, Trade, Signal, LogEntry, now_iso
 from market import MarketData, HTF
 from indicators import build_df, trend_label, htf_trend
-from strategies import evaluate, exit_signal, ema_test, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST, EMA_TEST_TAG, STRATEGY_INFO as FAST_INFO
+from strategies import evaluate, exit_signal, ema_test, ema_test_params, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST, EMA_TEST_TAG, STRATEGY_INFO as FAST_INFO
 from strategies_slow import SLOW_INFO, SLOW_KEYS, evaluate_slow
 from risk import FEE_RATE, MAKER_FEE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules, move_in_r, tp_in_r, partial_qty, be_allowed, ema_partial_due, EMA_PARTIAL_PCT
 from ai_advisor import evaluate_signal, label as ai_label
@@ -698,7 +698,7 @@ class TradingEngine:
                     if self.running:
                         await self._exit_on_cross(symbol, df, i)
                     if symbol in test_syms:
-                        tsig = ema_test(df, i, params={"ema_test_adx_min": settings.ema_test_adx_min if settings.ema_test_adx_filter else 0})
+                        tsig = ema_test(df, i, params=ema_test_params(settings))
                         if tsig and self.running:
                             found += 1
                             await self._handle_test_signal(symbol, tsig, settings, df)

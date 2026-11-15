@@ -72,6 +72,10 @@ class FxSettings(BaseModel):
     ema_test_adx_min: float = 20.0
     ema_test_partial_enabled: bool = False
     ema_test_partial_atr: float = 1.5
+    ema_test_confirm_enabled: bool = False
+    ema_test_confirm_adx: float = 24.0
+    ema_test_confirm_dist_atr: float = 0.5
+    ema_test_confirm_bars: int = 20
     bot_running: bool = False
 
     @field_validator("ema_test_symbols")
@@ -253,6 +257,10 @@ class FxSettingsUpdate(BaseModel):
     ema_test_adx_min: Optional[float] = Field(default=None, ge=5, le=60)
     ema_test_partial_enabled: Optional[bool] = None
     ema_test_partial_atr: Optional[float] = Field(default=None, ge=0.5, le=3.0)
+    ema_test_confirm_enabled: Optional[bool] = None
+    ema_test_confirm_adx: Optional[float] = Field(default=None, ge=5, le=60)
+    ema_test_confirm_dist_atr: Optional[float] = Field(default=None, ge=0.1, le=3.0)
+    ema_test_confirm_bars: Optional[int] = Field(default=None, ge=1, le=100)
 
 
 class HfmTestRequest(BaseModel):

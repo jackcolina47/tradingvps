@@ -4,6 +4,12 @@ import { Input } from "@/components/ui/input";
 
 const CHIP = "relative rounded-sm border px-2 py-1 font-mono text-[11px] transition-colors";
 
+const CONFIRM = [
+  ["ema_test_confirm_adx", "ADX mayor que", 1, 5, 60, 24],
+  ["ema_test_confirm_dist_atr", "Distancia máx. EMAs (×ATR)", 0.1, 0.1, 3, 0.5],
+  ["ema_test_confirm_bars", "Plazo tras el cruce (velas)", 1, 1, 100, 20],
+];
+
 export default function EmaTestSettings({ form, set, meta }) {
   if (!("ema_test_enabled" in form)) return null;
   const on = !!form.ema_test_enabled;
@@ -52,6 +58,27 @@ export default function EmaTestSettings({ form, set, meta }) {
             <Input data-testid="settings-ema-test-adx-min-input" type="number" step={1} min={5} max={60} value={form.ema_test_adx_min ?? 20}
               onChange={(e) => set("ema_test_adx_min", e.target.value)} className="num h-8 w-24 border-[#1E293B] bg-[#07090E] text-xs" />
             <p className="text-[11px] text-slate-500">Típico 20–25 (ADX 14). Compruébalo en Backtest con «Test cruce EMA 10/20» antes y después.</p>
+          </div>
+        )}
+      </div>
+      <div className="mt-3 rounded-sm border border-[#1E293B] bg-[#07090E]/60 p-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm text-slate-200">Entrada confirmada (ADX + EMAs cercanas)</p>
+            <p className="text-[11px] text-slate-500">Cambia el criterio de entrada: tras un cruce EMA10/20 espera a la primera vela con ADX por encima del umbral y entra en el sentido de la EMA10 solo si en ese momento las EMAs están a menos de la distancia indicada. Si están más lejos, o pasa el plazo de velas sin ADX suficiente, el cruce se descarta. La salida no cambia. Con esto encendido el «Filtro de lateral (ADX)» de arriba no se usa.</p>
+          </div>
+          <Switch data-testid="settings-ema-test-confirm-switch" checked={!!form.ema_test_confirm_enabled} onCheckedChange={(v) => set("ema_test_confirm_enabled", v)} className="data-[state=checked]:bg-fuchsia-500" />
+        </div>
+        {form.ema_test_confirm_enabled && (
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {CONFIRM.map(([k, label, step, min, max, def]) => (
+              <label key={k} className="block">
+                <span className="mb-1 block font-mono text-[10px] uppercase tracking-wider text-slate-500">{label}</span>
+                <Input data-testid={`settings-${k.replaceAll("_", "-")}-input`} type="number" step={step} min={min} max={max} value={form[k] ?? def}
+                  onChange={(e) => set(k, e.target.value)} className="num h-8 w-full border-[#1E293B] bg-[#07090E] text-xs" />
+              </label>
+            ))}
+            <p className="text-[11px] text-slate-500 sm:col-span-3">Por defecto ADX 24 · 0.5×ATR · 20 velas. Ajusta el plazo de velas a tu temporalidad y compáralo en Backtest con «Test cruce EMA 10/20».</p>
           </div>
         )}
       </div>
