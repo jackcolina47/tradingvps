@@ -7,7 +7,7 @@ from models import Trade, Position
 WARMUP = 220
 MAX_LIMIT = 700
 DEFAULT_LIMIT = 300
-EMPTY_KEYS = ("candles", "volume", "ema9", "ema21", "ema200", "rsi", "markers", "lines")
+EMPTY_KEYS = ("candles", "volume", "ema9", "ema21", "ema200", "rsi", "adx", "gap", "markers", "lines")
 
 
 def clamp(limit: int) -> int:
@@ -48,6 +48,7 @@ async def build(db, symbol: str, tf: str, rows: list, step: int, limit: int, bef
     def line(col):
         return [{"time": t, "value": round(float(v), 8)} for t, v in zip(times, df[col].tolist())]
 
+    df = df.assign(gap=((df["ema10"] - df["ema20"]) / df["atr"].where(df["atr"] > 0)).fillna(0.0), adx=df["adx"].fillna(0.0))  # EMA10−EMA20 in ATR units (test cruce EMA)
     candles = [{"time": t, "open": o, "high": h, "low": lo, "close": c} for t, o, h, lo, c in zip(times, df["open"], df["high"], df["low"], df["close"])]
     volume = [{"time": t, "value": v, "color": "rgba(16,185,129,0.35)" if c >= o else "rgba(239,68,68,0.35)"}
               for t, v, o, c in zip(times, df["volume"], df["open"], df["close"])]
@@ -73,5 +74,5 @@ async def build(db, symbol: str, tf: str, rows: list, step: int, limit: int, bef
                      {"price": p.tp, "title": "TP", "color": "#10B981"}]
     markers.sort(key=lambda m: m["time"])
     return {"symbol": symbol, "tf": tf, "source": source, "has_more": has_more, "digits": price_digits(symbol, candles[-1]["close"] if candles else 0),
-            "candles": candles, "volume": volume, "ema9": line("ema9"), "ema21": line("ema21"), "ema200": line("ema200"), "rsi": line("rsi"),
+            "candles": candles, "volume": volume, "ema9": line("ema9"), "ema21": line("ema21"), "ema200": line("ema200"), "rsi": line("rsi"), "adx": line("adx"), "gap": line("gap"),
             "markers": markers, "lines": lines}

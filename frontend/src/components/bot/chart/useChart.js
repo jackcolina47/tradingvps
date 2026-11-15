@@ -18,12 +18,27 @@ export function shift(points, daily) {
   });
 }
 
-function addRsi(chart) {
-  const rsi = chart.addSeries(LineSeries, { ...lineOpts("#F472B6"), lastValueVisible: true }, 1);
-  rsi.createPriceLine({ price: 70, color: "rgba(239,68,68,0.45)", lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: false });
-  rsi.createPriceLine({ price: 30, color: "rgba(16,185,129,0.45)", lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: false });
-  try { chart.panes()[1].setHeight(90); } catch (e) { /* pane api optional */ }
-  return rsi;
+// indicators drawn in their own pane below the price, in this order; `levels` = dashed reference lines
+const SUB = {
+  rsi: { color: "#F472B6", levels: [[70, "rgba(239,68,68,0.45)"], [30, "rgba(16,185,129,0.45)"]] },
+  adx: { color: "#A78BFA", levels: [[24, "rgba(247,166,0,0.5)"]] },
+  gap: { color: "#2DD4BF", levels: [[0.5, "rgba(148,163,184,0.45)"], [0, "rgba(148,163,184,0.25)"], [-0.5, "rgba(148,163,184,0.45)"]] },
+};
+
+function syncPanes(a, ind, d) {
+  const want = Object.keys(SUB).filter((k) => ind[k]);
+  if (want.join() === a.subKey) return;
+  Object.values(a.sub).forEach((s) => a.chart.removeSeries(s));
+  try { while (a.chart.panes().length > 1) a.chart.removePane(a.chart.panes().length - 1); } catch (e) { /* already gone */ }
+  a.sub = {};
+  want.forEach((k, i) => {
+    const s = a.chart.addSeries(LineSeries, { ...lineOpts(SUB[k].color), lastValueVisible: true, priceFormat: { type: "price", precision: 2, minMove: 0.01 } }, i + 1);
+    SUB[k].levels.forEach(([price, color]) => s.createPriceLine({ price, color, lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: false }));
+    if (d) s.setData(shift(d[k] || [], a.daily));
+    a.sub[k] = s;
+  });
+  try { a.chart.panes().forEach((p, i) => p.setStretchFactor(i ? 1 : 8 - want.length)); } catch (e) { /* pane api optional */ }
+  a.subKey = want.join();
 }
 
 export function useChart(ref, onNeedOlder) {
@@ -44,8 +59,7 @@ export function useChart(ref, onNeedOlder) {
     const vol = chart.addSeries(HistogramSeries, { priceFormat: { type: "volume" }, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false });
     vol.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
     const a = { chart, candles, vol, e9: chart.addSeries(LineSeries, lineOpts("#F7A600")), e21: chart.addSeries(LineSeries, lineOpts("#38BDF8")),
-      e200: chart.addSeries(LineSeries, lineOpts("#CBD5E1", 2)), rsi: null, markers: createSeriesMarkers(candles, []), lines: [] };
-    a.rsi = addRsi(chart);
+      e200: chart.addSeries(LineSeries, lineOpts("#CBD5E1", 2)), sub: {}, subKey: null, markers: createSeriesMarkers(candles, []), lines: [] };
     chart.timeScale().subscribeVisibleLogicalRangeChange((r) => { if (r && r.from < 80) need.current?.(); });
     api.current = a;
     return () => { chart.remove(); api.current = null; };
@@ -68,7 +82,7 @@ export function render(a, d, lines, tf) {
   a.e9.setData(shift(d.ema9, daily));
   a.e21.setData(shift(d.ema21, daily));
   a.e200.setData(shift(d.ema200, daily));
-  if (a.rsi) a.rsi.setData(shift(d.rsi, daily));
+  Object.entries(a.sub).forEach(([k, s]) => s.setData(shift(d[k] || [], daily)));
   a.markers.setMarkers(shift(d.markers, daily));
   if (lines) {
     a.lines.forEach((l) => a.candles.removePriceLine(l));
@@ -81,12 +95,10 @@ export function applyIndicators(a, ind, d) {
   a.e21.applyOptions({ visible: !!ind.ema21 });
   a.e200.applyOptions({ visible: !!ind.ema200 });
   a.vol.applyOptions({ visible: !!ind.vol });
-  if (ind.rsi && !a.rsi) {
-    a.rsi = addRsi(a.chart);
-    if (d) a.rsi.setData(shift(d.rsi, a.daily));
-  } else if (!ind.rsi && a.rsi) {
-    a.chart.removeSeries(a.rsi);
-    a.rsi = null;
-    try { if (a.chart.panes().length > 1) a.chart.removePane(1); } catch (e) { /* already gone */ }
-  }
+  syncPanes(a, ind, d);
+}
+
+/** New pair / timeframe: a price axis the user dragged keeps the old instrument's range (empty chart) → back to auto-scale. */
+export function resetScales(a) {
+  a.chart.panes().forEach((p) => { try { p.priceScale("right").applyOptions({ autoScale: true }); } catch (e) { /* pane without right scale */ } });
 }

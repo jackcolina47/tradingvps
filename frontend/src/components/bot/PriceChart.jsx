@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { CandlestickChart, Loader2, Maximize2, Minimize2 } from "lucide-react";
 import { Panel } from "./Panel";
 import { fmtPrice } from "@/lib/api";
-import { useChart, render, applyIndicators } from "./chart/useChart";
+import { useChart, render, applyIndicators, resetScales } from "./chart/useChart";
 import { useHistory } from "./chart/useHistory";
 
 const TFS = ["1m", "5m", "15m", "1h", "4h", "1d"];
 const SOURCE = { bybit: "Velas Bybit", bitget: "Velas Bitget", hfm: "Velas del bróker · MetaTrader", yahoo: "Velas Yahoo Finance" };
-const IND = [["ema9", "EMA 9", "text-amber-400"], ["ema21", "EMA 21", "text-sky-400"], ["ema200", "EMA 200", "text-slate-300"], ["rsi", "RSI 14", "text-pink-400"], ["vol", "Volumen", "text-slate-400"]];
-const DEFAULT_IND = { ema9: true, ema21: true, ema200: true, rsi: true, vol: true };
+const IND = [["ema9", "EMA 9", "text-amber-400"], ["ema21", "EMA 21", "text-sky-400"], ["ema200", "EMA 200", "text-slate-300"], ["rsi", "RSI 14", "text-pink-400"], ["adx", "ADX 14", "text-violet-400"], ["gap", "Dist. EMA 10/20 (×ATR)", "text-teal-400"], ["vol", "Volumen", "text-slate-400"]];
+const DEFAULT_IND = { ema9: true, ema21: true, ema200: true, rsi: true, adx: true, gap: true, vol: true };
 const loadInd = () => {
   try { return { ...DEFAULT_IND, ...JSON.parse(localStorage.getItem("chart.indicators") || "{}") }; } catch (e) { return DEFAULT_IND; }
 };
@@ -31,6 +31,7 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
     const key = `${symbol}-${tf}`;
     if (fitted.current !== key) {
       const n = data.candles.length;
+      resetScales(a);
       // the chart applies new data on its next frame; fit after that so the default range does not override us
       requestAnimationFrame(() => {
         if (!api.current) return;
@@ -88,7 +89,7 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
           {meta.source && <span data-testid="chart-source">{SOURCE[meta.source] || meta.source} · {data?.candles?.length || 0} velas · hora local</span>}
         </span>
       </div>
-      <div ref={ref} data-testid="price-chart" className={`w-full ${fs ? "h-[calc(100vh-96px)]" : "h-[470px]"}`} />
+      <div ref={ref} data-testid="price-chart" className={`w-full ${fs ? "h-[calc(100vh-96px)]" : "h-[560px]"}`} />
     </Panel>
   );
 }

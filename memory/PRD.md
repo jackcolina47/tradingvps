@@ -568,3 +568,7 @@
 ## Iteración 86 (jun 2026) — Entrada confirmada en Test cruce EMA (3 bots)
 - Toggle `ema_test_confirm_enabled` + `ema_test_confirm_adx` (24), `ema_test_confirm_dist_atr` (0.5×ATR), `ema_test_confirm_bars` (20 velas, 1–100). Tras un cruce EMA10/20 entra en la PRIMERA vela (dentro del plazo) con ADX > umbral, solo si |EMA10−EMA20| < dist×ATR en esa vela; si no, el cruce se descarta. Sustituye al filtro ADX simple mientras está encendido. Salida sin cambios. Aplica en paper, REAL y Backtest.
 - Código: `strategies._ema_test_confirmed`, `strategies.ema_test_params(settings)` (usado por ambos motores y ambas rutas de backtest). Tests: `tests/test_iter86_ema_confirm.py`.
+
+## Iteración 87 (jun 2026) — Gráfico: bug al cambiar de par + ADX y distancia EMAs
+- Bug: tras arrastrar el eje de precios, al cambiar de par el gráfico quedaba vacío (la escala manual conservaba el rango del par anterior). Fix: `resetScales()` (autoScale) al cambiar par/temporalidad (`chart/useChart.js`, `PriceChart.jsx`).
+- Nuevos indicadores con botón mostrar/ocultar (persisten en localStorage): ADX 14 (línea guía 24) y Dist. EMA 10/20 en ×ATR (guías ±0.5). `/klines` devuelve `adx` y `gap` (`backend/chart.py`); paneles inferiores dinámicos (`syncPanes`). Los 3 bots comparten el componente.

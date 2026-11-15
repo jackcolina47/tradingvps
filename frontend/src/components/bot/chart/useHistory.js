@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { http } from "@/lib/api";
 
-const SERIES = ["candles", "volume", "ema9", "ema21", "ema200", "rsi"];
+const SERIES = ["candles", "volume", "ema9", "ema21", "ema200", "rsi", "adx", "gap"];
 const PAGE = 500;
 
 function fresh() {
