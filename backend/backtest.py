@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 import numpy as np
 from strategies import evaluate, exit_signal, EXIT_REASON, CROSS_ONLY
-from risk import FEE_RATE, position_size, pnl, check_exit, update_trailing, trade_rules, partial_qty, tp_in_r
+from risk import FEE_RATE, position_size, pnl, check_exit, update_trailing, trade_rules, partial_qty, tp_in_r, EMA_PARTIAL_PCT
 
 
 def _iso(ts_ms) -> str:
@@ -48,7 +48,7 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
     def close(price, reason, i):
         nonlocal balance, pos
         if reason == "SL" and pos["be"]:
-            reason = "TRAILING"
+            reason = "BREAKEVEN" if pos["strategy"] in CROSS_ONLY else "TRAILING"
         fee = price * pos["qty"] * FEE_RATE
         gross = pnl(pos["side"], pos["entry"], price, pos["qty"])
         net = gross + pos["partial_gross"] - pos["fee"] - fee
@@ -73,7 +73,16 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
             elif exit_signal(pos["strategy"], pos["side"], e10[i], e20[i]):
                 close(closes[i], EXIT_REASON, i)
             elif cross_only:
-                pass
+                if rules["ema_test_partial_enabled"] and not pos["partial"] and fav >= rules["ema_test_partial_atr"] * pos["atr"]:
+                    d = 1 if pos["side"] == "long" else -1
+                    part = partial_qty(symbol, pos["qty"], EMA_PARTIAL_PCT) if symbol else round(pos["qty"] * EMA_PARTIAL_PCT / 100, 8)
+                    if part > 0:
+                        level = pos["entry"] + rules["ema_test_partial_atr"] * pos["atr"] * d
+                        fee = level * part * FEE_RATE
+                        gross = pnl(pos["side"], pos["entry"], level, part)
+                        balance += gross - fee
+                        pos.update(qty=round(pos["qty"] - part, 8), fee=pos["fee"] + fee, partial_gross=pos["partial_gross"] + gross)
+                    pos.update(partial=True, sl=pos["entry"] * (1 + 2 * FEE_RATE * d), be=True)
             else:
                 if use_partial and not pos["partial"] and fav >= rules["partial_tp_r"] * r_dist:
                     part = partial_qty(symbol, pos["qty"], rules["partial_tp_pct"]) if symbol else round(pos["qty"] * rules["partial_tp_pct"] / 100, 8)

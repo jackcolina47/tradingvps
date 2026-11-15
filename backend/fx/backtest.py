@@ -5,7 +5,7 @@ import numpy as np
 from indicators import build_df
 from backtest import scan_signals, _levels, _iso
 from strategies import exit_signal, EXIT_REASON, CROSS_ONLY
-from risk import check_exit as bar_exit
+from risk import check_exit as bar_exit, EMA_PARTIAL_PCT
 from fx import risk
 from fx.market import sessions as fx_sessions
 from fx.symbols import SPECS, pips
@@ -52,7 +52,7 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
     def close(price, reason, i):
         nonlocal balance, pos
         if reason == "SL" and pos["be"]:
-            reason = "TRAILING"
+            reason = "BREAKEVEN" if pos["strategy"] in CROSS_ONLY else "TRAILING"
         fee = risk.spread_cost(symbol, pos["lots"], tickers, costs)
         gross = risk.pnl(symbol, pos["side"], pos["entry"], price, pos["lots"], tickers)
         net = gross + pos["partial_gross"] - pos["fee"] - fee
@@ -84,7 +84,16 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
             elif exit_signal(pos["strategy"], pos["side"], e10[i], e20[i]):
                 close(closes[i], EXIT_REASON, i)
             elif cross_only:
-                pass
+                if rules["ema_test_partial_enabled"] and not pos["partial"] and fav >= rules["ema_test_partial_atr"] * pos["atr"]:
+                    d = 1 if pos["side"] == "long" else -1
+                    part = risk.partial_lots(pos["lots"], EMA_PARTIAL_PCT)
+                    if part > 0:
+                        level = pos["entry"] + rules["ema_test_partial_atr"] * pos["atr"] * d
+                        pfee = risk.spread_cost(symbol, part, tickers, costs)
+                        pgross = risk.pnl(symbol, pos["side"], pos["entry"], level, part, tickers)
+                        balance += pgross - pfee
+                        pos.update(lots=round(pos["lots"] - part, 8), fee=pos["fee"] + pfee, partial_gross=pos["partial_gross"] + pgross)
+                    pos.update(partial=True, sl=pos["entry"] + spread * d, be=True)
             else:
                 if use_partial and not pos["partial"] and r_dist and fav >= rules["partial_tp_r"] * r_dist:
                     part = risk.partial_lots(pos["lots"], rules["partial_tp_pct"])

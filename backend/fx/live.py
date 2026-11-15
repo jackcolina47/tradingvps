@@ -319,7 +319,7 @@ class FxLiveBroker:
     async def set_stop(self, symbol: str, position_id: str, sl: float, tp: float):
         lot = await self.lot(symbol)
         d = lot["digits"]
-        want_sl, want_tp = round(sl, d), round(tp, d)
+        want_sl, want_tp = round(sl, d), (round(tp, d) if tp is not None else None)
 
         async def send():
             return await self.api.modify_position(self.account_id, position_id, want_sl, want_tp, self.region)

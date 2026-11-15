@@ -7,7 +7,7 @@ from models import Position, Trade, now_iso
 from fx.models import FxSettings
 from fx.symbols import SPECS, fmt_price, pips
 from fx import risk
-from risk import be_allowed
+from risk import be_allowed, ema_partial_due, EMA_PARTIAL_PCT
 from fx.metaapi import MetaApiError, TRADE_DISABLED_CODES
 from strategies import EMA_TEST_TAG
 from fx.engine_core import logger, LIVE_GRACE_SEC, TRANSIENT_TG_SEC, PENDING_TTL_SEC, HORIZON_LABEL, FX_STRATEGY_INFO
@@ -25,10 +25,26 @@ class PositionsMixin:
         p.mfe_r, p.mae_r = updates["mfe_r"], updates["mae_r"]
         if p.exit_mode == "cross":  # Test cruce EMA: only the safety SL (no TP/partial/BE/trailing); the opposite cross is the normal exit
             if not rollover and ((price <= p.sl) if p.side == "long" else (price >= p.sl)):
-                await self.log("RISK", f"{p.symbol}: SL de seguridad del test cruce EMA alcanzado ({fmt_price(p.symbol, p.sl)}) · movimiento violento antes del cierre de vela")
-                await self.close_position(p.id, p.sl, "SL")
+                await self.log("RISK", f"{p.symbol}: stop en breakeven del test cruce EMA alcanzado ({fmt_price(p.symbol, p.sl)}) tras el cierre parcial" if p.breakeven else
+                               f"{p.symbol}: SL de seguridad del test cruce EMA alcanzado ({fmt_price(p.symbol, p.sl)}) · movimiento violento antes del cierre de vela")
+                await self.close_position(p.id, p.sl, "BREAKEVEN" if p.breakeven else "SL")
                 return
             updates.update(mark_price=price, unrealized_pnl=round(risk.pnl(p.symbol, p.side, p.entry_price, price, p.qty, tickers), 4))
+            if not rollover and ema_partial_due(rules, p.side, p.entry_price, p.atr, price, p.partial_done):
+                part = risk.partial_lots(p.qty, EMA_PARTIAL_PCT)
+                be = self._ema_be(p)
+                net = 0.0
+                if part > 0:
+                    fee = risk.spread_cost(p.symbol, part, tickers)
+                    gross = risk.pnl(p.symbol, p.side, p.entry_price, price, part, tickers)
+                    net = gross - fee
+                    await self.db.account.update_one({"_id": "main"}, {"$inc": {"balance": net}})
+                    updates.update(qty=round(p.qty - part, 8), margin=round(p.margin * (p.qty - part) / p.qty, 6), fees=round(p.fees + fee, 6),
+                                   partial_gross=round(p.partial_gross + gross, 6), partial_fees=round(p.partial_fees + fee, 6), initial_qty=p.initial_qty or p.qty,
+                                   unrealized_pnl=round(risk.pnl(p.symbol, p.side, p.entry_price, price, p.qty - part, tickers), 4))
+                    p.qty = updates["qty"]
+                updates.update(partial_done=True, sl=be, breakeven=True)
+                await self._announce_ema_partial(p, part, price, net, be, rules)
             await self.db.positions.update_one({"_id": ObjectId(p.id)}, {"$set": updates})
             return
         if not rollover:
@@ -67,6 +83,50 @@ class PositionsMixin:
                 if be and not p.breakeven:
                     await self.log("RISK", f"{p.symbol}: stop movido a breakeven ({fmt_price(p.symbol, new_sl)})")
         await self.db.positions.update_one({"_id": ObjectId(p.id)}, {"$set": updates})
+
+    @staticmethod
+    def _ema_be(p: Position) -> float:
+        spread = SPECS[p.symbol]["spread"]
+        return round(p.entry_price + spread if p.side == "long" else p.entry_price - spread, SPECS[p.symbol]["digits"])
+
+    async def _announce_ema_partial(self, p: Position, part: float, price: float, net: float, be: float, rules: dict):
+        tag = "REAL " if p.live else ""
+        k, f = rules["ema_test_partial_atr"], lambda v: fmt_price(p.symbol, v)  # noqa: E731
+        if part <= 0:
+            await self.log("RISK", f"{p.symbol}: test cruce EMA a +{k:g}×ATR · cierre parcial omitido (el lote mínimo no permite dividir) · SL movido a breakeven ({f(be)})")
+            return
+        await self.log("ORDER", f"PARCIAL {tag}{p.side.upper()} {p.symbol} · {EMA_TEST_TAG}: cerrado {EMA_PARTIAL_PCT}% ({part:.2f} lotes) @ {f(price)} a +{k:g}×ATR · "
+                                f"PnL {net:+.2f} USD · resto {p.qty:.2f} lotes con SL en breakeven ({f(be)}) hasta el cruce contrario")
+        await self.tg(f"🎯 <b>PARCIAL {tag}{p.side.upper()} {p.symbol}</b> · {EMA_TEST_TAG} @ {f(price)} (+{k:g}×ATR)\n"
+                      f"Cerrado {EMA_PARTIAL_PCT}% ({part:.2f} lotes) · PnL {net:+.2f} USD · resto {p.qty:.2f} lotes con SL en breakeven ({f(be)}) hasta el cruce contrario", "orders")
+
+    async def _ema_partial_live(self, p: Position, price: float, rules: dict, updates: dict):
+        done = p.partial_done
+        if ema_partial_due(rules, p.side, p.entry_price, p.atr, price, done):
+            part = risk.partial_lots(p.qty, EMA_PARTIAL_PCT, await self.broker.lot(p.symbol))
+            if part > 0:
+                try:
+                    r = await self.broker.close_partial(p.order_id, part, p.link_id)
+                    gross = risk.pnl(p.symbol, p.side, p.entry_price, price, part, self.market.tickers)
+                    updates.update(qty=round(p.qty - part, 8), margin=round(p.margin * (p.qty - part) / p.qty, 6), partial_done=True,
+                                   partial_gross=round(p.partial_gross + gross, 6), partial_fees=round(p.partial_fees + abs(r.get("commission") or 0), 6),
+                                   initial_qty=p.initial_qty or p.qty)
+                    p.qty = updates["qty"]
+                    done = True
+                    await self._announce_ema_partial(p, part, price, gross, self._ema_be(p), rules)
+                except Exception as e:
+                    await self.log("ERROR", f"{p.symbol}: cierre parcial REAL del test cruce EMA fallido · {str(e)[:120]}")
+            else:
+                done = updates["partial_done"] = True
+                await self._announce_ema_partial(p, 0, price, 0.0, self._ema_be(p), rules)
+        if done and not p.breakeven:
+            be = self._ema_be(p)
+            try:
+                await self.broker.set_stop(p.symbol, p.order_id, be, None)
+                updates.update(sl=be, breakeven=True)
+                await self.log("RISK", f"{p.symbol}: stop REAL del test cruce EMA movido a breakeven ({fmt_price(p.symbol, be)})")
+            except Exception as e:
+                await self.log("ERROR", f"{p.symbol}: no se pudo mover el stop a breakeven en {self.bk} · {str(e)[:120]}")
 
     async def _announce_partial(self, p: Position, part: float, price: float, net: float, rules: dict):
         tag = "REAL " if p.live else ""
@@ -136,7 +196,8 @@ class PositionsMixin:
         if abs(ex["volume"] - p.qty) > 1e-9:
             updates["qty"] = ex["volume"]
             p.qty = ex["volume"]
-        if p.exit_mode == "cross":  # Test cruce EMA: no time stop / partial / breakeven / trailing at the broker (safety SL travels in the order)
+        if p.exit_mode == "cross":  # Test cruce EMA: safety SL travels in the order; only the optional partial + breakeven rule is managed here
+            await self._ema_partial_live(p, price, rules, updates)
             await self.db.positions.update_one({"_id": ObjectId(p.id)}, {"$set": updates})
             return
         if p.expires_at and now >= datetime.fromisoformat(p.expires_at):
@@ -197,7 +258,7 @@ class PositionsMixin:
             net = cr["pnl"] if cr else risk.pnl(p.symbol, p.side, p.entry_price, price, p.qty, self.market.tickers) + p.partial_gross - p.fees - p.partial_fees
             reason = (cr or {}).get("reason") or ("SL" if p.exit_mode == "cross" else "TP" if abs(price - p.tp) <= abs(price - p.sl) else ("TRAILING" if p.breakeven else "SL"))
             if reason == "SL" and p.breakeven:
-                reason = "TRAILING"
+                reason = "BREAKEVEN" if p.exit_mode == "cross" else "TRAILING"
             await self.db.positions.delete_one({"_id": ObjectId(p.id)})
             trade = await self._record_trade(p, price, net, fees, reason)
         await self._announce_close(p, trade, reason, cr is None)

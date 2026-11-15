@@ -19,8 +19,32 @@ const ALERTS = [
   ["system", "Conexión con el bróker (HFM, Pepperstone / MetaApi) caída o restablecida"],
 ];
 
+const BOTS = [["bybit", "Bybit"], ["hfm", "HotForex"], ["pepperstone", "Pepperstone"]];
+const ALL_BOTS = BOTS.map(([k]) => k);
+
+function BotPicker({ id, value, onChange }) {
+  const toggle = (k) => {
+    const next = value.includes(k) ? value.filter((x) => x !== k) : [...value, k];
+    if (!next.length) return toast.error("Cada chat debe recibir avisos de al menos un bot");
+    onChange(ALL_BOTS.filter((b) => next.includes(b)));
+  };
+  return (
+    <div data-testid={`${id}-box`} className="rounded-sm border border-[#1E293B] bg-[#0D111A] px-3 py-2">
+      <p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-slate-500">Este chat recibe avisos de</p>
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+        {BOTS.map(([k, label]) => (
+          <label key={k} className="flex cursor-pointer items-center gap-1.5 text-[12px] text-slate-200">
+            <input data-testid={`${id}-${k}`} type="checkbox" checked={value.includes(k)} onChange={() => toggle(k)} className="h-3.5 w-3.5 cursor-pointer accent-amber-500" />
+            {label}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function TelegramSection({ config, onSave, showWeekly = true, weeklyDesc }) {
-  const [form, setForm] = useState({ telegram_enabled: config.telegram_enabled, telegram_bot_token: "", telegram_chat_id: config.telegram_chat_id, telegram_chat_id_2: config.telegram_chat_id_2 || "", telegram_alerts: config.telegram_alerts });
+  const [form, setForm] = useState({ telegram_enabled: config.telegram_enabled, telegram_bot_token: "", telegram_chat_id: config.telegram_chat_id, telegram_chat_id_2: config.telegram_chat_id_2 || "", telegram_chat_bots: config.telegram_chat_bots || ALL_BOTS, telegram_chat_bots_2: config.telegram_chat_bots_2 || ALL_BOTS, telegram_alerts: config.telegram_alerts });
   const [chats, setChats] = useState(null);
   const [target, setTarget] = useState("telegram_chat_id");
   const [busy, setBusy] = useState("");
@@ -79,9 +103,10 @@ export default function TelegramSection({ config, onSave, showWeekly = true, wee
           {busy === "detect" && target === "telegram_chat_id" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Radar className="mr-1.5 h-3.5 w-3.5" />} Detectar chat ID
         </Button>
       </div>
+      <BotPicker id="telegram-chat-bots" value={form.telegram_chat_bots} onChange={(v) => set("telegram_chat_bots", v)} />
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-[180px] flex-1">
-          <Field label="Chat ID adicional (opcional)" hint="Cada aviso se envía a los dos chats a la vez. Déjalo vacío si solo quieres uno.">
+          <Field label="Chat ID adicional (opcional)" hint="Recibe los avisos de los bots que marques debajo. Déjalo vacío si solo quieres un chat.">
             <Input data-testid="telegram-chat-id-2-input" value={form.telegram_chat_id_2} placeholder="Otro chat, grupo o canal" onChange={(e) => set("telegram_chat_id_2", e.target.value)} className={`${INPUT} ${sameChat ? "border-rose-500/60" : ""}`} />
           </Field>
         </div>
@@ -92,6 +117,8 @@ export default function TelegramSection({ config, onSave, showWeekly = true, wee
           <Button data-testid="telegram-chat-id-2-clear" variant="outline" onClick={() => set("telegram_chat_id_2", "")} className={`${BTN_OUT} text-rose-300 hover:bg-rose-500/10`}><X className="mr-1 h-3.5 w-3.5" /> Quitar</Button>
         )}
       </div>
+      {form.telegram_chat_id_2.trim() && <BotPicker id="telegram-chat-bots-2" value={form.telegram_chat_bots_2} onChange={(v) => set("telegram_chat_bots_2", v)} />}
+      <p className="text-[11px] text-slate-500">Los avisos generales (IA sin servicio, copias de seguridad y el mensaje de prueba) llegan siempre a todos los chats.</p>
       {sameChat && <p data-testid="telegram-same-chat-error" className="text-[11px] text-rose-300">El chat ID adicional es igual al principal: el mensaje solo se enviaría una vez.</p>}
       {chats && (
         <div data-testid="telegram-chats" className="rounded-sm border border-[#1E293B] bg-[#0D111A] p-2 text-[12px]">

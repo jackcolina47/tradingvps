@@ -74,7 +74,18 @@ def update_trailing(side: str, entry: float, sl: float, initial_sl: float, atr: 
 
 
 DEFAULT_RULES = {"trailing_enabled": True, "breakeven_enabled": True, "be_start_r": 1.0, "trail_start_r": 1.5, "trail_atr_mult": 1.0,
-                 "partial_tp_enabled": False, "partial_tp_r": 1.5, "partial_tp_pct": 50}
+                 "partial_tp_enabled": False, "partial_tp_r": 1.5, "partial_tp_pct": 50,
+                 "ema_test_partial_enabled": False, "ema_test_partial_atr": 1.5}
+
+
+EMA_PARTIAL_PCT = 50
+
+
+def ema_partial_due(rules: dict, side: str, entry: float, atr: float, price: float, done: bool) -> bool:
+    """Test cruce EMA: bank half and go to breakeven once price runs ema_test_partial_atr × ATR in favour."""
+    if done or not rules.get("ema_test_partial_enabled") or not atr or atr <= 0:
+        return False
+    return ((price - entry) if side == "long" else (entry - price)) >= rules["ema_test_partial_atr"] * atr
 
 
 def be_allowed(rules: dict, partial_done: bool) -> bool:

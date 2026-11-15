@@ -19,7 +19,7 @@ async def _crypto_wf(engine, settings, initial: float, sym: str) -> dict:
 
 
 async def _crypto_notify(engine, msg: str):
-    await notify.notify(msg, "review")
+    await notify.notify(msg, "review", bot="bybit")
 
 
 # A kit binds the weekly revalidation to one bot: how to run the walk-forward, its job state and how to notify.

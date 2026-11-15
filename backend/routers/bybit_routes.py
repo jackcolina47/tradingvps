@@ -85,11 +85,11 @@ async def set_mode(body: ModeRequest):
         if body.reset_stats:
             await engine.reset_account(store.cfg.bybit_verified_equity or None)
         await engine.log("RISK", f"MODO REAL ACTIVADO · Bybit {store.cfg.bybit_env} · el bot operará con dinero real al iniciarse")
-        await notify.notify(f"🚨 <b>MODO REAL ACTIVADO</b> · Bybit {store.cfg.bybit_env}\nEquidad ${store.cfg.bybit_verified_equity or 0:,.2f}. El bot operará con dinero real cuando lo inicies.", "orders")
+        await notify.notify(f"🚨 <b>MODO REAL ACTIVADO</b> · Bybit {store.cfg.bybit_env}\nEquidad ${store.cfg.bybit_verified_equity or 0:,.2f}. El bot operará con dinero real cuando lo inicies.", "orders", bot="bybit")
     else:
         await store.update({"trading_mode": "paper", "live_since": None})
         if body.reset_stats:
             await engine.reset_account()
         await engine.log("INFO", "Vuelta a modo PAPER · simulación con precios reales")
-        await notify.notify("📄 <b>Vuelta a modo PAPER</b> · simulación con precios reales", "orders")
+        await notify.notify("📄 <b>Vuelta a modo PAPER</b> · simulación con precios reales", "orders", bot="bybit")
     return await _mode_checks()

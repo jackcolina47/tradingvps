@@ -1,5 +1,5 @@
 import os
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 from cryptography.fernet import Fernet, InvalidToken
 from pydantic import BaseModel, ConfigDict, Field
 import ai_advisor
@@ -44,6 +44,8 @@ class AppConfig(BaseModel):
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
     telegram_chat_id_2: str = ""
+    telegram_chat_bots: List[str] = list(notify.BOTS)
+    telegram_chat_bots_2: List[str] = list(notify.BOTS)
     telegram_alerts: Dict[str, bool] = dict(DEFAULT_ALERTS)
     auto_review_enabled: bool = True
     auto_review_frequency: str = "weekly"
@@ -107,6 +109,8 @@ class ConfigUpdate(BaseModel):
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = Field(default=None, max_length=40)
     telegram_chat_id_2: Optional[str] = Field(default=None, max_length=40)
+    telegram_chat_bots: Optional[List[str]] = None
+    telegram_chat_bots_2: Optional[List[str]] = None
     telegram_alerts: Optional[Dict[str, bool]] = None
     auto_review_enabled: Optional[bool] = None
     auto_review_frequency: Optional[str] = None
@@ -154,7 +158,7 @@ class ConfigStore:
         c = self.cfg
         ai_advisor.configure(**self.ai_runtime())
         ai_funnel.configure(c.ai_fast_model)
-        notify.configure(c.telegram_enabled, c.telegram_bot_token, c.telegram_chat_id, c.telegram_alerts, c.telegram_chat_id_2)
+        notify.configure(c.telegram_enabled, c.telegram_bot_token, c.telegram_chat_id, c.telegram_alerts, c.telegram_chat_id_2, c.telegram_chat_bots, c.telegram_chat_bots_2)
         for fn in self.listeners:
             await fn(c)
 
@@ -236,6 +240,11 @@ class ConfigStore:
         reduce = patch.get("funding_reduce_pct", self.cfg.funding_reduce_pct)
         if ("funding_block_pct" in patch or "funding_reduce_pct" in patch) and reduce > block:
             raise ValueError("El umbral de reducción debe ser menor o igual que el de bloqueo")
+        for k in ("telegram_chat_bots", "telegram_chat_bots_2"):
+            if k in patch:
+                patch[k] = [b for b in notify.BOTS if b in patch[k]]
+                if not patch[k]:
+                    raise ValueError("Selecciona al menos un bot para cada chat de Telegram")
         if "telegram_alerts" in patch:
             merged = {**self.cfg.telegram_alerts, **patch["telegram_alerts"]}
             patch["telegram_alerts"] = {k: bool(merged.get(k, True)) for k in DEFAULT_ALERTS}

@@ -250,7 +250,7 @@ class NewsAgent:
                 continue
             self._seen_alerts.add(a["key"])
             await self.engine.log("NEWS", f"ALERTA {a['severity']} · {a['symbol']} · {a['title']}")
-            await notify.notify(f"📰 <b>Alerta de noticias {a['severity']}</b> · {a['symbol']}\n<b>{a['title']}</b>\n{a['why']}", "news")
+            await notify.notify(f"📰 <b>Alerta de noticias {a['severity']}</b> · {a['symbol']}\n<b>{a['title']}</b>\n{a['why']}", "news", bot="bybit")
 
     def _event_block(self):
         if not (self.cfg and self.cfg.news_block_events and self.latest):

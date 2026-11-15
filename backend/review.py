@@ -220,7 +220,7 @@ async def run_auto_review(engine, db, store) -> dict:
            + (f"<b>Cambios aplicados</b>\n{changes_text(applied)}" if applied else ("<b>Sin cambios</b> en la configuración" if store.cfg.auto_review_apply else "<b>Modo solo aviso</b>: no se aplicó nada"))
            + (("\n\n" + "\n".join(f"– {n}" for n in res["notes"])) if res["notes"] else "")
            + _footer(acc))
-    await notify.notify(msg, "review")
+    await notify.notify(msg, "review", bot="bybit")
     return {**res, "applied": applied, "previous": previous, "ran_at": store.cfg.auto_review_last_at}
 
 
@@ -264,7 +264,7 @@ async def run_global_optimization(engine, db) -> dict:
            + (f"<b>Cambios aplicados</b>\n{changes_text(applied)}" if applied else "<b>Sin cambios</b> en la configuración")
            + (("\n\n" + "\n".join(f"– {n}" for n in res["notes"])) if res["notes"] else "")
            + _footer(acc))
-    await notify.notify(msg, "review")
+    await notify.notify(msg, "review", bot="bybit")
     return {**res, "applied": applied, "previous": previous, "optimizer": results, "ran_at": now_iso()}
 
 

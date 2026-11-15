@@ -16,6 +16,7 @@ const REASON_CLS = {
   TP: "text-emerald-400 border-emerald-500/30",
   SL: "text-rose-400 border-rose-500/30",
   TRAILING: "text-amber-400 border-amber-500/30",
+  BREAKEVEN: "text-sky-300 border-sky-500/30",
   MANUAL: "text-slate-300 border-slate-500/30",
 };
 

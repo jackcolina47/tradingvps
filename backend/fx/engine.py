@@ -110,7 +110,7 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
         return FxLiveBroker(c.metaapi_token, c.metaapi_account_id, c.metaapi_region, c.metaapi_base_url, c.mt_symbol_suffix, c.mt_symbol_map, self.profile.suffixes)
 
     async def tg(self, text: str, kind: str):
-        await notify.notify(f"{self.profile.tg_icon} <b>{self.profile.tg_name}</b>\n{text}", kind)
+        await notify.notify(f"{self.profile.tg_icon} <b>{self.profile.tg_name}</b>\n{text}", kind, bot=self.profile.key)
 
     async def init(self):
         await self.market.detect()

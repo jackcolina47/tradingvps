@@ -298,7 +298,10 @@ class MetaApi:
         return await self.trade(account_id, {"actionType": "POSITION_PARTIAL", "positionId": str(position_id), "volume": volume, "clientId": client_id}, region)
 
     async def modify_position(self, account_id: str, position_id: str, sl: float, tp: float, region: str = None) -> dict:
-        return await self.trade(account_id, {"actionType": "POSITION_MODIFY", "positionId": str(position_id), "stopLoss": sl, "takeProfit": tp}, region)
+        payload = {"actionType": "POSITION_MODIFY", "positionId": str(position_id), "stopLoss": sl}
+        if tp is not None:
+            payload["takeProfit"] = tp
+        return await self.trade(account_id, payload, region)
 
     async def aclose(self):
         await self.client.aclose()

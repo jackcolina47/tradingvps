@@ -200,7 +200,8 @@ def format_weekly(w: dict, currency: str = "USDT", extra: str = None) -> str:
 async def send_weekly(engine, db, force: bool = False, *, build=None, fmt=format_weekly, prefix: str = "") -> dict:
     w = await (build or build_weekly)(engine, db)
     text = prefix + fmt(w)
-    sent = bool(await notify.send(text) if force else await notify.notify(text, "daily"))
+    bot = notify.bot_of(engine)
+    sent = bool(await notify.send(text, bot=bot) if force else await notify.notify(text, "daily", bot=bot))
     if sent:
         await db.weekly.update_one({"_id": "latest"}, {"$set": {**w, "text": text, "sent_at": now_iso()}}, upsert=True)
         await engine.log("PLAN", f"Resumen semanal enviado: {w['week_pnl']:+.2f} ({w['week_return_pct']:+.2f}%) · {w['week']['trades']} ops"

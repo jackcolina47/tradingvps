@@ -70,6 +70,8 @@ class FxSettings(BaseModel):
     ema_test_symbols: List[str] = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD"]
     ema_test_adx_filter: bool = False
     ema_test_adx_min: float = 20.0
+    ema_test_partial_enabled: bool = False
+    ema_test_partial_atr: float = 1.5
     bot_running: bool = False
 
     @field_validator("ema_test_symbols")
@@ -249,6 +251,8 @@ class FxSettingsUpdate(BaseModel):
     ema_test_symbols: Optional[List[str]] = None
     ema_test_adx_filter: Optional[bool] = None
     ema_test_adx_min: Optional[float] = Field(default=None, ge=5, le=60)
+    ema_test_partial_enabled: Optional[bool] = None
+    ema_test_partial_atr: Optional[float] = Field(default=None, ge=0.5, le=3.0)
 
 
 class HfmTestRequest(BaseModel):

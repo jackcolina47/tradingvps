@@ -4,13 +4,28 @@ import httpx
 
 logger = logging.getLogger("notify")
 TG = "https://api.telegram.org/bot{token}/{method}"
-_cfg = {"enabled": False, "token": "", "chat_id": "", "chat_ids": [], "alerts": {}}
+BOTS = ("bybit", "hfm", "pepperstone")
+_cfg = {"enabled": False, "token": "", "chat_id": "", "chat_ids": [], "alerts": {}, "chat_bots": {}}
 
 
-def configure(enabled: bool, token: str, chat_id: str, alerts: dict, chat_id_2: str = ""):
-    ids = [str(c).strip() for c in (chat_id, chat_id_2) if c and str(c).strip()]
-    ids = list(dict.fromkeys(ids))  # the extra chat is ignored when it repeats the main one
-    _cfg.update(enabled=enabled, token=token or "", chat_id=ids[0] if ids else "", chat_ids=ids, alerts=alerts or {})
+def configure(enabled: bool, token: str, chat_id: str, alerts: dict, chat_id_2: str = "", bots=None, bots_2=None):
+    """`bots` / `bots_2`: which trading bots each chat hears from (None = all)."""
+    pairs = [(str(c).strip(), set(BOTS if b is None else b)) for c, b in ((chat_id, bots), (chat_id_2, bots_2)) if c and str(c).strip()]
+    chat_bots = {}
+    for cid, b in pairs:
+        chat_bots.setdefault(cid, b)  # the extra chat is ignored when it repeats the main one
+    ids = list(chat_bots)
+    _cfg.update(enabled=enabled, token=token or "", chat_id=ids[0] if ids else "", chat_ids=ids, alerts=alerts or {}, chat_bots=chat_bots)
+
+
+def bot_of(engine) -> str:
+    profile = getattr(engine, "profile", None)
+    return profile.key if profile else "bybit"
+
+
+def _targets(bot: str = None) -> list:
+    """Chats subscribed to `bot`; messages without a bot (system-wide notices, backups, tests) go to every chat."""
+    return [c for c in _cfg["chat_ids"] if bot is None or bot in _cfg["chat_bots"].get(c, BOTS)]
 
 
 def chat_ids() -> list:
@@ -43,12 +58,14 @@ async def _fan_out(targets: list, coro_factory) -> list:
     return out
 
 
-async def send(text: str, token: str = None, chat_id: str = None) -> bool:
-    """Sends to every configured chat (or only to `chat_id` when given). True if at least one delivery succeeded."""
+async def send(text: str, token: str = None, chat_id: str = None, bot: str = None) -> bool:
+    """Sends to every chat subscribed to `bot` (or only to `chat_id` when given). True if at least one delivery succeeded."""
     token = token or _cfg["token"]
-    targets = [str(chat_id)] if chat_id else _cfg["chat_ids"]
-    if not token or not targets:
+    if not token or not (chat_id or _cfg["chat_ids"]):
         raise RuntimeError("Telegram no configurado: faltan token o chat ID")
+    targets = [str(chat_id)] if chat_id else _targets(bot)
+    if not targets:
+        raise RuntimeError("Ningún chat de Telegram tiene seleccionado este bot")
     await _fan_out(targets, lambda cid: _send_one(token, cid, text))
     return True
 
@@ -60,12 +77,12 @@ async def send_detailed(text: str) -> list:
     return await _fan_out(_cfg["chat_ids"], lambda cid: _send_one(_cfg["token"], cid, text))
 
 
-async def notify(text: str, kind: str):
-    """Fire-and-forget alert honouring the per-kind toggles; never raises."""
-    if not is_on(kind):
+async def notify(text: str, kind: str, bot: str = None):
+    """Fire-and-forget alert honouring the per-kind toggles and the per-chat bot selection; never raises."""
+    if not is_on(kind) or not _targets(bot):
         return False
     try:
-        return await send(text)
+        return await send(text, bot=bot)
     except Exception as e:
         logger.warning(f"telegram {kind}: {e}")
         return False
@@ -88,6 +105,8 @@ async def send_document(data: bytes, filename: str, caption: str = "") -> bool:
         raise RuntimeError("Telegram no configurado: faltan token o chat ID")
     await _fan_out(_cfg["chat_ids"], lambda cid: _send_document_one(token, cid, data, filename, caption))
     return True
+
+
 async def get_chats(token: str) -> list:
     async with httpx.AsyncClient(timeout=12) as c:
         r = await c.get(TG.format(token=token, method="getUpdates"), params={"limit": 100})

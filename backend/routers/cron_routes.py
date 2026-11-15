@@ -66,7 +66,7 @@ async def _safe_auto_review(bot: dict):
     except Exception as e:
         logger.exception("scheduled auto review")
         await bot["engine"].log("ERROR", f"Revisión IA automática falló: {str(e)[:160]}")
-        await notify.notify(f"{bot['prefix']}⚠️ <b>Revisión IA automática{bot['label']} falló</b>\n{str(e)[:300]}", "review")
+        await notify.notify(f"{bot['prefix']}⚠️ <b>Revisión IA automática{bot['label']} falló</b>\n{str(e)[:300]}", "review", bot=notify.bot_of(bot["engine"]))
 
 
 async def _safe_weekly(bot: dict):

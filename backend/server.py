@@ -129,7 +129,7 @@ async def set_profile(req: ProfileRequest):
         f"• {len(st['symbols'])} pares · velas {st['timeframe']} · criterios {MODE_INFO[st['signal_mode']]['name'].lower()}\n"
         f"• Riesgo {st['risk_per_trade']}%/op · máx {st['max_positions']} posiciones · {st['leverage']}x · límite diario {st['daily_loss_limit']}%\n"
         f"• Filtro 4h: {'sí' if st['htf_filter'] else 'no'} · IA: {'sí (≥' + str(st['ai_min_confidence']) + '%)' if st['ai_enabled'] else 'NO'}"
-        + (f"\n⚠️ {p['warning']}" if p["warning"] else ""), "review")
+        + (f"\n⚠️ {p['warning']}" if p["warning"] else ""), "review", bot="bybit")
     return {"settings": s.model_dump(), "profile_active": detect_profile(s)}
 
 

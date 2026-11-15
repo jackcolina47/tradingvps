@@ -76,6 +76,11 @@ export default function SettingsPanel({ settings, meta, profileActive, onSave, o
       body.ema_test_adx_min = Math.min(60, Math.max(5, v || 20));
       if (body.ema_test_adx_min !== v) clamped.push(`ADX mínimo (test EMA) → ${body.ema_test_adx_min}`);
     }
+    if ("ema_test_partial_atr" in body) {
+      const v = Number(body.ema_test_partial_atr);
+      body.ema_test_partial_atr = Math.min(3, Math.max(0.5, v || 1.5));
+      if (body.ema_test_partial_atr !== v) clamped.push(`Parcial test EMA (×ATR) → ${body.ema_test_partial_atr}`);
+    }
     delete body.bot_running;
     delete body.symbol_params;
     const ok = await onSave(body);

@@ -81,7 +81,7 @@ async def reoptimize(engine, settings, source: str = "manual") -> dict:
     await engine.db.meta.update_one({"_id": "reopt"}, {"$set": doc}, upsert=True)
     await engine.log("INFO", f"Re-optimización {'semanal' if source == 'auto' else 'manual'}: " + (" · ".join(_line(r) for r in results) or "sin pares"))
     if results:
-        await notify.notify(_tg(results, applied, turned), "review")
+        await notify.notify(_tg(results, applied, turned), "review", bot="bybit")
     return {"results": results, "applied": applied, "turned_profitable": [r["symbol"] for r in turned]}
 
 
@@ -144,7 +144,7 @@ async def prune(engine, settings) -> dict:
             off = []
     await engine.db.meta.update_one({"_id": "prune"}, {"$set": {"last_at": now_iso(), "warned": warned, "last_off": [o["key"] for o in off], "last_warned": [b["key"] for b in bad]}}, upsert=True)
     if bad or off or cleared:
-        await notify.notify(_prune_tg(bad, off, cleared, settings), "review")
+        await notify.notify(_prune_tg(bad, off, cleared, settings), "review", bot="bybit")
     return {"warned": [b["key"] for b in bad], "switched_off": [o["key"] for o in off], "cleared": cleared}
 
 

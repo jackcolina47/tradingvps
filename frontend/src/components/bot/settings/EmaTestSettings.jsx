@@ -55,6 +55,23 @@ export default function EmaTestSettings({ form, set, meta }) {
           </div>
         )}
       </div>
+      <div className="mt-3 rounded-sm border border-[#1E293B] bg-[#07090E]/60 p-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm text-slate-200">Cierre parcial 50% + breakeven</p>
+            <p className="text-[11px] text-slate-500">Cuando la operación va a favor el múltiplo de ATR indicado, cierra el 50% con beneficios y mueve el SL a breakeven (entrada + comisiones). El resto sigue abierto y se cierra solo: por breakeven o en el siguiente cruce contrario. Si el lote mínimo no permite dividir la posición, solo se mueve el SL a breakeven.</p>
+          </div>
+          <Switch data-testid="settings-ema-test-partial-switch" checked={!!form.ema_test_partial_enabled} onCheckedChange={(v) => set("ema_test_partial_enabled", v)} className="data-[state=checked]:bg-fuchsia-500" />
+        </div>
+        {form.ema_test_partial_enabled && (
+          <div className="mt-2 flex items-center gap-3">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-slate-500">Activar a +×ATR</p>
+            <Input data-testid="settings-ema-test-partial-atr-input" type="number" step={0.1} min={0.5} max={3} value={form.ema_test_partial_atr ?? 1.5}
+              onChange={(e) => set("ema_test_partial_atr", e.target.value)} className="num h-8 w-24 border-[#1E293B] bg-[#07090E] text-xs" />
+            <p className="text-[11px] text-slate-500">Recomendado 1.5 (la mitad del SL de seguridad de 3×ATR). Rango 0.5–3. Compáralo en Backtest con el interruptor encendido y apagado.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
