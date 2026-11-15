@@ -1,0 +1,28 @@
+{
+  "summary": "Iter85: Tested the new EMA 10/20 test-partial toggle (ema_test_partial_enabled/_atr, default 1.5, 0.5-3) and per-chat Telegram bot routing (telegram_chat_bots / telegram_chat_bots_2). Added /app/backend/tests/test_iter85_extra.py (20 tests). Full run with iter79/81/82/83/84/85/85_extra = 107/107 passed. Engine coverage: Bybit _manage_paper_position cross branch (partial halves qty, credits account, BE sl = entry*(1±2*FEE_RATE), short mirror, second tick does NOT re-partial, later BE close sets trade.reason='BREAKEVEN' with partial_tp=True, safety SL before partial closes as 'SL'), FX _manage_paper_position for HFM and Pepperstone (sl=entry±spread rounded to digits, rollover skips the rule, 0.01-lot path moves SL to BE without partial). Live paths: Bybit _ema_partial_live calls broker.close + broker.set_stop; when set_stop raises, partial_done stays True, next tick retries ONLY set_stop (no second close). FX metaapi payload omits takeProfit when None. Backtest ema_test with toggle ON → excursion.partial_closes > 0 and trades.partial True; toggle OFF → 0 partials. Telegram notify.notify routing: bot='bybit' only to chat A, bot='hfm' only to B, system to both, chat with no matching bot returns False, send() raises RuntimeError when no chat subscribes. Config API PUT /api/config with telegram_chat_bots filters invalid keys and keeps notify.BOTS order; empty list returns 400/422; settings PUT accepts/rejects ema_test_partial_atr bounds on Bybit, HFM and Pepperstone. Frontend: on /bybit (not /), /hotforex, /pepperstone the ema-test-card shows settings-ema-test-partial-switch; toggling reveals settings-ema-test-partial-atr-input (default 1.5); typing 9 and Guardar clamps the value to 3 with a toast; after reload the switch stays on with value=3. Admin/Ajustes → telegram-section shows telegram-chat-bots-box with checkboxes bybit/hfm/pepperstone; typing a value in telegram-chat-id-2-input makes telegram-chat-bots-2-box appear; unchecking every bot in a box and saving triggers the toast 'Cada chat debe recibir avisos de al menos un bot'; no horizontal overflow on 390px (scrollWidth-clientWidth=0). All UI changes were restored to defaults (enabled off / atr 1.5 / all three bots checked / chat-id-2 cleared). Note: the prompt said the Bybit panel is at '/' but on this build '/' is the bot picker and the Bybit panel lives at '/bybit' — the test uses that path.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter85_extra.py",
+    "/app/backend/tests/test_iter85_ema_partial_tg.py",
+    "/app/test_reports/pytest/iter85_extra.xml"
+  ],
+  "action_items": [
+    "Minor documentation nit: the review asks for the Bybit settings panel at '/', but this build serves the bot picker at '/' and the Bybit settings at '/bybit'. Confirm which is canonical or add a redirect."
+  ],
+  "critical_code_review_comments": [
+    "notify._cfg is mutated via dict.update in tests to restore state; consider exposing notify.snapshot()/restore() for safer teardown in tests.",
+    "Old test_iter80 (Bybit) still asserts the pre-iter85 behaviour (cross had no SL/TP, no partial); its 9 failures are expected because the feature deliberately changed. Either delete or update test_iter80 to the new rules."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter85_extra.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Password BlackCat2233@ from /app/memory/test_credentials.md",
+  "seed_data_creation": "None. All settings/config changes were restored: ema_test_partial_enabled=false, ema_test_partial_atr=1.5 on bybit/fx/pepper; telegram_chat_bots and _2 restored to the user's prior values. Isolated Mongo dbs (test_iter85x_*) dropped by the test teardown.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run new tests with -n 0 and REACT_APP_BACKEND_URL exported. test_iter80_ema_test.py has 9 failures that are STALE assertions pre-iter85 (cross used to have no SL/TP and no partial) — not iter85 regressions. Bybit UI panel is served at /bybit, not /. Weekend: forex market closed, so live engine coverage comes from the monkeypatched tests in test_iter85_extra.py (FakeBroker)."
+}

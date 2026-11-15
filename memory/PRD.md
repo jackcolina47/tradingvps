@@ -558,3 +558,9 @@
 - P1: Telegram: configurar token/chat en el VPS y validar alertas end-to-end
 - P3: server.py ~350 líneas (routers cron/weekly/walk-forward/bybit/ai/analysis separados); candidato siguiente: klines/positions del bot cripto (fx/engine.py y fx/routes.py ya divididos en la iteración 50)
 - P3: `test_iter5_live_mode.py` / `test_iter28_cashflows.py` usan el mock de Bybit en el puerto 8011, ocupado por nginx en este pod: migrarlos a `BYBIT_MOCK_PORT=8013` como `test_iter49`.
+
+## Iteración 85 (jun 2026) — Parcial 50% + breakeven en Test cruce EMA · Telegram por bot
+- **Test cruce EMA (Bybit, HotForex, Pepperstone)**: nuevo toggle `ema_test_partial_enabled` + `ema_test_partial_atr` (0.5–3, por defecto 1.5×ATR). Al llegar a +N×ATR cierra el 50% y mueve el SL a breakeven (Bybit: entrada ± 2×fee; FX: entrada ± spread). El resto cierra por `BREAKEVEN` (nuevo motivo) o `CRUCE`. Si el lote mínimo no permite dividir, solo breakeven. Paper, REAL (reintenta el set_stop si falla) y Backtest (`ema_test` usa los ajustes guardados). Código: `risk.ema_partial_due`, `engine._ema_partial_live`, `fx/engine_positions._ema_partial_live`, ramas `cross_only` de ambos backtests.
+- **Telegram por bot**: `telegram_chat_bots` / `telegram_chat_bots_2` (bybit, hfm, pepperstone). `notify.notify(text, kind, bot=...)` filtra los chats; avisos sin bot (IA caída, copias, prueba) van a todos. UI: caja de selección bajo cada chat ID en Alertas de Telegram.
+- Tests: `tests/test_iter85_ema_partial_tg.py`, `tests/test_iter85_extra.py` · informe `/app/test_reports/iteration_85.json` (107/107, frontend 100%).
+- Nota: `tests/test_iter80_ema_test.py` está obsoleto (afirma el comportamiento previo al SL de seguridad y al port FX).
