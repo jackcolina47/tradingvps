@@ -1,0 +1,29 @@
+{
+  "summary": "Iter86 FRONTEND: tested the new TradingView-style chart on /bybit, /hotforex, /pepperstone. On /bybit (BTCUSDT) placed every drawing tool (ray, hline, vline, channel, rect, measure, long, short, arrow, text via window.prompt accepted with 'TEST_NOTE', plus trend/fib which the retry proved work when the clicks stay inside the price pane) — each adds one entry to localStorage['chart.drawings.bybit.BTCUSDT'] with the correct type and visibly paints on chart-drawings-canvas. Selection: mousedown on an hline opens chart-drawing-bar with all 8 color swatches and widths 1-4; color + width=3 update persists to the LS entry; chart-drawing-delete removes it; Escape returns to cursor (chart-tool-cursor aria-pressed=true) and clears a draft. Hide button toggles the overlay (visual on class check — see the minor issue below). Magnet: toggle writes localStorage['chart.magnet']='1' and places an hline at a snapped price. Persistence: 9 drawings survive a full reload with count intact. Per-pair isolation: switching to ETHUSDT (watchlist-row-ETHUSDT) shows 0 drawings; switching back to BTCUSDT restores 9. Timeframe change (1m↔5m) preserves count. Legend shows 'O H L C +chg%' and the OHLC values follow the mouse / fall back to the last candle. Style popover (chart-style-popover) opens above the chart, all four chart-type-* cycle without errors (and continue working inside fullscreen above the fs layer), chart-style-reset works. Indicator chips chart-ind-ema10/20/50/bb/vwap/macd/adx/gap/vol toggle on and off, including with all sub-pane indicators off. chart-screenshot-btn downloads 'BTCUSDT-1m-2026-11-151622.png' (<SYMBOL>-<tf>-....png). Fullscreen enter/exit via chart-fullscreen-btn and Esc. chart-tool-clear with accepted window.confirm wipes the pair. On /hotforex (XAUUSD) and /pepperstone (XAUUSD) the sanity set (trend + fib, BB/MACD/VWAP toggles, Heikin Ashi, back to candles) all draw and render; VWAP renders on FX bots too even without real volume. Mobile 390x844 on /bybit: toolbar hidden by default, chart-tools-btn opens it, panel has 0 horizontal overflow, indicator chips wrap. Cleanup: all chart.drawings.* keys and chart.style removed, chart.magnet cleared; only chart.tools and chart.indicators remain (user toggles).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "DrawToolbar · chart-tool-hide", "issue": "Button toggles correctly (class flips to bg-amber-500 when hidden, and the overlay really hides) but it is missing the aria-pressed attribute that every other toggle button in the toolbar has (chart-tool-* tools, chart-tool-magnet, chart-tools-btn). Add aria-pressed={dr.hidden} to /app/frontend/src/components/bot/chart/DrawToolbar.jsx line 35 for a11y consistency.", "selector": "[data-testid=\"chart-tool-hide\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "ChartStyle popover", "issues": ["React dev warning: '<span> cannot be a child of <option>'. The inner <span> is injected by the preview editor tooling (x-ve-dynamic) around the {w}px text inside each <option>, not written in source. Not reproducible in a plain build, but noisy in the preview console. Consider rendering the option label as a plain string template literal (e.g. `${w}px`) so the annotator does not wrap it — already is a template literal, but the array mapper still receives the wrapper. No functional impact, selects still work."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "LOW: add aria-pressed={dr.hidden} to chart-tool-hide in DrawToolbar.jsx to match other toggle buttons (and help SR / tests)."
+  ],
+  "critical_code_review_comments": [
+    "useDrawings onDown rejects clicks outside the main price pane ('if (x > c.W || y > c.H) return;'). With the default indicators (rsi+adx+gap enabled), the price pane is ~45% of the canvas height, so testers / users clicking near the vertical centre will silently see 'nothing happens'. Consider a subtle hint (cursor change to not-allowed over the sub-panes while a tool is active) so the gesture failure is discoverable.",
+    "ChartStyle popover width 72 (18rem) plus max-h 70vh is fine on desktop but on 390px mobile the popover extends under the right edge; works via scroll but an align='end' + sideOffset tweak would avoid clipping. Not tested here (not in scope)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "100% of in-scope scenarios (all drawing tools, select/color/width/delete, Esc, magnet, persistence over reload, per-pair isolation, timeframe preservation, hide toggle, clear-all, legend, indicator chips, style popover + all 4 chart types, screenshot download, fullscreen, mobile layout, HF/PP sanity) — no pageerror and no app-side console errors."},
+  "test_credentials": "BlackCat2233@ (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. Cleared every chart.drawings.* key, chart.style and chart.magnet at the end. chart.tools and chart.indicators are left as the user's prefs.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Chart tests must click inside the main price pane. With default indicators RSI+ADX+GAP enabled the main pane is ~y:0..0.45 of the canvas; clicks at y>0.5 are swallowed by the sub-pane guard in useDrawings.onDown. Use relative y in [0.1,0.4] for safe placement. Drawings localStorage key is 'chart.drawings.<bot>.<symbol>' where <bot> comes from window.location.pathname.split('/')[1] (so '/bybit' → 'bybit', '/hotforex' → 'hotforex', '/pepperstone' → 'pepperstone'). When accepting window.prompt or window.confirm in Playwright, register the dialog handler with page.once('dialog', ...) BEFORE the click, not after — tested working here.",
+  "rca of the issue": "N/A — no functional bug. Only a minor missing aria-pressed attribute and a dev-env React warning."
+}

@@ -71,6 +71,8 @@ function addMain(a, style) {
   a.digits = null;
 }
 
+const fineFormat = (digits) => { const p = Math.max(2, digits ?? 2); return { type: "price", precision: p, minMove: Number((10 ** -p).toFixed(p)) }; };
+
 function syncPanes(a, ind, d, style) {
   const want = Object.keys(SUBS).filter((k) => ind[k]);
   if (want.join() === a.subKey) return;
@@ -78,15 +80,16 @@ function syncPanes(a, ind, d, style) {
   try { while (a.chart.panes().length > 1) a.chart.removePane(a.chart.panes().length - 1); } catch (e) { /* already gone */ }
   a.sub = {};
   const fmt = { type: "price", precision: 2, minMove: 0.01 };
+  const fine = fineFormat(a.digits);
   want.forEach((k, i) => {
     const def = SUBS[k];
     const st = style.lines[k] || def;
     const list = [];
-    if (def.hist) list.push({ key: def.hist, series: a.chart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false, priceFormat: { type: "price", precision: 5, minMove: 0.00001 } }, i + 1) });
+    if (def.hist) list.push({ key: def.hist, series: a.chart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false, priceFormat: fine }, i + 1), fine: true });
     def.keys.forEach((key, j) => {
-      const series = a.chart.addSeries(LineSeries, { ...lineOpts(j ? SIGNAL_COLOR : st.color, j ? 1 : st.width), lastValueVisible: !j, priceFormat: def.hist ? { type: "price", precision: 5, minMove: 0.00001 } : fmt }, i + 1);
+      const series = a.chart.addSeries(LineSeries, { ...lineOpts(j ? SIGNAL_COLOR : st.color, j ? 1 : st.width), lastValueVisible: !j, priceFormat: def.hist ? fine : fmt }, i + 1);
       if (!j) def.levels.forEach(([price, color]) => series.createPriceLine({ price, color, lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: false }));
-      list.push({ key, series, styled: !j });
+      list.push({ key, series, styled: !j, fine: !!def.hist });
     });
     if (d) list.forEach((s) => s.series.setData(shift(d[s.key] || [], a.daily)));
     a.sub[k] = list;
@@ -132,6 +135,7 @@ export function render(a, d, lines, tf) {
     a.digits = digits;
     const priceFormat = { type: "price", precision: digits, minMove: Number((10 ** -digits).toFixed(digits)) };
     [a.main, ...Object.values(a.over).flat().map((s) => s.series)].forEach((s) => s.applyOptions({ priceFormat }));
+    Object.values(a.sub).flat().filter((s) => s.fine).forEach((s) => s.series.applyOptions({ priceFormat: fineFormat(digits) }));
     a.lines = [];
   }
   a.main.setData(shift(mainData(d.candles, a.mainType), daily));

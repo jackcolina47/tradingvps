@@ -572,3 +572,9 @@
 ## Iteración 87 (jun 2026) — Gráfico: bug al cambiar de par + ADX y distancia EMAs
 - Bug: tras arrastrar el eje de precios, al cambiar de par el gráfico quedaba vacío (la escala manual conservaba el rango del par anterior). Fix: `resetScales()` (autoScale) al cambiar par/temporalidad (`chart/useChart.js`, `PriceChart.jsx`).
 - Nuevos indicadores con botón mostrar/ocultar (persisten en localStorage): ADX 14 (línea guía 24) y Dist. EMA 10/20 en ×ATR (guías ±0.5). `/klines` devuelve `adx` y `gap` (`backend/chart.py`); paneles inferiores dinámicos (`syncPanes`). Los 3 bots comparten el componente.
+
+## Iteración 88 (jun 2026) — Gráfico estilo TradingView (3 bots, componente compartido)
+- **Dibujo** (canvas superpuesto, `chart/drawings.js`, `chart/useDrawings.js`, `chart/DrawToolbar.jsx`): tendencia, rayo, horizontal, vertical, canal paralelo, rectángulo, Fibonacci, regla (precio/%/velas), posición larga/corta (R:R), flecha y texto. Clic-clic para colocar; seleccionar, arrastrar cuerpo o puntos, color (8) y grosor (1–4), Supr para borrar, imán OHLC, ocultar/mostrar, borrar todo. Guardados por bot+par en localStorage (`chart.drawings.{bot}.{symbol}`), puntos como {t, p}.
+- **Indicadores nuevos**: EMA 10/20/50, Bollinger 20,2, VWAP (anclado diario), MACD 12,26,9 (`backend/chart.py` LINE_KEYS; series alineadas con puntos vacíos para NaN).
+- **Estilo** (`chart/ChartStyle.jsx`, localStorage `chart.style`): tipo de gráfico (velas, Heikin Ashi, barras, línea), colores de velas, color y grosor por indicador.
+- **Leyenda** OHLC + indicadores bajo el cursor (`chart/ChartLegend.jsx`), captura PNG con dibujos, botón para ocultar la barra de herramientas.

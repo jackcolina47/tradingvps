@@ -32,7 +32,7 @@ export function DrawToolbar({ dr }) {
       ))}
       <span className="my-0.5 h-px bg-[#1E293B]" />
       <button data-testid="chart-tool-magnet" title="Imán a máximo / mínimo / apertura / cierre de la vela" aria-pressed={dr.snap} onClick={() => dr.setSnap((v) => !v)} className={cls(dr.snap)}><Magnet className="h-3.5 w-3.5" /></button>
-      <button data-testid="chart-tool-hide" title={dr.hidden ? "Mostrar dibujos" : "Ocultar dibujos"} onClick={() => dr.setHidden((v) => !v)} className={cls(dr.hidden)}>{dr.hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}</button>
+      <button data-testid="chart-tool-hide" title={dr.hidden ? "Mostrar dibujos" : "Ocultar dibujos"} aria-pressed={dr.hidden} onClick={() => dr.setHidden((v) => !v)} className={cls(dr.hidden)}>{dr.hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}</button>
       <button data-testid="chart-tool-clear" title={`Borrar todos los dibujos de este par (${dr.count})`} disabled={!dr.count}
         onClick={() => window.confirm(`¿Borrar los ${dr.count} dibujos de este par?`) && dr.clear()} className={`${BTN} text-slate-400 hover:bg-rose-500/20 hover:text-rose-300 disabled:opacity-30`}><Trash2 className="h-3.5 w-3.5" /></button>
     </div>
