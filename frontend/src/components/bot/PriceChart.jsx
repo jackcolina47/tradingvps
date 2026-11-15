@@ -1,14 +1,24 @@
 import { useEffect, useRef, useState } from "react";
-import { CandlestickChart, Loader2, Maximize2, Minimize2 } from "lucide-react";
+import { Camera, CandlestickChart, Loader2, Maximize2, Minimize2, PencilRuler } from "lucide-react";
 import { Panel } from "./Panel";
 import { fmtPrice } from "@/lib/api";
-import { useChart, render, applyIndicators, resetScales } from "./chart/useChart";
+import { useChart, render, applyIndicators, applyStyle, resetScales, OVERLAYS, SUBS, DEFAULT_STYLE } from "./chart/useChart";
+import { useDrawings } from "./chart/useDrawings";
+import { DrawToolbar, DrawingBar } from "./chart/DrawToolbar";
+import ChartLegend from "./chart/ChartLegend";
+import ChartStyle from "./chart/ChartStyle";
 import { useHistory } from "./chart/useHistory";
 
 const TFS = ["1m", "5m", "15m", "1h", "4h", "1d"];
 const SOURCE = { bybit: "Velas Bybit", bitget: "Velas Bitget", hfm: "Velas del bróker · MetaTrader", yahoo: "Velas Yahoo Finance" };
-const IND = [["ema9", "EMA 9", "text-amber-400"], ["ema21", "EMA 21", "text-sky-400"], ["ema200", "EMA 200", "text-slate-300"], ["rsi", "RSI 14", "text-pink-400"], ["adx", "ADX 14", "text-violet-400"], ["gap", "Dist. EMA 10/20 (×ATR)", "text-teal-400"], ["vol", "Volumen", "text-slate-400"]];
+const IND = [...Object.entries({ ...OVERLAYS, ...SUBS }).map(([k, v]) => [k, v.label]), ["vol", "Volumen"]];
 const DEFAULT_IND = { ema9: true, ema21: true, ema200: true, rsi: true, adx: true, gap: true, vol: true };
+const loadStyle = () => {
+  try {
+    const s = JSON.parse(localStorage.getItem("chart.style") || "{}");
+    return { ...DEFAULT_STYLE, ...s, lines: { ...DEFAULT_STYLE.lines, ...(s.lines || {}) } };
+  } catch (e) { return DEFAULT_STYLE; }
+};
 const loadInd = () => {
   try { return { ...DEFAULT_IND, ...JSON.parse(localStorage.getItem("chart.indicators") || "{}") }; } catch (e) { return DEFAULT_IND; }
 };
@@ -17,12 +27,45 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
   const [tf, setTf] = useState(defaultTf);
   const [fs, setFs] = useState(false);
   const [ind, setInd] = useState(loadInd);
+  const [style, setStyle] = useState(loadStyle);
+  const [tools, setTools] = useState(() => (localStorage.getItem("chart.tools") ?? (window.innerWidth >= 640 ? "1" : "0")) === "1");
   const ref = useRef(null);
+  const wrap = useRef(null);
+  const canvas = useRef(null);
   const fitted = useRef("");
   const { data, meta, loadOlder } = useHistory(symbol, tf);
   const api = useChart(ref, () => { if (fitted.current === `${symbol}-${tf}`) loadOlder(); });
 
+  const dr = useDrawings(api, data, symbol, wrap, canvas);
+  const [ready, setReady] = useState(false);
+  useEffect(() => setReady(true), []);
+
   useEffect(() => setTf(defaultTf), [defaultTf]);
+  useEffect(() => { localStorage.setItem("chart.tools", tools ? "1" : "0"); }, [tools]);
+
+  useEffect(() => {
+    localStorage.setItem("chart.style", JSON.stringify(style));
+    const a = api.current;
+    if (a && applyStyle(a, style) && data) render(a, data, meta.lines, tf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [style, api]);
+
+  const screenshot = () => {
+    const a = api.current;
+    if (!a) return;
+    const shot = a.chart.takeScreenshot();
+    const out = document.createElement("canvas");
+    out.width = shot.width; out.height = shot.height;
+    const g = out.getContext("2d");
+    g.fillStyle = "#07090E";
+    g.fillRect(0, 0, out.width, out.height);
+    g.drawImage(shot, 0, 0);
+    if (canvas.current && !dr.hidden) g.drawImage(canvas.current, 0, 0, out.width, out.height);
+    const link = document.createElement("a");
+    link.download = `${symbol}-${tf}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.png`;
+    link.href = out.toDataURL("image/png");
+    link.click();
+  };
 
   useEffect(() => {
     const a = api.current;
@@ -43,7 +86,7 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
 
   useEffect(() => {
     localStorage.setItem("chart.indicators", JSON.stringify(ind));
-    if (api.current) applyIndicators(api.current, ind, data);
+    if (api.current) applyIndicators(api.current, ind, data, style);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ind, api]);
 
@@ -69,6 +112,11 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
               </button>
             ))}
           </div>
+          <button data-testid="chart-tools-btn" onClick={() => setTools((v) => !v)} title={tools ? "Ocultar herramientas de dibujo" : "Herramientas de dibujo"} aria-pressed={tools}
+            className={`rounded-sm border p-1 transition-colors ${tools ? "border-amber-500/60 text-amber-400" : "border-[#1E293B] text-slate-400 hover:text-slate-100"}`}><PencilRuler className="h-3.5 w-3.5" /></button>
+          <ChartStyle style={style} setStyle={setStyle} />
+          <button data-testid="chart-screenshot-btn" onClick={screenshot} title="Descargar captura del gráfico (PNG)"
+            className="rounded-sm border border-[#1E293B] p-1 text-slate-400 transition-colors hover:text-slate-100"><Camera className="h-3.5 w-3.5" /></button>
           <button data-testid="chart-fullscreen-btn" onClick={() => setFs((v) => !v)} title={fs ? "Salir de pantalla completa (Esc)" : "Pantalla completa"}
             className="rounded-sm border border-[#1E293B] p-1 text-slate-400 transition-colors hover:text-slate-100">
             {fs ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
@@ -77,9 +125,9 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
       }>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-3 font-mono text-[11px]">
         <span data-testid="chart-last-price" className="text-base font-semibold text-slate-50">{fmtPrice(last?.close, data?.digits)}</span>
-        {IND.map(([k, label, color]) => (
-          <button key={k} data-testid={`chart-ind-${k}`} onClick={() => setInd((v) => ({ ...v, [k]: !v[k] }))} aria-pressed={!!ind[k]}
-            className={`rounded-sm border px-1.5 py-px transition-colors ${ind[k] ? `border-[#1E293B] ${color}` : "border-transparent text-slate-600 line-through hover:text-slate-400"}`}>
+        {IND.map(([k, label]) => (
+          <button key={k} data-testid={`chart-ind-${k}`} onClick={() => setInd((v) => ({ ...v, [k]: !v[k] }))} aria-pressed={!!ind[k]} style={ind[k] ? { color: style.lines[k]?.color || "#94A3B8" } : undefined}
+            className={`rounded-sm border px-1.5 py-px transition-colors ${ind[k] ? "border-[#1E293B]" : "border-transparent text-slate-600 line-through hover:text-slate-400"}`}>
             {label}
           </button>
         ))}
@@ -89,7 +137,14 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
           {meta.source && <span data-testid="chart-source">{SOURCE[meta.source] || meta.source} · {data?.candles?.length || 0} velas · hora local</span>}
         </span>
       </div>
-      <div ref={ref} data-testid="price-chart" className={`w-full ${fs ? "h-[calc(100vh-96px)]" : "h-[560px]"}`} />
+      <div ref={wrap} data-testid="price-chart-wrap" className={`relative mt-1 w-full ${fs ? "h-[calc(100vh-120px)]" : "h-[560px]"}`}>
+        <div ref={ref} data-testid="price-chart" className="absolute inset-0" />
+        <canvas ref={canvas} data-testid="chart-drawings-canvas" onPointerDown={dr.onDown} onPointerMove={dr.onMove}
+          className="absolute inset-0 z-10 h-full w-full" style={{ pointerEvents: dr.tool ? "auto" : "none", cursor: "crosshair", touchAction: "none" }} />
+        <ChartLegend api={api} ready={ready} data={data} ind={ind} style={style} offset={tools ? 44 : 8} />
+        {tools && <DrawToolbar dr={dr} />}
+        <DrawingBar dr={dr} />
+      </div>
     </Panel>
   );
 }

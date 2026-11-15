@@ -7,7 +7,8 @@ from models import Trade, Position
 WARMUP = 220
 MAX_LIMIT = 700
 DEFAULT_LIMIT = 300
-EMPTY_KEYS = ("candles", "volume", "ema9", "ema21", "ema200", "rsi", "adx", "gap", "markers", "lines")
+LINE_KEYS = ("ema9", "ema10", "ema20", "ema21", "ema50", "ema200", "bb_up", "bb_mid", "bb_low", "vwap", "rsi", "macd", "macd_signal", "adx", "gap")
+EMPTY_KEYS = ("candles", "volume", "macd_hist", *LINE_KEYS, "markers", "lines")
 
 
 def clamp(limit: int) -> int:
@@ -36,6 +37,10 @@ async def build(db, symbol: str, tf: str, rows: list, step: int, limit: int, bef
     if not rows:
         return {"symbol": symbol, "tf": tf, "source": source, "has_more": False, "digits": price_digits(symbol, 0), **{k: [] for k in EMPTY_KEYS}}
     df = build_df(rows)
+    # daily-anchored VWAP (UTC); spot FX feeds report no volume → equal weight per candle
+    w = df["volume"].where(df["volume"] > 0, 1.0) if df["volume"].fillna(0).sum() > 0 else df["volume"] * 0 + 1.0
+    day = df["ts"] // 86_400_000
+    df["vwap"] = ((df["high"] + df["low"] + df["close"]) / 3 * w).groupby(day).cumsum() / w.groupby(day).cumsum()
     if before is not None:
         df = df[(df["ts"] // 1000) < before]
     has_more = len(df) > limit
@@ -45,8 +50,8 @@ async def build(db, symbol: str, tf: str, rows: list, step: int, limit: int, bef
         return {"symbol": symbol, "tf": tf, "source": source, "has_more": False, **{k: [] for k in EMPTY_KEYS}}
     first, end = times[0], times[-1] + step
 
-    def line(col):
-        return [{"time": t, "value": round(float(v), 8)} for t, v in zip(times, df[col].tolist())]
+    def line(col):  # NaN → whitespace point, so every series stays index-aligned with the candles
+        return [{"time": t, "value": round(float(v), 8)} if v == v else {"time": t} for t, v in zip(times, df[col].tolist())]
 
     df = df.assign(gap=((df["ema10"] - df["ema20"]) / df["atr"].where(df["atr"] > 0)).fillna(0.0), adx=df["adx"].fillna(0.0))  # EMA10−EMA20 in ATR units (test cruce EMA)
     candles = [{"time": t, "open": o, "high": h, "low": lo, "close": c} for t, o, h, lo, c in zip(times, df["open"], df["high"], df["low"], df["close"])]
@@ -74,5 +79,6 @@ async def build(db, symbol: str, tf: str, rows: list, step: int, limit: int, bef
                      {"price": p.tp, "title": "TP", "color": "#10B981"}]
     markers.sort(key=lambda m: m["time"])
     return {"symbol": symbol, "tf": tf, "source": source, "has_more": has_more, "digits": price_digits(symbol, candles[-1]["close"] if candles else 0),
-            "candles": candles, "volume": volume, "ema9": line("ema9"), "ema21": line("ema21"), "ema200": line("ema200"), "rsi": line("rsi"), "adx": line("adx"), "gap": line("gap"),
+            "candles": candles, "volume": volume, **{k: line(k) for k in LINE_KEYS},
+            "macd_hist": [{"time": t, "value": round(float(v), 8), "color": "rgba(16,185,129,0.55)" if v >= 0 else "rgba(239,68,68,0.55)"} for t, v in zip(times, df["macd_hist"].fillna(0).tolist())],
             "markers": markers, "lines": lines}
