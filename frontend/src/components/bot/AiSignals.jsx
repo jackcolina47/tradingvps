@@ -29,7 +29,7 @@ const NO_AI_BAR = ["SIN_IA", "ERROR", "BLOQUEADA", "NOTICIAS", "FUNDING", "MERCA
 const RISK_CLS = { BAJO: "text-emerald-400", MEDIO: "text-amber-300", ALTO: "text-rose-400" };
 const GATE_TIP = "Se ejecuta solo si la IA aprueba y la confianza ≥ mínimo (Ajustes → confianza mínima). El riesgo es informativo: no decide la ejecución.";
 
-function SignalCard({ s, minConfidence }) {
+function SignalCard({ s, minConfidence, rulesOnly }) {
   const min = s.ai_min_confidence ?? minConfidence;
   const belowMin = s.ai_decision === "APROBADA" && !s.executed && Number.isInteger(min) && s.ai_confidence < min;
   const showMin = Number.isInteger(min) && s.ai_decision === "APROBADA";
@@ -43,13 +43,13 @@ function SignalCard({ s, minConfidence }) {
         </div>
         <span data-testid={`ai-decision-${s.id}`} title={belowMin ? GATE_TIP : undefined}
           className={`rounded-sm border px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider ${belowMin ? DECISION_CLS.BLOQUEADA : DECISION_CLS[s.ai_decision]}`}>
-          {s.ai_decision === "SIN_IA" ? "Sin IA" : s.ai_decision === "SESION" ? "Sesión" : belowMin ? "Aprobada · bajo mínimo" : s.ai_decision}
+          {s.ai_decision === "SIN_IA" ? (rulesOnly ? "Entrada directa" : "Sin IA") : rulesOnly && s.ai_decision === "RECHAZADA" ? "Bloqueada por regla" : rulesOnly && s.ai_decision === "APROBADA" ? "Pasa las reglas" : s.ai_decision === "SESION" ? "Sesión" : belowMin ? "Aprobada · bajo mínimo" : s.ai_decision}
         </span>
       </div>
       <p className="mt-1 font-mono text-[10px] text-slate-500">
         {STRATEGY_LABELS[s.strategy]} · {fmtPrice(s.price)} · SL {fmtPrice(s.sl)} · TP {fmtPrice(s.tp)} · {fmtTime(s.created_at)}
       </p>
-      {!NO_AI_BAR.includes(s.ai_decision) && (
+      {!NO_AI_BAR.includes(s.ai_decision) && !rulesOnly && (
         <div data-testid={`ai-gate-${s.id}`} title={GATE_TIP} className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px]">
           <span className="flex min-w-[180px] flex-1 items-center gap-2">
             <span className="uppercase tracking-wider text-slate-500">Confianza IA</span>
@@ -67,7 +67,7 @@ function SignalCard({ s, minConfidence }) {
       {s.ai_reasoning && <p className="mt-2 text-[12px] leading-relaxed text-slate-300">{s.ai_reasoning}</p>}
       {s.ai_stage != null && (
         <p data-testid={`ai-stage-${s.id}`} className="mt-1 font-mono text-[10px] text-slate-500">
-          Etapa {s.ai_stage} · {s.ai_model} · {s.ai_ms} ms
+          {rulesOnly ? "Filtro de reglas" : `Etapa ${s.ai_stage}`} · {s.ai_model} · {s.ai_ms} ms
           {(s.ai_adjusted_sl || s.ai_adjusted_tp) && <span className="text-sky-300"> · IA sugiere{s.ai_adjusted_sl ? ` SL ${fmtPrice(s.ai_adjusted_sl)}` : ""}{s.ai_adjusted_tp ? ` TP ${fmtPrice(s.ai_adjusted_tp)}` : ""} (solo registrado)</span>}
         </p>
       )}
@@ -97,12 +97,12 @@ const UsageChip = ({ usage, ai }) => {
   );
 };
 
-export default function AiSignals({ signals, ai, usage, minConfidence }) {
+export default function AiSignals({ signals, ai, usage, minConfidence, rulesOnly = false, title = "Evaluación IA", emptyText = "Cuando el bot detecte una señal, la IA la evaluará aquí con su razonamiento.", className = "lg:col-span-4" }) {
   return (
-    <Panel testId="ai-signals-panel" title="Evaluación IA" icon={Sparkles} className="lg:col-span-4" bodyClass="max-h-[480px] overflow-y-auto thin-scroll" delay={260}
+    <Panel testId="ai-signals-panel" title={title} icon={Sparkles} className={className} bodyClass="max-h-[480px] overflow-y-auto thin-scroll" delay={260}
       actions={<UsageChip usage={usage} ai={ai} />}>
-      {signals.length ? signals.map((s) => <SignalCard key={s.id} s={s} minConfidence={minConfidence} />) : (
-        <Empty testId="ai-signals-empty" text="Cuando el bot detecte una señal, la IA la evaluará aquí con su razonamiento." />
+      {signals.length ? signals.map((s) => <SignalCard key={s.id} s={s} minConfidence={minConfidence} rulesOnly={rulesOnly} />) : (
+        <Empty testId="ai-signals-empty" text={emptyText} />
       )}
     </Panel>
   );

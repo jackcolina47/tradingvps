@@ -27,7 +27,7 @@ const withAuth = (client) => {
 
 // One shared client: the active bot (crypto → /api, HotForex → /api/fx, Pepperstone → /api/pepper) switches the base URL so every panel is reusable.
 export const http = withAuth(axios.create({ baseURL: API, timeout: 90000 }));
-export const BOT_API = { fx: "/api/fx", pepper: "/api/pepper" };
+export const BOT_API = { fx: "/api/fx", pepper: "/api/pepper", lab: "/api/lab" };
 export const setApiBase = (bot) => { http.defaults.baseURL = BOT_API[bot] ? `${BACKEND}${BOT_API[bot]}` : API; };
 // Global features (chat, backups, VPS package) always talk to /api, whichever dashboard is open. Use relative paths ("/chat").
 // (In the VPS build REACT_APP_BACKEND_URL is "" so API is relative and could not be used as an absolute URL with `http`.)

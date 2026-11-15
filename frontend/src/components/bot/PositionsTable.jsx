@@ -39,13 +39,13 @@ const TD = ({ children, right, className = "" }) => (
   <td className={`whitespace-nowrap px-3 py-2.5 ${right ? "text-right" : ""} ${className}`}>{children}</td>
 );
 
-export default function PositionsTable({ positions, onClose, onCloseAll }) {
+export default function PositionsTable({ positions, onClose, onCloseAll, aiReview = true }) {
   if (!positions.length) return <Empty testId="positions-empty" text="Sin posiciones abiertas. El bot abrirá operaciones cuando una señal pase los filtros de riesgo y la IA." />;
   const anyLive = positions.some((p) => p.live);
   return (
     <div className="overflow-x-auto thin-scroll">
       <div className="flex items-center justify-end gap-2 border-b border-[#1E293B] px-3 py-1.5">
-        <AiReviewNowButton />
+        {aiReview && <AiReviewNowButton />}
         {onCloseAll && positions.length > 1 && (
           <AlertDialog>
             <AlertDialogTrigger asChild>

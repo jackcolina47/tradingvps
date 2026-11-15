@@ -405,7 +405,7 @@ def _candles_txt(cs: list, digits: int = 6) -> str:
     return "; ".join(f"O{c['open']:.{digits}g} H{c['high']:.{digits}g} L{c['low']:.{digits}g} C{c['close']:.{digits}g}" for c in cs)
 
 
-async def analyze_trade(t: dict, signal: dict | None, pa: dict, before: list, during: list, tf: str, currency: str) -> dict:
+async def analyze_trade(t: dict, signal: dict | None, pa: dict, before: list, during: list, tf: str, currency: str, known_rules: list = None) -> dict:
     sig_txt = "Sin señal vinculada (operación anterior al registro de señales)."
     if signal:
         sig_txt = (f"Puntuación {signal.get('score')} · motivos técnicos: {'; '.join(signal.get('reasons') or [])}\n"
@@ -422,7 +422,10 @@ async def analyze_trade(t: dict, signal: dict | None, pa: dict, before: list, du
         f"ÚLTIMAS {len(before)} VELAS ANTES DE ENTRAR ({tf}, antigua→reciente): {_candles_txt(before)}\n"
         f"VELAS DURANTE LA OPERACIÓN ({tf}, {len(during)}): {_candles_txt(during[:40])}{' …' if len(during) > 40 else ''}\n"
         f"Nota del usuario: {t.get('note') or '—'}\n"
-        "Haz el análisis."
+        + ("REGLAS YA GUARDADAS (la «lesson» se guardará como regla nueva que filtra entradas futuras: debe poder comprobarse con los datos de una señal "
+           "—indicadores, tendencia, velas previas, niveles, hora— y si ya está cubierta por alguna de estas, devuelve \"lesson\":\"\"):\n"
+           + "\n".join(f"- {r}" for r in known_rules) + "\n" if known_rules is not None else "")
+        + "Haz el análisis."
     )
     data = parse_json(await _ask(_chat(REVIEW_SYSTEM, "trade-review"), prompt), "análisis de operación")
     verdict = str(data.get("verdict", "ACEPTABLE")).upper()

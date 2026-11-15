@@ -48,6 +48,10 @@ fx_market._shared_owner = fx_engine
 FX_BOTS = ((fx_engine, fx_store, fx_news), (pep_engine, pep_store, pep_news))
 ALL_ENGINES = (engine, fx_engine, pep_engine)
 
+from lab import LabEngine  # noqa: E402
+
+lab_engine = LabEngine(db, engine)  # paper-only research clone of the Bybit bot (test cruce EMA)
+
 
 async def _ai_health_event(event: str, h: dict):
     """AI provider down/up → log in both bots (they share the AI config) + Telegram 'system' alert."""

@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
 MAX_RULES = 30
+MAX_MISSES = 3  # winners a rule would have blocked before it is switched off automatically
 
 
 class RuleIn(BaseModel):
@@ -23,11 +24,46 @@ class RulePatch(BaseModel):
 
 def _pub(d: dict) -> dict:
     return {"id": str(d["_id"]), "text": d["text"], "symbol": d.get("symbol") or "", "enabled": d.get("enabled", True),
-            "source_trade_id": d.get("source_trade_id"), "verdict": d.get("verdict"), "created_at": d.get("created_at"), "hits": d.get("hits", 0)}
+            "source_trade_id": d.get("source_trade_id"), "verdict": d.get("verdict"), "created_at": d.get("created_at"), "hits": d.get("hits", 0),
+            "misses": d.get("misses", 0), "auto": bool(d.get("auto"))}
 
 
 async def list_rules(db) -> List[dict]:
-    return [_pub(d) async for d in db.ai_rules.find().sort("_id", -1)]
+    """Every rule + what its blocked signals would have done (shadow trades of signals it rejected)."""
+    stats = {s["_id"]: s async for s in db.shadow_trades.aggregate([{"$match": {"rule_id": {"$ne": None}}}, {"$group": {
+        "_id": "$rule_id", "n": {"$sum": 1}, "pnl": {"$sum": "$pnl"}, "wins": {"$sum": {"$cond": [{"$gt": ["$pnl", 0]}, 1, 0]}}}}])}
+    out = []
+    async for d in db.ai_rules.find().sort("_id", -1):
+        s = stats.get(str(d["_id"]))
+        out.append({**_pub(d), "blocked_closed": s["n"] if s else 0, "blocked_wins": s["wins"] if s else 0, "blocked_pnl": round(s["pnl"], 2) if s else 0.0})
+    return out
+
+
+async def auto_add(db, text: str, trade_id: str, verdict: str) -> Optional[dict]:
+    """Rule learned from a closed trade. When the list is full the oldest switched-off rule makes room; returns None if nothing can be added."""
+    text = " ".join(text.split())[:300]
+    if await db.ai_rules.find_one({"text": text}):
+        return None
+    if await db.ai_rules.count_documents({}) >= MAX_RULES:
+        old = await db.ai_rules.find_one_and_delete({"enabled": False}, sort=[("_id", 1)])
+        if not old:
+            return None
+    doc = {"text": text, "symbol": "", "enabled": True, "source_trade_id": trade_id, "verdict": verdict, "auto": True,
+           "created_at": datetime.now(timezone.utc).isoformat(), "hits": 0, "misses": 0}
+    res = await db.ai_rules.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    return _pub(doc)
+
+
+async def hit(db, rule_id: str) -> None:
+    await db.ai_rules.update_one({"_id": ObjectId(rule_id)}, {"$inc": {"hits": 1}})
+
+
+async def miss(db, rule_id: str) -> dict:
+    doc = await db.ai_rules.find_one_and_update({"_id": ObjectId(rule_id)}, {"$inc": {"misses": 1}}, return_document=True)
+    if doc.get("misses", 0) >= MAX_MISSES and doc.get("enabled", True):
+        doc = await db.ai_rules.find_one_and_update({"_id": doc["_id"]}, {"$set": {"enabled": False}}, return_document=True)
+    return _pub(doc)
 
 
 async def active(db, symbol: str = None) -> List[dict]:
@@ -55,6 +91,8 @@ async def patch(db, rule_id: str, body: RulePatch) -> dict:
     if not ObjectId.is_valid(rule_id):
         raise HTTPException(404, "Regla no encontrada")
     upd = {k: (v.upper().strip() if k == "symbol" else v) for k, v in body.model_dump(exclude_none=True).items()}
+    if upd.get("enabled"):
+        upd["misses"] = 0  # switched back on by hand: the miss counter starts again
     if "text" in upd:
         upd["text"] = " ".join(upd["text"].split())
     doc = await db.ai_rules.find_one_and_update({"_id": ObjectId(rule_id)}, {"$set": upd}, return_document=True) if upd else await db.ai_rules.find_one({"_id": ObjectId(rule_id)})

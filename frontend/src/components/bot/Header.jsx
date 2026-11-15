@@ -35,7 +35,7 @@ const StatusPill = ({ status }) => {
   );
 };
 
-export default function Header({ status, onToggle, onScan, onReset, busy, onSettings, onDocs, onDeploy, onLogout, view, onSwitchBot, brand = CRYPTO_BRAND, bot = "crypto", onRefresh }) {
+export default function Header({ status, onToggle, onScan, onReset, busy, onSettings, onDocs, onDeploy, onLogout, view, onSwitchBot, brand = CRYPTO_BRAND, bot = "crypto", onRefresh, hideChat = false }) {
   const [count, setCount] = useState(status.next_scan_in);
   useEffect(() => setCount(status.next_scan_in), [status.next_scan_in]);
   useEffect(() => {
@@ -120,10 +120,10 @@ export default function Header({ status, onToggle, onScan, onReset, busy, onSett
           >
             {status.running ? <><Square className="mr-1.5 h-3.5 w-3.5" /> Detener bot</> : <><Play className="mr-1.5 h-3.5 w-3.5" /> Iniciar bot</>}
           </Button>
-          <Button data-testid="settings-view-button" variant="outline" size="sm" onClick={onSettings}
+          {onSettings && <Button data-testid="settings-view-button" variant="outline" size="sm" onClick={onSettings}
             className={`h-8 border-[#1E293B] font-mono text-[11px] uppercase tracking-wider hover:bg-[#111827] ${view === "settings" ? "bg-[#111827] text-amber-300" : "bg-transparent"}`}>
             <Settings2 className="mr-1.5 h-3.5 w-3.5" /> {view === "settings" ? "Volver al panel" : "Ajustes"}
-          </Button>
+          </Button>}
           {onDocs && (
             <Button data-testid="docs-view-button" size="sm" onClick={onDocs} title="Características, cómo usar el bot y preguntas frecuentes"
               className={`docs-glow h-8 font-mono text-[11px] font-bold uppercase tracking-wider transition-transform hover:-translate-y-px ${
@@ -138,7 +138,7 @@ export default function Header({ status, onToggle, onScan, onReset, busy, onSett
               <Server className="mr-1.5 h-3.5 w-3.5" /> {view === "deploy" ? "Volver al panel" : "Instalar en tu VPS"}
             </Button>
           )}
-          <ChatLauncher bot={bot} onApplied={onRefresh} />
+          {!hideChat && <ChatLauncher bot={bot} onApplied={onRefresh} />}
           {onSwitchBot && (
             <Button data-testid="switch-bot-button" variant="outline" size="sm" onClick={onSwitchBot} title="Volver a la selección de bot"
               className="h-8 border-sky-500/40 bg-transparent font-mono text-[11px] uppercase tracking-wider text-sky-300 hover:bg-sky-500/10">

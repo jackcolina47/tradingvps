@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Zap, Landmark, Flame, ArrowRight, LogOut, Loader2 } from "lucide-react";
+import { Zap, Landmark, Flame, FlaskConical, ArrowRight, LogOut, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api, setApiBase, fmtUsd, fmtPct, pnlClass } from "@/lib/api";
 
@@ -9,7 +9,7 @@ const BOTS = [
     key: "crypto", path: "/bybit", icon: Zap, accent: "amber",
     title: <>Bybit <span className="text-amber-400">AI</span> Trader</>,
     subtitle: "Criptomonedas · Futuros perpetuos USDT",
-    desc: "Bot cripto 24/7 con 8 estrategias, validación con IA, filtros de noticias y funding, optimizador walk-forward y modo REAL en Bybit.",
+    desc: "Bot cripto 24/7 con 8 estrategias: abre todas las señales y aprende reglas de cada operación cerrada para filtrar las siguientes. Optimizador walk-forward y modo REAL en Bybit.",
     tags: ["BTC · ETH · SOL · XRP…", "Paper / REAL Bybit", "Bitget espejo"],
   },
   {
@@ -26,8 +26,16 @@ const BOTS = [
     desc: "Instancia independiente del motor forex para Pepperstone: cuenta Razor (spread crudo + comisión) o Standard, símbolos sin sufijo, sus propios ajustes, plan, revisión IA y Telegram.",
     tags: ["XAUUSD · XAGUSD · EURUSD…", "Razor / Standard", "Yahoo Finance · Pepperstone"],
   },
+  {
+    key: "lab", path: "/lab", icon: FlaskConical, accent: "fuchsia",
+    title: <>Bybit <span className="text-fuchsia-400">Lab</span></>,
+    subtitle: "Investigación de estrategias · solo paper",
+    desc: "Clon de Bybit para probar el Test cruce EMA 10/20 sin riesgo: cuenta paper, historial y ajustes propios, backtest y gráfico. Sin IA, sin noticias y sin modo REAL.",
+    tags: ["Test cruce EMA 10/20", "Solo paper", "Datos del bot Bybit"],
+  },
 ];
 const ACCENT = {
+  fuchsia: { ring: "hover:border-fuchsia-500/60 hover:shadow-[0_0_0_1px_rgba(217,70,239,0.35),0_30px_80px_-30px_rgba(217,70,239,0.35)]", mark: "bg-fuchsia-500 text-[#07090E]", btn: "bg-fuchsia-500 text-[#07090E] hover:bg-fuchsia-400", tag: "border-fuchsia-500/30 text-fuchsia-300" },
   amber: { ring: "hover:border-amber-500/60 hover:shadow-[0_0_0_1px_rgba(247,166,0,0.35),0_30px_80px_-30px_rgba(247,166,0,0.35)]", mark: "bg-amber-500 text-[#07090E]", btn: "bg-amber-500 text-[#07090E] hover:bg-amber-400", tag: "border-amber-500/30 text-amber-300" },
   sky: { ring: "hover:border-sky-500/60 hover:shadow-[0_0_0_1px_rgba(56,189,248,0.35),0_30px_80px_-30px_rgba(56,189,248,0.35)]", mark: "bg-sky-500 text-[#07090E]", btn: "bg-sky-500 text-[#07090E] hover:bg-sky-400", tag: "border-sky-500/30 text-sky-300" },
   teal: { ring: "hover:border-teal-400/60 hover:shadow-[0_0_0_1px_rgba(45,212,191,0.35),0_30px_80px_-30px_rgba(45,212,191,0.35)]", mark: "bg-teal-400 text-[#07090E]", btn: "bg-teal-400 text-[#07090E] hover:bg-teal-300", tag: "border-teal-400/30 text-teal-300" },
@@ -58,9 +66,9 @@ export default function BotSelector({ onLogout }) {
     setApiBase("");
     document.title = "AI Trading · Selecciona un bot";
     const load = async () => {
-      const [c, f, p] = await Promise.allSettled([api.get("/overview"), api.get("/fx/overview"), api.get("/pepper/overview")]);
+      const [c, f, p, l] = await Promise.allSettled([api.get("/overview"), api.get("/fx/overview"), api.get("/pepper/overview"), api.get("/lab/overview")]);
       const v = (r) => (r.status === "fulfilled" ? r.value.data : { error: true });
-      setStatus({ crypto: v(c), fx: v(f), pepper: v(p) });
+      setStatus({ crypto: v(c), fx: v(f), pepper: v(p), lab: v(l) });
     };
     load();
   }, []);
@@ -72,13 +80,13 @@ export default function BotSelector({ onLogout }) {
           <div>
             <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-slate-500">Panel de control · acceso verificado</p>
             <h1 className="font-display mt-2 text-3xl font-extrabold uppercase leading-none tracking-tight text-slate-50 md:text-4xl">¿Qué bot quieres operar?</h1>
-            <p className="mt-3 max-w-xl text-sm text-slate-400">Tres bots independientes con la misma filosofía: estrategias técnicas, puertas de riesgo y validación con IA. Cada uno tiene su cuenta paper, su historial y sus ajustes.</p>
+            <p className="mt-3 max-w-xl text-sm text-slate-400">Bots independientes, cada uno con su cuenta paper, su historial y sus ajustes. Bybit Lab es solo para investigar estrategias en paper.</p>
           </div>
           <Button data-testid="selector-logout-button" variant="ghost" onClick={onLogout} className="h-9 font-mono text-[11px] uppercase tracking-wider text-slate-400 hover:bg-[#111827] hover:text-rose-300">
             <LogOut className="mr-1.5 h-3.5 w-3.5" /> Cerrar sesión
           </Button>
         </div>
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {BOTS.map((b, i) => {
             const a = ACCENT[b.accent];
             const Icon = b.icon;

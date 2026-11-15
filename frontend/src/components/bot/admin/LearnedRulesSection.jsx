@@ -38,8 +38,8 @@ export default function LearnedRulesSection() {
     <Panel title="Reglas aprendidas" icon={BookOpen} testId="learned-rules-section" bodyClass="space-y-3 p-4"
       actions={<span data-testid="learned-rules-count" className="font-mono text-[10px] uppercase tracking-wider text-slate-500">{active} activas · {(rules || []).length}/{max}</span>}>
       <p className="text-[12px] text-slate-400">
-        Lecciones de tus análisis o reglas propias. La IA las lee con <span className="text-amber-300">prioridad alta</span> cada vez que aprueba o rechaza una señal de este bot: si una señal incumple una regla activa, la rechaza o baja la confianza citándola.
-        Puedes guardarlas desde «Analizar IA» en el historial o escribirlas aquí.
+        Lecciones de los análisis de operaciones cerradas o reglas propias. La IA las comprueba en cada señal de este bot y cita la regla cuando una señal la incumple.
+        En Bybit son el <span className="text-amber-300">único filtro de entrada</span> y se crean solas tras cada pérdida evitable; en los bots de forex acompañan a la evaluación IA. Debajo de cada regla ves cuántas señales bloqueó y qué habría pasado sin ella.
       </p>
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-[240px] flex-1">
@@ -62,7 +62,11 @@ export default function LearnedRulesSection() {
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-slate-200">{r.text}</p>
                 <p className="mt-0.5 font-mono text-[10px] text-slate-500">
-                  {r.symbol ? `Solo ${r.symbol}` : "Todos los símbolos"}{r.verdict ? ` · de un análisis ${r.verdict}` : ""}{r.created_at ? ` · ${new Date(r.created_at).toLocaleDateString("es-ES")}` : ""}
+                  {r.symbol ? `Solo ${r.symbol}` : "Todos los símbolos"}{r.verdict ? ` · de un análisis ${r.verdict}` : ""}{r.created_at ? ` · ${new Date(r.created_at).toLocaleDateString("es-ES")}` : ""}{r.auto ? " · automática" : ""}
+                </p>
+                <p data-testid={`learned-rule-stats-${r.id}`} className="mt-0.5 font-mono text-[10px] text-slate-500">
+                  {r.hits || 0} señales bloqueadas{r.blocked_closed ? <> · de {r.blocked_closed} ya resueltas, {r.blocked_wins} habrían ganado (<span className={r.blocked_pnl > 0 ? "text-rose-300" : "text-emerald-300"}>{r.blocked_pnl > 0 ? "+" : ""}{r.blocked_pnl} sin la regla</span>)</> : ""}
+                  {r.misses ? <span className="text-amber-300"> · {r.misses} ganadoras que habría bloqueado</span> : ""}
                 </p>
               </div>
               <button data-testid={`learned-rule-delete-${r.id}`} onClick={() => remove(r)} disabled={busy === r.id} title="Eliminar regla" className="rounded-sm p-1 text-slate-500 transition-colors hover:bg-rose-500/10 hover:text-rose-300">

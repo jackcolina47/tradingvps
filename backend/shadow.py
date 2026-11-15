@@ -8,13 +8,13 @@ def shadow_be(rules: dict, d: dict, price: float) -> bool:
     return bool(rules["breakeven_enabled"] and rules["partial_tp_enabled"] and move_in_r(d["side"], d["entry_price"], d["initial_sl"], price) >= rules["partial_tp_r"])
 
 MAX_AGE_H = 72
-KINDS = ("RECHAZADA", "BAJA_CONFIANZA", "FILTRO_IA", "BLOQUEADA", "NOTICIAS", "FUNDING", "REGIMEN", "ROTACION", "RR_BAJO", "SPREAD", "ERROR", "NO_EJECUTADA")
+KINDS = ("RECHAZADA", "BAJA_CONFIANZA", "FILTRO_IA", "BLOQUEADA", "NOTICIAS", "FUNDING", "REGIMEN", "ROTACION", "RR_BAJO", "SPREAD", "ERROR", "NO_EJECUTADA", "REGLA")
 AI_KINDS = ("RECHAZADA", "BAJA_CONFIANZA")
 BUCKETS = [(0, 39, "<40%"), (40, 59, "40-59%"), (60, 79, "60-79%"), (80, 100, "80-100%")]
 
 
 async def open_shadow(engine, signal_id: str, symbol: str, sig: dict, settings, kind: str, equity: float,
-                      ai_confidence: int = 0, ai_risk: str = "-", risk_factor: float = 1.0, horizon: str = "short"):
+                      ai_confidence: int = 0, ai_risk: str = "-", risk_factor: float = 1.0, horizon: str = "short", rule_id: str = None):
     price = engine.market.tickers.get(symbol, {}).get("price") or sig["price"]
     long = sig["side"] == "long"
     entry = price * (1 + SLIPPAGE) if long else price * (1 - SLIPPAGE)
@@ -25,7 +25,7 @@ async def open_shadow(engine, signal_id: str, symbol: str, sig: dict, settings, 
     doc = {"signal_id": signal_id, "symbol": symbol, "side": sig["side"], "strategy": sig["strategy"], "timeframe": settings.timeframe,
            "kind": kind, "ai_confidence": ai_confidence, "ai_risk": ai_risk, "entry_price": entry, "qty": qty, "leverage": settings.leverage,
            "margin": margin, "sl": sl, "tp": tp, "initial_sl": sl, "atr": sig["atr"], "fees": entry * qty * FEE_RATE, "breakeven": False,
-           "risk_factor": risk_factor, "mark_price": price, "unrealized_pnl": 0.0, "opened_at": now_iso(), "horizon": horizon}
+           "risk_factor": risk_factor, "mark_price": price, "unrealized_pnl": 0.0, "opened_at": now_iso(), "horizon": horizon, "rule_id": rule_id}
     await engine.db.shadow_positions.insert_one(doc)
     return doc
 

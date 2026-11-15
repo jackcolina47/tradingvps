@@ -61,14 +61,14 @@ export default function BotPanel({ settings: s, meta, account, equity, profileAc
       <div data-testid="ai-config-card" className="rounded-sm border border-purple-500/30 bg-purple-500/[0.08] p-3">
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-1.5 text-[13px] font-semibold text-purple-300">
-            <Sparkles className="h-3.5 w-3.5" /> Confirmación IA
+            <Sparkles className="h-3.5 w-3.5" /> Reglas aprendidas
           </span>
-          <span data-testid="ai-status-label" className={`font-mono text-[10px] font-bold uppercase ${s.ai_enabled ? "text-purple-300" : "text-slate-500"}`}>
-            {s.ai_enabled ? "Activa" : "Inactiva"}
+          <span data-testid="ai-status-label" className={`font-mono text-[10px] font-bold uppercase ${s.rules_auto_learn ? "text-purple-300" : "text-slate-500"}`}>
+            {s.rules_auto_learn ? "Aprendiendo" : "Aprendizaje apagado"}
           </span>
         </div>
         <p className="mt-1 text-[12px] leading-relaxed text-slate-400">
-          La IA revisa cada señal y solo se ejecuta si la aprueba con confianza ≥ {s.ai_min_confidence}%.
+          Cada señal detectada se abre directamente. El único filtro son las reglas aprendidas de las operaciones cerradas (Ajustes → Reglas aprendidas).
         </p>
       </div>
 

@@ -98,3 +98,44 @@ async def final_eval(evaluate, *args) -> dict:
     res["ms"], res["model"] = int((time.monotonic() - t0) * 1000), label(_cfg["model"])
     logger.info(f"[STAGE 2 {'APPROVE' if res['decision'] == 'APROBADA' else 'REJECT'}] {args[0]} · {_cfg['model']} · {res['ms']} ms · {res['confidence']}%")
     return res
+
+
+RULES_SYSTEM = (
+    "Eres el filtro de reglas de un bot de trading de criptomonedas (perpetuos USDT). Recibes una señal de entrada y una lista numerada de REGLAS "
+    "aprendidas de operaciones pasadas. Tu ÚNICA tarea es decidir si la señal incumple claramente alguna regla con los datos recibidos. "
+    "No juzgues si la señal es buena o mala por ningún otro motivo: si no incumple ninguna regla, pasa. Si los datos no permiten comprobar una regla, "
+    "considérala cumplida. Una regla marcada «(solo SÍMBOLO)» únicamente aplica a ese par. "
+    'Responde EXCLUSIVAMENTE con JSON válido, sin texto adicional: {"violates":true|false,"rule":número de la regla incumplida (0 si ninguna),'
+    '"reason":"máx. 25 palabras en español citando el dato concreto que incumple la regla; vacío si pasa"}'
+)
+
+
+async def rules_check(symbol: str, timeframe: str, sig: dict, ctx: dict, rules: list) -> dict:
+    """The only entry gate of the crypto bot: does the signal break a learned rule? Cheap model; raises on provider error/timeout."""
+    cfg = fast_cfg()
+    t0 = time.monotonic()
+    chat = _chat(RULES_SYSTEM, "signal", cfg)
+    chat._probe = False
+    lines = "\n".join(f"{i}. {r['text']}" + (f" (solo {r['symbol']})" if r.get("symbol") else "") for i, r in enumerate(rules, 1))
+    pa = ctx.get("price_action") or {}
+    prompt = (
+        f"SEÑAL: {sig['side'].upper()} {symbol} | {sig['strategy']} | TF {timeframe} | horizonte {ctx.get('horizon', 'short')} | R:R {rr(sig):.2f}\n"
+        f"Entrada {sig['price']} · SL {sig['sl']} · TP {sig['tp']}\n"
+        f"Confirmaciones ({sig['score']}): {'; '.join(sig['reasons'])}\n"
+        f"Indicadores: {json.dumps(sig['indicators'])}\n"
+        f"Tendencia TF superior ({ctx.get('htf_tf')}): {ctx.get('htf_trend')} | cambio 24h {ctx.get('change_24h') or 0:.2f}% | funding {ctx.get('funding_rate')}\n"
+        f"Hora UTC: {time.strftime('%A %H:%M', time.gmtime())} | posiciones abiertas {ctx.get('open_positions')} | PnL del día {ctx.get('daily_pnl_pct')}%\n"
+        + (f"Últimas velas (% por vela): {ctx.get('recent_changes')}\n" if ctx.get("recent_changes") else "")
+        + (f"Acción del precio: {' '.join(pa.get('summary') or [])} · datos: {json.dumps({k: v for k, v in pa.items() if k != 'summary'})}\n" if pa else "")
+        + f"REGLAS:\n{lines}\n¿Incumple alguna?"
+    )
+    data = parse_json(await asyncio.wait_for(_ask(chat, prompt), FAST_TIMEOUT_SEC), "filtro de reglas")
+    try:
+        n = int(data.get("rule") or 0)
+    except (TypeError, ValueError):
+        n = 0
+    violates = bool(data.get("violates")) and 1 <= n <= len(rules)
+    out = {"violates": violates, "rule": rules[n - 1] if violates else None, "reason": str(data.get("reason") or "")[:200],
+           "model": label(cfg["model"]), "ms": int((time.monotonic() - t0) * 1000)}
+    logger.info(f"[RULES {'BLOCK' if violates else 'PASS'}] {symbol} {sig['side']} · {cfg['model']} · {out['ms']} ms · {len(rules)} reglas · {out['reason']}")
+    return out

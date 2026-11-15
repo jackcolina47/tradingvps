@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { http, errMsg, getToken, setToken, setApiBase, fmtTime } from "@/lib/api";
 import BotSelector from "@/pages/BotSelector";
 import FxDashboard from "@/fx/FxDashboard";
+import LabDashboard from "@/pages/LabDashboard";
 import { usePolling } from "@/hooks/usePolling";
 import Header from "@/components/bot/Header";
 import Login from "@/components/bot/Login";
@@ -29,7 +30,6 @@ import AiSignals from "@/components/bot/AiSignals";
 import EvolutionPanel from "@/components/bot/EvolutionPanel";
 import { AiHealthBanner } from "@/components/bot/AiHealthBanner";
 import SettingsPanel from "@/components/bot/SettingsPanel";
-import RegimePanel from "@/components/bot/RegimePanel";
 import Terminal from "@/components/bot/Terminal";
 import { Panel } from "@/components/bot/Panel";
 
@@ -136,13 +136,9 @@ function Dashboard({ onLogout }) {
                     )}
                   </TabsTrigger>
                   <TabsTrigger data-testid="tab-evolution" value="evolution" className={TAB_CLS}>Evolución</TabsTrigger>
-                  <TabsTrigger data-testid="tab-regime" value="regime" className={TAB_CLS}>Régimen</TabsTrigger>
                 </TabsList>
               </div>
               <TabsContent value="evolution" className="mt-0"><EvolutionPanel /></TabsContent>
-              <TabsContent value="regime" className="mt-0">
-                <RegimePanel settings={data.settings} onSave={(body) => act(() => http.put("/settings", body), "Configuración actualizada")} />
-              </TabsContent>
               <TabsContent value="positions" className="mt-0">
                 <PositionsTable positions={data.positions} onClose={(id) => act(() => http.post(`/positions/${id}/close`), "Posición cerrada")}
                   onCloseAll={() => act(() => http.post("/positions/close-all"), "Cierre de emergencia ejecutado")} />
@@ -165,7 +161,8 @@ function Dashboard({ onLogout }) {
               </TabsContent>
             </Tabs>
           </Panel>
-          <AiSignals signals={data.signals} ai={data.status.ai} usage={data.status.ai_usage} minConfidence={data.settings.ai_min_confidence} />
+          <AiSignals signals={data.signals} ai={data.status.ai} usage={data.status.ai_usage} rulesOnly title="Señales y reglas aprendidas"
+            emptyText="Cada señal detectada se abre directamente; aquí verás si alguna regla aprendida la bloqueó y por qué." />
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <SettingsPanel settings={data.settings} meta={meta} profileActive={data.profile_active} strategyKeys={meta?.strategy_keys} longKeys={meta?.long_horizon_keys}
@@ -175,7 +172,8 @@ function Dashboard({ onLogout }) {
               { k: "partial_tp_pct", label: "Cierre parcial (%)", min: 25, max: 75, step: 5 },
               { k: "auto_prune_pf", label: "Poda: PF mínimo (30 d)", min: 0.3, max: 1.5, step: 0.05, hint: "Un par activo con factor de beneficio por debajo de este valor en los últimos 30 días entra en poda" },
               { k: "auto_prune_min_trades", label: "Poda: más de N operaciones", min: 3, max: 100, step: 1, hint: "Solo se poda con más de N operaciones cerradas en 30 días (muestra suficiente)" }]}
-            extraToggles={[{ k: "btc_regime_filter", label: "Filtro régimen BTC", hint: "Cortos plazos solo a favor de BTC vs SMA200 diaria" }, { k: "rotation_enabled", label: "Rotación semanal", hint: "Momentum 7 d ponderado por volumen: sesgo y tamaño por par" },
+            hide={["ai_min_confidence", "min_rr", "ai_enabled", "ai_funnel_enabled"]}
+            extraToggles={[{ k: "rules_auto_learn", label: "Aprendizaje automático", hint: "La IA analiza cada operación cerrada: de las pérdidas evitables guarda una regla nueva y apaga las reglas que habrían bloqueado 3 operaciones ganadoras. Gasta saldo de IA por operación cerrada" },
               { k: "partial_tp_enabled", label: "Cierre parcial de beneficios", hint: "Cierra una parte al alcanzar el nivel en R y deja correr el resto con trailing" },
               { k: "reopt_enabled", label: "Re-optimización semanal", hint: "Cada 7 días repite el optimizador SL/TP/ATR en los pares marcados abajo, aplica el mejor resultado robusto y avisa por Telegram si un par apagado pasa a ser rentable" },
               { k: "auto_prune_enabled", label: "Poda automática de pares", hint: "Cada día revisa los últimos 30 días: un par con más de N operaciones y PF bajo recibe aviso por Telegram y, si sigue igual al día siguiente, se apaga solo" }]}
@@ -209,6 +207,7 @@ export default function App() {
           <Route path="/" element={<BotSelector onLogout={logout} />} />
           <Route path="/bybit" element={<Dashboard onLogout={logout} />} />
           <Route path="/hotforex" element={<FxDashboard onLogout={logout} bot="fx" />} />
+          <Route path="/lab" element={<LabDashboard onLogout={logout} />} />
           <Route path="/pepperstone" element={<FxDashboard onLogout={logout} bot="pepper" />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

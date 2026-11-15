@@ -578,3 +578,10 @@
 - **Indicadores nuevos**: EMA 10/20/50, Bollinger 20,2, VWAP (anclado diario), MACD 12,26,9 (`backend/chart.py` LINE_KEYS; series alineadas con puntos vacíos para NaN).
 - **Estilo** (`chart/ChartStyle.jsx`, localStorage `chart.style`): tipo de gráfico (velas, Heikin Ashi, barras, línea), colores de velas, color y grosor por indicador.
 - **Leyenda** OHLC + indicadores bajo el cursor (`chart/ChartLegend.jsx`), captura PNG con dibujos, botón para ocultar la barra de herramientas.
+
+## Iteración 89 (jun 2026) — Bybit sin validación IA (solo reglas aprendidas) + Bybit Lab
+- **Bybit: entrada sin validación IA.** `engine._handle_signal` abre toda señal detectada. Únicas puertas: una posición por par, máx. posiciones, límite de pérdida diaria, exchange caído y **reglas aprendidas** (`ai_funnel.rules_check`: llamada corta al modelo rápido que solo dice si la señal incumple una regla; sin reglas activas no hay llamada; si la IA falla se abre igual). Eliminados de la entrada: embudo IA, confianza mínima, régimen BTC, rotación, noticias, funding y R:R mínimo. Señal bloqueada → sombra `REGLA` con `rule_id`.
+- **Aprendizaje automático** (`trade_learning.learn`, toggle `rules_auto_learn`): cada operación cerrada (salvo test EMA) se analiza; pérdida con veredicto EVITABLE/MALA → regla nueva automática (texto libre, global, sin duplicar; si hay 30 se sustituye la apagada más antigua). Ganadora que una regla activa habría bloqueado → `misses`+1; a los 3 la regla se apaga sola. `GET /ai-rules` devuelve hits, misses y resultado en sombra de lo bloqueado.
+- **Bybit Lab** (`backend/lab.py`, `/api/lab`, ruta `/lab`, colecciones `lab_*`): clon solo paper, solo Test cruce EMA, comparte datos de mercado con Bybit, sin IA/noticias/REAL. Telegram con clave de bot `lab` (hay que marcarlo en cada chat).
+- HotForex y Pepperstone sin cambios (siguen con evaluación IA).
+- Tests: `tests/test_iter89_rules_gate_lab.py`. Tests antiguos de la puerta IA de Bybit quedan obsoletos.
