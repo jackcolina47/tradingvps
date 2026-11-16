@@ -303,6 +303,10 @@ class PositionsMixin:
             return f"máximo de posiciones de {HORIZON_LABEL[horizon]} alcanzado ({cap})"
         return None
 
+    def _pair_taken(self, open_docs: list, symbol: str, cross: bool) -> bool:
+        """One position per pair; with `dual_pair` (HotForex) the Test cruce EMA and the normal strategies are counted separately."""
+        return any(p["symbol"] == symbol and (not self.profile.dual_pair or (p.get("exit_mode") == "cross") == cross) for p in open_docs)
+
     async def open_position(self, symbol: str, sig: dict, settings: FxSettings, signal_id: str, risk_factor: float = 1.0,
                             risk_reason: str = "noticias", expires_at: str = None, horizon: str = "short", exit_mode: str = None):
         """Returns (Position | None, reason) — reason explains why nothing was opened.
@@ -312,9 +316,8 @@ class PositionsMixin:
         tickers = self.market.tickers
         async with self.lock:
             open_docs = await self.db.positions.find({}, {"symbol": 1, "side": 1, "horizon": 1, "exit_mode": 1}).to_list(100)
-            open_syms = [p["symbol"] for p in open_docs]
             slot = None if cross else self._slot_block(open_docs, settings, horizon)
-            if symbol in open_syms or slot:
+            if self._pair_taken(open_docs, symbol, cross) or slot:
                 await self.log("RISK", f"{symbol}: apertura cancelada · {slot or 'par ya abierto'}")
                 return None, slot or "par ya abierto"
             price = tickers.get(symbol, {}).get("price") or sig["price"]

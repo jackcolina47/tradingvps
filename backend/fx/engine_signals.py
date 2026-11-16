@@ -120,8 +120,8 @@ class SignalsMixin:
                         score=sig["score"], reasons=sig["reasons"], indicators=sig["indicators"], key=key, ai_decision="SIN_IA",
                         ai_reasoning="Test cruce EMA 10/20: entrada directa por cruce, inmune a la aprobación de la IA", context={"exit_mode": "cross"})
         acc = await self.account_summary()
-        open_syms = [p["symbol"] async for p in self.db.positions.find({}, {"symbol": 1})]
-        block = ("límite de pérdida diaria alcanzado" if acc["daily_paused"] else "ya existe una posición abierta en el par" if symbol in open_syms
+        open_docs = await self.db.positions.find({}, {"symbol": 1, "exit_mode": 1}).to_list(100)
+        block = ("límite de pérdida diaria alcanzado" if acc["daily_paused"] else "ya existe una posición del test abierta en el par" if self._pair_taken(open_docs, symbol, True)
                  else "cierre de fin de semana inminente" if settings.close_before_weekend and closing_soon(30)
                  else f"cuenta {self.bk} sin conexión con MetaApi" if self.live and self.hfm["down_since"]
                  else f"par no operable en {self.bk} con el sufijo de símbolos configurado" if self.live and self.cfg and symbol in (self.cfg.hfm_symbols_bad or []) else None)
@@ -136,13 +136,13 @@ class SignalsMixin:
         await self.db.signals.update_one({"_id": res.inserted_id}, {"$set": {"executed": True} if pos else {"note": f"No ejecutada: {reason}"}})
 
     async def _blocks(self, symbol: str, settings: FxSettings, acc: dict, side: str = None, horizon: str = "short"):
-        open_docs = await self.db.positions.find({}, {"symbol": 1, "side": 1, "horizon": 1}).to_list(100)
+        open_docs = await self.db.positions.find({}, {"symbol": 1, "side": 1, "horizon": 1, "exit_mode": 1}).to_list(100)
         open_syms = [p["symbol"] for p in open_docs]
         if not market_open():
             return "mercado cerrado", "MERCADO", open_syms
         if horizon == "short" and not in_sessions(settings.sessions_allowed):
             return f"fuera de las sesiones permitidas ({session_names(settings.sessions_allowed)})", "SESION", open_syms
-        if symbol in open_syms:
+        if self._pair_taken(open_docs, symbol, False):
             return "ya existe una posición abierta en el par", "BLOQUEADA", open_syms
         slot = self._slot_block(open_docs, settings, horizon)
         if slot:

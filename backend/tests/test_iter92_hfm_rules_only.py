@@ -121,3 +121,22 @@ def test_learning_only_hfm(monkeypatch):
             await db.client.drop_database(db.name)
         assert seen == [("hfm", "USD", "s")] and not PEPPERSTONE.rules_only
     asyncio.run(run())
+
+
+def test_dual_pair_only_hfm():
+    async def run():
+        out = {}
+        for prof, nm in ((HFM, "f"), (PEPPERSTONE, "g")):
+            e, db = await mk(prof, nm)
+            docs = [{"symbol": "EURUSD", "exit_mode": "cross"}]
+            out[prof.key] = (e._pair_taken(docs, "EURUSD", False), e._pair_taken(docs, "EURUSD", True), e._pair_taken([{"symbol": "EURUSD"}], "EURUSD", True),
+                             e._pair_taken([{"symbol": "EURUSD"}], "EURUSD", False))
+            s = await e.get_settings()
+            pos, _ = await e.open_position("EURUSD", dict(SIG), s, "s1", exit_mode="cross")
+            pos2, _ = await e.open_position("EURUSD", dict(SIG), s, "s2")
+            pos3, _ = await e.open_position("EURUSD", dict(SIG), s, "s3")
+            out[prof.key] += (bool(pos), bool(pos2), bool(pos3))
+            await db.client.drop_database(db.name)
+        assert out["hfm"] == (False, True, False, True, True, True, False)
+        assert out["pepperstone"] == (True, True, True, True, True, False, False)
+    asyncio.run(run())

@@ -41,6 +41,7 @@ class BrokerProfile:
     account_types: dict
     default_account_type: str
     weekly_prefix: str = field(default="")
+    dual_pair: bool = False   # a pair may hold 1 normal-strategy position + 1 «Test cruce EMA» position at the same time
     rules_only: bool = False  # entries gated only by risk limits + learned rules (no AI approval), with automatic learning on closed trades
 
     def costs(self, account_type: str = "") -> Costs:
@@ -55,7 +56,7 @@ class BrokerProfile:
 
 
 HFM = BrokerProfile(
-    rules_only=True, key="hfm", prefix="fx_", api_prefix="/api/fx", panel="fx", ai_kind="fx", bot_name="HotForex AI Trading", tg_name="HotForex AI", tg_icon="🏦",
+    rules_only=True, dual_pair=True, key="hfm", prefix="fx_", api_prefix="/api/fx", panel="fx", ai_kind="fx", bot_name="HotForex AI Trading", tg_name="HotForex AI", tg_icon="🏦",
     broker="HFM", broker_long="HotForex", metaapi_name="hotforex-ai-trading", keywords=("HFM", "HotForex"),
     suffixes={"": "Premium", "b": "Zero", "r": "Pro", "c": "Cent", "x": "InfinityX"},
     suffix_hint="el símbolo cotiza pero no es operable en esta cuenta: revisa el sufijo de símbolos (HFM: Premium sin sufijo, Zero «b», Pro «r», Cent «c», InfinityX «x»)",
