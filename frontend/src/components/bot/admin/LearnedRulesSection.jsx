@@ -8,6 +8,36 @@ import { Panel } from "../Panel";
 import { http, errMsg } from "@/lib/api";
 import { INPUT, BTN } from "./SecuritySection";
 
+function RulesSummary({ rules, max }) {
+  const today = new Date().toDateString();
+  const since = (r) => (r.created_at ? (Date.now() - new Date(r.created_at).getTime()) / 86400000 : Infinity);
+  const sum = (k) => rules.reduce((a, r) => a + (r[k] || 0), 0);
+  const active = rules.filter((r) => r.enabled).length;
+  const auto = rules.filter((r) => r.auto).length;
+  const closed = sum("blocked_closed");
+  const pnl = Math.round(sum("blocked_pnl") * 100) / 100;
+  const cards = [
+    ["total", "Reglas en total", `${rules.length}/${max}`, `${active} activas · ${rules.length - active} apagadas`],
+    ["today", "Añadidas hoy", rules.filter((r) => r.created_at && new Date(r.created_at).toDateString() === today).length, `${rules.filter((r) => since(r) <= 7).length} en los últimos 7 días`],
+    ["origin", "Automáticas", auto, `${rules.length - auto} escritas o guardadas a mano`],
+    ["hits", "Señales bloqueadas", sum("hits"), closed ? `${closed} ya resueltas · ${sum("blocked_wins")} habrían ganado` : "ninguna resuelta todavía"],
+    ["pnl", "Efecto de las reglas", closed ? `${pnl > 0 ? "−" : "+"}${Math.abs(pnl)}` : "—",
+      closed ? (pnl > 0 ? "bloquearon más ganancias que pérdidas" : "pérdidas netas evitadas") : "se calcula al resolverse las bloqueadas", closed ? (pnl > 0 ? "text-rose-300" : "text-emerald-300") : ""],
+    ["misses", "Ganadoras en riesgo", sum("misses"), "operaciones ganadoras que una regla activa habría bloqueado", sum("misses") ? "text-amber-300" : ""],
+  ];
+  return (
+    <div data-testid="learned-rules-summary" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      {cards.map(([k, label, value, hint, cls]) => (
+        <div key={k} data-testid={`learned-rules-stat-${k}`} className="rounded-sm border border-[#1E293B] bg-[#0D111A] px-3 py-2">
+          <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+          <p className={`num mt-0.5 text-base font-semibold ${cls || "text-slate-100"}`}>{value}</p>
+          <p className="mt-0.5 text-[10px] leading-snug text-slate-500">{hint}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function LearnedRulesSection() {
   const [rules, setRules] = useState(null);
   const [max, setMax] = useState(30);
@@ -41,6 +71,7 @@ export default function LearnedRulesSection() {
         Lecciones de los análisis de operaciones cerradas o reglas propias. La IA las comprueba en cada señal de este bot y cita la regla cuando una señal la incumple.
         En Bybit y HotForex son el <span className="text-amber-300">único filtro de entrada</span> y se crean solas tras cada pérdida evitable; en Pepperstone acompañan a la evaluación IA. Debajo de cada regla ves cuántas señales bloqueó y qué habría pasado sin ella.
       </p>
+      {rules && rules.length > 0 && <RulesSummary rules={rules} max={max} />}
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-[240px] flex-1">
           <Input data-testid="learned-rule-text-input" value={text} maxLength={300} placeholder="Ej.: No comprar tras 3 velas grandes seguidas si hay un swing alto a menos de 1 ATR" onChange={(e) => setText(e.target.value)} className={INPUT} />
