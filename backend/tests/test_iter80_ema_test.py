@@ -133,9 +133,9 @@ async def _aboom(*a, **k):
 
 def run(coro_fn, monkeypatch, data, daily_paused=False, live=False):
     """Fresh motor client + engine per test (motor binds to the loop)."""
-    monkeypatch.setattr(engine_mod, "tg", _noop)
+    monkeypatch.setattr(engine_mod, "tg", _noop, raising=False)
     monkeypatch.setattr(ai_funnel, "quick_filter", _aboom, raising=False)
-    monkeypatch.setattr(engine_mod, "evaluate_signal", _aboom)
+    monkeypatch.setattr(engine_mod, "evaluate_signal", _aboom, raising=False)
 
     async def main():
         client = AsyncIOMotorClient(MONGO_URL)
