@@ -140,3 +140,36 @@ async def apply_action(db, rule: dict, action: str, text: str, reason: str, trad
     await event(db, action, text if action == "MODIFICAR" else rule["text"], reason, trade, rule["text"] if action == "MODIFICAR" else None)
     verb = {"DESACTIVAR": "apagada", "ELIMINAR": "eliminada", "MODIFICAR": "reescrita"}[action]
     return f"Regla {verb}: «{rule['text']}»" + (f" → «{text}»" if action == "MODIFICAR" else "") + (f" · {reason}" if reason else "")
+
+
+class MergeIn(BaseModel):
+    ids: List[str] = Field(min_length=2, max_length=20)
+    merged: str = Field(default="", max_length=300)
+    keep_id: Optional[str] = None
+    reason: str = Field(default="", max_length=300)
+
+
+async def merge(db, body: MergeIn) -> dict:
+    """Applies one accepted clean-up proposal: the group becomes one merged rule (or only `keep_id` survives)."""
+    if not all(ObjectId.is_valid(i) for i in body.ids):
+        raise HTTPException(404, "Regla no encontrada")
+    docs = [d async for d in db.ai_rules.find({"_id": {"$in": [ObjectId(i) for i in body.ids]}})]
+    if len(docs) < 2:
+        raise HTTPException(409, "Esas reglas ya no existen: vuelve a analizar")
+    text = " ".join(body.merged.split())
+    if len(text) < 5 and body.keep_id not in [str(d["_id"]) for d in docs]:
+        raise HTTPException(400, "Falta el texto de la regla fusionada")
+    old = "; ".join(f"«{d['text']}»" for d in docs)
+    if len(text) >= 5:
+        await db.ai_rules.delete_many({"_id": {"$in": [d["_id"] for d in docs]}})
+        doc = {"text": text, "symbol": docs[0].get("symbol") or "", "enabled": any(d.get("enabled", True) for d in docs), "auto": all(d.get("auto") for d in docs),
+               "created_at": datetime.now(timezone.utc).isoformat(), "hits": sum(d.get("hits", 0) for d in docs), "misses": 0,
+               "ai_edited_at": datetime.now(timezone.utc).isoformat(), "ai_note": f"Fusión de {len(docs)} reglas"}
+        await db.ai_rules.delete_many({"text": text})
+        doc["_id"] = (await db.ai_rules.insert_one(doc)).inserted_id
+        await event(db, "FUSION", text, body.reason, prev=old)
+        return _pub(doc)
+    await db.ai_rules.delete_many({"_id": {"$in": [d["_id"] for d in docs if str(d["_id"]) != body.keep_id]}})
+    kept = next(d for d in docs if str(d["_id"]) == body.keep_id)
+    await event(db, "FUSION", kept["text"], body.reason, prev=old)
+    return _pub(kept)

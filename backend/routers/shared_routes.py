@@ -66,6 +66,20 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
     async def ai_rules_list():
         return {"rules": await ai_rules.list_rules(engine.db), "max": None, "events": await ai_rules.events(engine.db)}
 
+    @router.post("/ai-rules/cleanup")
+    async def ai_rules_cleanup():
+        rules = await ai_rules.list_rules(engine.db)
+        if len(rules) < 2:
+            return {"proposals": [], "checked": len(rules)}
+        try:
+            return {"proposals": await ai_advisor.cleanup_rules(rules), "checked": len(rules)}
+        except Exception as e:
+            raise HTTPException(424, f"Error IA: {friendly_error(e)}")
+
+    @router.post("/ai-rules/merge")
+    async def ai_rules_merge(body: ai_rules.MergeIn):
+        return await ai_rules.merge(engine.db, body)
+
     @router.post("/ai-rules")
     async def ai_rules_add(body: ai_rules.RuleIn):
         return await ai_rules.add(engine.db, body)

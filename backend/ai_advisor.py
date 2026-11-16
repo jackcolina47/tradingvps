@@ -596,3 +596,38 @@ async def advise(scope: str, context: dict, policy: dict = None, market: dict = 
         "revert": [str(x) for x in revert if isinstance(x, (str, int))][:3] if isinstance(revert, list) else [],
         "notes": [_clip(n, 420) for n in (data.get("notes") or [])][:6],
     }
+
+
+CLEANUP_SYSTEM = (
+    "Eres el encargado de mantener limpia la lista de reglas de entrada de un bot de trading. Recibes las reglas numeradas con su estado y estadísticas. "
+    "Detecta SOLO grupos claros de: DUPLICADAS (dicen lo mismo o una contiene a la otra) y CONTRADICTORIAS (no pueden cumplirse a la vez o se anulan). "
+    "Para cada grupo propone UNA regla fusionada que conserve lo útil de todas, concreta y comprobable con los datos de una señal (máx. 40 palabras). "
+    "En un grupo CONTRADICTORIAS, si no hay forma sensata de conciliarlas, deja merged vacío y en keep indica el número de la única regla que debe conservarse "
+    "(la mejor respaldada por las estadísticas). Cada regla puede aparecer como mucho en un grupo. No agrupes reglas que solo tratan el mismo tema con condiciones distintas. "
+    "Si una regla del grupo es «solo SÍMBOLO», la fusión solo es válida si todas son del mismo símbolo. Si no hay nada que limpiar devuelve groups vacío. "
+    "Responde EXCLUSIVAMENTE con JSON válido en español: "
+    '{"groups":[{"type":"DUPLICADAS"|"CONTRADICTORIAS","rules":[números],"merged":"texto o vacío","keep":número o null,"reason":"1 frase"}]}'
+)
+
+
+async def cleanup_rules(rules: list) -> list:
+    """Proposals to merge duplicated / contradictory learned rules. Nothing is changed here."""
+    lines = "\n".join(f"{i}. [{'activa' if r['enabled'] else 'apagada'} · {r.get('hits', 0)} bloqueos · {r.get('blocked_wins', 0)}/{r.get('blocked_closed', 0)} bloqueadas habrían ganado · "
+                      f"{r.get('misses', 0)} ganadoras en riesgo] {r['text']}" + (f" (solo {r['symbol']})" if r.get("symbol") else "") for i, r in enumerate(rules, 1))
+    data = parse_json(await _ask(_chat(CLEANUP_SYSTEM, "rules-cleanup"), f"REGLAS:\n{lines}\nPropón la limpieza."), "limpieza de reglas")
+    out, used = [], set()
+    for g in data.get("groups") or []:
+        if not isinstance(g, dict):
+            continue
+        ns = [n for n in dict.fromkeys(g.get("rules") or []) if isinstance(n, int) and 1 <= n <= len(rules) and n not in used]
+        group = [rules[n - 1] for n in ns]
+        merged = " ".join(str(g.get("merged") or "").split())[:300]
+        keep = g.get("keep") if isinstance(g.get("keep"), int) and g.get("keep") in ns else None
+        if len(group) < 2 or len({r.get("symbol") or "" for r in group}) > 1 or (len(merged) < 5 and keep is None):
+            continue
+        used.update(ns)
+        out.append({"type": "CONTRADICTORIAS" if str(g.get("type", "")).upper().startswith("CONTRA") else "DUPLICADAS",
+                    "rules": [{"id": r["id"], "text": r["text"], "enabled": r["enabled"], "hits": r.get("hits", 0)} for r in group],
+                    "merged": merged if len(merged) >= 5 else "", "keep_id": rules[keep - 1]["id"] if keep and len(merged) < 5 else None,
+                    "symbol": group[0].get("symbol") or "", "reason": str(g.get("reason") or "")[:300]})
+    return out

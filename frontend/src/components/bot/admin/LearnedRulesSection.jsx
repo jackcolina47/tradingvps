@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, Check, ChevronLeft, ChevronRight, History, Loader2, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { BookOpen, Check, Sparkles, ChevronLeft, ChevronRight, History, Loader2, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -13,7 +13,7 @@ const FILTERS = [["all", "Todas"], ["on", "Activas"], ["off", "Apagadas"], ["aut
 const SORTS = [["new", "Más recientes"], ["hits", "Más bloqueos"], ["cost", "Peor efecto"], ["good", "Mejor efecto"], ["misses", "Más ganadoras en riesgo"]];
 const MATCH = { all: () => true, on: (r) => r.enabled, off: (r) => !r.enabled, auto: (r) => r.auto, manual: (r) => !r.auto, ai: (r) => !!r.ai_edited_at };
 const ORDER = { new: () => 0, hits: (a, b) => (b.hits || 0) - (a.hits || 0), cost: (a, b) => b.blocked_pnl - a.blocked_pnl, good: (a, b) => a.blocked_pnl - b.blocked_pnl, misses: (a, b) => (b.misses || 0) - (a.misses || 0) };
-const EVENT = { NUEVA: ["Nueva", "text-emerald-300"], MODIFICAR: ["Reescrita", "text-sky-300"], DESACTIVAR: ["Apagada", "text-amber-300"], ELIMINAR: ["Eliminada", "text-rose-300"] };
+const EVENT = { FUSION: ["Fusión", "text-fuchsia-300"], NUEVA: ["Nueva", "text-emerald-300"], MODIFICAR: ["Reescrita", "text-sky-300"], DESACTIVAR: ["Apagada", "text-amber-300"], ELIMINAR: ["Eliminada", "text-rose-300"] };
 const SEL = "h-8 rounded-sm border border-[#1E293B] bg-[#07090E] px-2 font-mono text-[11px] text-slate-300 outline-none";
 const ICON_BTN = "rounded-sm p-1 text-slate-500 transition-colors hover:bg-[#111827] hover:text-slate-200 disabled:opacity-40";
 
@@ -84,6 +84,38 @@ function RuleRow({ r, busy, onToggle, onRemove, onSave }) {
   );
 }
 
+function Cleanup({ proposals, onApply, onDismiss, busy }) {
+  const [texts, setTexts] = useState({});
+  if (!proposals) return null;
+  if (!proposals.length) return <p data-testid="rules-cleanup-none" className="rounded-sm border border-emerald-500/30 bg-emerald-500/[0.06] px-3 py-2 text-[12px] text-emerald-200">La IA no encontró reglas duplicadas ni contradictorias.</p>;
+  return (
+    <div data-testid="rules-cleanup-proposals" className="space-y-2 rounded-sm border border-fuchsia-500/30 bg-fuchsia-500/[0.05] p-3">
+      <p className="text-[12px] text-fuchsia-100">La IA propone {proposals.length} {proposals.length === 1 ? "fusión" : "fusiones"}. Nada cambia hasta que aceptes cada una; puedes retocar el texto antes.</p>
+      {proposals.map((p, i) => {
+        const merged = texts[i] ?? p.merged;
+        return (
+          <div key={p.rules.map((r) => r.id).join()} data-testid={`rules-cleanup-proposal-${i}`} className="rounded-sm border border-[#1E293B] bg-[#0D111A] p-2.5">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-fuchsia-300">{p.type === "CONTRADICTORIAS" ? "Contradictorias" : "Duplicadas"}{p.symbol ? ` · solo ${p.symbol}` : ""}</p>
+            <ul className="mt-1 space-y-0.5">
+              {p.rules.map((r) => <li key={r.id} className={`break-words text-[11px] ${p.keep_id && r.id !== p.keep_id ? "text-slate-500 line-through" : p.keep_id ? "text-emerald-200" : "text-slate-400"}`}>• {r.text} <span className="font-mono text-[10px] text-slate-600">({r.enabled ? "activa" : "apagada"} · {r.hits} bloqueos)</span></li>)}
+            </ul>
+            {p.keep_id ? <p className="mt-1.5 text-[11px] text-slate-300">Propuesta: conservar solo la regla marcada en verde y eliminar el resto.</p> : (
+              <textarea data-testid={`rules-cleanup-text-${i}`} value={merged} maxLength={300} rows={2} onChange={(e) => setTexts((t) => ({ ...t, [i]: e.target.value }))}
+                className="mt-1.5 w-full rounded-sm border border-fuchsia-500/40 bg-[#07090E] px-2 py-1 text-xs text-slate-100 outline-none" />
+            )}
+            {p.reason && <p className="mt-1 text-[10px] text-slate-500">{p.reason}</p>}
+            <div className="mt-2 flex gap-2">
+              <button data-testid={`rules-cleanup-accept-${i}`} disabled={busy === `m${i}` || (!p.keep_id && merged.trim().length < 5)} onClick={() => onApply(i, { ...p, merged })}
+                className="rounded-sm bg-fuchsia-500 px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-wider text-[#07090E] transition-colors hover:bg-fuchsia-400 disabled:opacity-50">{p.keep_id ? "Aceptar" : "Fusionar"}</button>
+              <button data-testid={`rules-cleanup-dismiss-${i}`} onClick={() => onDismiss(i)} className="rounded-sm border border-[#1E293B] px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-slate-400 hover:text-slate-200">Descartar</button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function Activity({ events }) {
   const [open, setOpen] = useState(false);
   if (!events?.length) return null;
@@ -118,6 +150,12 @@ export default function LearnedRulesSection() {
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("new");
   const [page, setPage] = useState(0);
+  const [proposals, setProposals] = useState(null);
+  const dismiss = (i) => setProposals((p) => { const next = p.filter((_, j) => j !== i); return next.length ? next : null; });
+  const cleanup = async () => {
+    setBusy("cleanup");
+    try { setProposals((await http.post("/ai-rules/cleanup")).data.proposals); } catch (e) { toast.error(errMsg(e)); } finally { setBusy(""); }
+  };
   const load = () => http.get("/ai-rules").then((r) => { setRules(r.data.rules); setEvents(r.data.events || []); }).catch(() => setRules([]));
   useEffect(() => { load(); }, []);
   useEffect(() => setPage(0), [q, filter, sort]);
@@ -179,12 +217,18 @@ export default function LearnedRulesSection() {
             <select data-testid="learned-rules-sort" value={sort} onChange={(e) => setSort(e.target.value)} className={SEL}>
               {SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
+            <button data-testid="learned-rules-cleanup" onClick={cleanup} disabled={busy === "cleanup" || rules.length < 2} title="La IA busca reglas duplicadas o contradictorias y propone fusionarlas. Gasta una llamada de IA."
+              className="flex h-8 items-center gap-1.5 rounded-sm border border-fuchsia-500/40 px-2 font-mono text-[10px] uppercase tracking-wider text-fuchsia-300 transition-colors hover:bg-fuchsia-500/10 disabled:opacity-50">
+              {busy === "cleanup" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} {busy === "cleanup" ? "Analizando…" : "Limpiar con IA"}
+            </button>
             {off.length > 0 && (
               <button data-testid="learned-rules-delete-off" onClick={removeOff} disabled={busy === "bulk"} className="h-8 rounded-sm border border-rose-500/30 px-2 font-mono text-[10px] uppercase tracking-wider text-rose-300 transition-colors hover:bg-rose-500/10">
                 Borrar apagadas ({off.length})
               </button>
             )}
           </div>
+          <Cleanup proposals={proposals} busy={busy} onDismiss={dismiss}
+            onApply={async (i, p) => { if (await run(`m${i}`, () => http.post("/ai-rules/merge", { ids: p.rules.map((r) => r.id), merged: p.keep_id ? "" : p.merged.trim(), keep_id: p.keep_id, reason: p.reason }), "Reglas fusionadas")) dismiss(i); }} />
           {view.length === 0 ? <p data-testid="learned-rules-no-match" className="text-xs text-slate-500">Ninguna regla coincide con la búsqueda o el filtro.</p> : (
             <ul data-testid="learned-rules-list" className="divide-y divide-[#1E293B] rounded-sm border border-[#1E293B]">
               {view.slice(cur * PAGE, cur * PAGE + PAGE).map((r) => (
