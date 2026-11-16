@@ -130,24 +130,24 @@ def apply_levels(sig: dict, sl, tp, min_rr: float = 1.0, spread: float = 0.0, di
 
 
 RULES_SYSTEM = (
-    "Eres el filtro de reglas de un bot de trading de criptomonedas (perpetuos USDT). Recibes una señal de entrada y una lista numerada de REGLAS "
+    "Eres el filtro de reglas de un bot de trading de {market}. Recibes una señal de entrada y una lista numerada de REGLAS "
     "aprendidas de operaciones pasadas. Tu ÚNICA tarea es decidir si la señal incumple claramente alguna regla con los datos recibidos. "
     "No juzgues si la señal es buena o mala por ningún otro motivo: si no incumple ninguna regla, pasa. Si los datos no permiten comprobar una regla, "
     "considérala cumplida. Una regla marcada «(solo SÍMBOLO)» únicamente aplica a ese par. "
     "Además, si la señal pasa y alguna regla habla de dónde colocar el stop o el objetivo (stop demasiado ajustado, detrás de un swing, objetivo antes de una "
     "resistencia, etc.) y con los datos recibidos procede aplicarla, propón el SL y/o TP ajustados como precios; en cualquier otro caso deja sl y tp en null "
     "y se usarán los niveles por defecto de la estrategia. "
-    'Responde EXCLUSIVAMENTE con JSON válido, sin texto adicional: {"violates":true|false,"rule":número de la regla incumplida (0 si ninguna),'
+    'Responde EXCLUSIVAMENTE con JSON válido, sin texto adicional: {{"violates":true|false,"rule":número de la regla incumplida (0 si ninguna),'
     '"reason":"máx. 25 palabras en español citando el dato concreto que incumple la regla, o por qué ajustas los niveles; vacío si pasa sin cambios",'
-    '"sl":número o null,"tp":número o null}'
+    '"sl":número o null,"tp":número o null}}'
 )
 
 
-async def rules_check(symbol: str, timeframe: str, sig: dict, ctx: dict, rules: list) -> dict:
+async def rules_check(symbol: str, timeframe: str, sig: dict, ctx: dict, rules: list, market: str = "criptomonedas (perpetuos USDT)") -> dict:
     """The only entry gate of the crypto bot: does the signal break a learned rule? Cheap model; raises on provider error/timeout."""
     cfg = fast_cfg()
     t0 = time.monotonic()
-    chat = _chat(RULES_SYSTEM, "signal", cfg)
+    chat = _chat(RULES_SYSTEM.format(market=market), "signal", cfg)
     chat._probe = False
     lines = "\n".join(f"{i}. {r['text']}" + (f" (solo {r['symbol']})" if r.get("symbol") else "") for i, r in enumerate(rules, 1))
     pa = ctx.get("price_action") or {}
@@ -157,7 +157,8 @@ async def rules_check(symbol: str, timeframe: str, sig: dict, ctx: dict, rules: 
         f"Confirmaciones ({sig['score']}): {'; '.join(sig['reasons'])}\n"
         f"Indicadores: {json.dumps(sig['indicators'])}\n"
         f"Tendencia TF superior ({ctx.get('htf_tf')}): {ctx.get('htf_trend')} | cambio 24h {ctx.get('change_24h') or 0:.2f}% | funding {ctx.get('funding_rate')}\n"
-        f"Hora UTC: {time.strftime('%A %H:%M', time.gmtime())} | posiciones abiertas {ctx.get('open_positions')} | PnL del día {ctx.get('daily_pnl_pct')}%\n"
+        (f"Sesiones abiertas: {ctx.get('sessions')} | stop {ctx.get('sl_pips')} pips · spread {ctx.get('spread_pips')} pips\n" if ctx.get("sl_pips") else "")
+        + f"Hora UTC: {time.strftime('%A %H:%M', time.gmtime())} | posiciones abiertas {ctx.get('open_positions')} | PnL del día {ctx.get('daily_pnl_pct')}%\n"
         + (f"Últimas velas (% por vela): {ctx.get('recent_changes')}\n" if ctx.get("recent_changes") else "")
         + (f"Acción del precio: {' '.join(pa.get('summary') or [])} · datos: {json.dumps({k: v for k, v in pa.items() if k != 'summary'})}\n" if pa else "")
         + f"REGLAS:\n{lines}\n¿Incumple alguna?"

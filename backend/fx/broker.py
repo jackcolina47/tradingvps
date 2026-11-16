@@ -41,6 +41,7 @@ class BrokerProfile:
     account_types: dict
     default_account_type: str
     weekly_prefix: str = field(default="")
+    rules_only: bool = False  # entries gated only by risk limits + learned rules (no AI approval), with automatic learning on closed trades
 
     def costs(self, account_type: str = "") -> Costs:
         t = self.account_types.get(account_type or self.default_account_type) or self.account_types[self.default_account_type]
@@ -50,11 +51,11 @@ class BrokerProfile:
         at = account_type if account_type in self.account_types else self.default_account_type
         return {"key": self.key, "name": self.bot_name, "broker": self.broker, "broker_long": self.broker_long, "panel": self.panel,
                 "server_hint": self.server_hint, "servers": self.servers, "suffixes": [{"suffix": k, "label": v} for k, v in self.suffixes.items()],
-                "account_types": [{"key": k, **v} for k, v in self.account_types.items()], "account_type": at, "default_account_type": self.default_account_type}
+                "account_types": [{"key": k, **v} for k, v in self.account_types.items()], "account_type": at, "default_account_type": self.default_account_type, "rules_only": self.rules_only}
 
 
 HFM = BrokerProfile(
-    key="hfm", prefix="fx_", api_prefix="/api/fx", panel="fx", ai_kind="fx", bot_name="HotForex AI Trading", tg_name="HotForex AI", tg_icon="🏦",
+    rules_only=True, key="hfm", prefix="fx_", api_prefix="/api/fx", panel="fx", ai_kind="fx", bot_name="HotForex AI Trading", tg_name="HotForex AI", tg_icon="🏦",
     broker="HFM", broker_long="HotForex", metaapi_name="hotforex-ai-trading", keywords=("HFM", "HotForex"),
     suffixes={"": "Premium", "b": "Zero", "r": "Pro", "c": "Cent", "x": "InfinityX"},
     suffix_hint="el símbolo cotiza pero no es operable en esta cuenta: revisa el sufijo de símbolos (HFM: Premium sin sufijo, Zero «b», Pro «r», Cent «c», InfinityX «x»)",

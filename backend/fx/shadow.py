@@ -10,7 +10,7 @@ from fx.market import closing_soon, market_status
 from shadow import _agg, _by, BUCKETS
 
 MAX_AGE_H = 72
-KINDS = ("RECHAZADA", "BAJA_CONFIANZA", "FILTRO_IA", "BLOQUEADA", "NOTICIAS", "SESION", "EXPOSICION", "ROLLOVER", "VOLATILIDAD", "ESTACIONAL", "REGIMEN_USD", "FOMC", "PRECIO_EXTENDIDO", "RR_BAJO", "SPREAD", "ERROR", "NO_EJECUTADA")
+KINDS = ("RECHAZADA", "BAJA_CONFIANZA", "FILTRO_IA", "BLOQUEADA", "NOTICIAS", "SESION", "EXPOSICION", "ROLLOVER", "VOLATILIDAD", "ESTACIONAL", "REGIMEN_USD", "FOMC", "PRECIO_EXTENDIDO", "RR_BAJO", "SPREAD", "ERROR", "NO_EJECUTADA", "REGLA")
 AI_KINDS = ("RECHAZADA", "BAJA_CONFIANZA")
 
 
@@ -20,7 +20,7 @@ def _costs(engine):
 
 
 async def open_shadow(engine, signal_id: str, symbol: str, sig: dict, settings, kind: str, acc: dict,
-                      ai_confidence: int = 0, ai_risk: str = "-", risk_factor: float = 1.0, note: str = ""):
+                      ai_confidence: int = 0, ai_risk: str = "-", risk_factor: float = 1.0, note: str = "", rule_id: str = None):
     tickers = engine.market.tickers
     news_ctx = engine.news.context(symbol) if getattr(engine, "news", None) else None
     news_risk = ((news_ctx or {}).get("mercado") or {}).get("risk") or "SIN_DATO"
@@ -33,7 +33,7 @@ async def open_shadow(engine, signal_id: str, symbol: str, sig: dict, settings, 
         lots = MIN_LOT
         margin = lots * SPECS[symbol]["contract"] * risk.base_usd(symbol, tickers, entry) / settings.leverage
         real_risk = risk.min_lot_risk_pct(acc["equity"], entry, sl, symbol, tickers)
-    doc = {"signal_id": signal_id, "symbol": symbol, "side": sig["side"], "strategy": sig["strategy"], "timeframe": settings.timeframe, "horizon": "long" if sig["strategy"] == "fix_reversion" else "short",
+    doc = {"rule_id": rule_id, "signal_id": signal_id, "symbol": symbol, "side": sig["side"], "strategy": sig["strategy"], "timeframe": settings.timeframe, "horizon": "long" if sig["strategy"] == "fix_reversion" else "short",
            "kind": kind, "note": note[:200], "ai_confidence": ai_confidence, "ai_risk": ai_risk, "entry_price": entry, "qty": lots,
            "leverage": settings.leverage, "margin": margin, "risk_pct": real_risk, "undersized": undersized, "sl": sl, "tp": tp, "initial_sl": sl,
            "atr": sig["atr"], "fees": risk.spread_cost(symbol, lots, tickers, _costs(engine)), "breakeven": False, "risk_factor": risk_factor,

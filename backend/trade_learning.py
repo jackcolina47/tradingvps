@@ -56,25 +56,28 @@ async def review(engine, t: Trade, currency: str, before_unit: str = "ms", known
     return out
 
 
-async def learn(engine, trade: Trade):
-    """Runs after every closed trade of the crypto bot (never raises)."""
+FX_MARKET = "forex y metales (CFD con lotes y pips)"
+
+
+async def learn(engine, trade: Trade, currency: str = "USDT", before_unit: str = "ms"):
+    """Runs after every closed trade of a rules-only bot (never raises)."""
     try:
         rules = await ai_rules.list_rules(engine.db)
-        out = await review(engine, trade, "USDT", "ms", [r["text"] for r in rules])
+        out = await review(engine, trade, currency, before_unit, [r["text"] for r in rules])
         await engine.log("AI_EVAL", f"{trade.symbol}: operación cerrada analizada · {out['verdict']} · {out['verdict_reason']}")
         if trade.pnl < 0 and out["verdict"] in RULE_VERDICTS and len(out["lesson"]) >= 5:
             rule = await ai_rules.auto_add(engine.db, out["lesson"], trade.id, out["verdict"])
             if rule:
-                await engine.log("AI_EVAL", f"Regla aprendida de {trade.symbol} ({trade.pnl:+.2f} USDT): «{rule['text']}»")
-                await engine.tg(f"📚 <b>Regla aprendida</b> · {trade.side.upper()} {trade.symbol} ({trade.pnl:+.2f} USDT · {out['verdict']})\n«{rule['text']}»", "ai")
+                await engine.log("AI_EVAL", f"Regla aprendida de {trade.symbol} ({trade.pnl:+.2f} {currency}): «{rule['text']}»")
+                await engine.tg(f"📚 <b>Regla aprendida</b> · {trade.side.upper()} {trade.symbol} ({trade.pnl:+.2f} {currency} · {out['verdict']})\n«{rule['text']}»", "ai")
         elif trade.pnl > 0:
-            await _check_winner(engine, trade)
+            await _check_winner(engine, trade, currency)
     except Exception as e:
         logger.exception("learn")
         await engine.log("ERROR", f"{trade.symbol}: no se pudo analizar la operación cerrada · {ai_advisor.friendly_error(e)}")
 
 
-async def _check_winner(engine, trade: Trade):
+async def _check_winner(engine, trade: Trade, currency: str = "USDT"):
     """A winner that a currently active rule would have blocked is a miss for that rule (auto-off after MAX_MISSES)."""
     active = await ai_rules.active(engine.db, trade.symbol)
     signal = await _signal(engine, trade)
@@ -83,10 +86,10 @@ async def _check_winner(engine, trade: Trade):
     ctx = signal.get("context") or {}
     sig = {"side": signal["side"], "strategy": signal["strategy"], "price": signal["price"], "sl": signal["sl"], "tp": signal["tp"],
            "score": signal["score"], "reasons": signal["reasons"], "indicators": signal["indicators"]}
-    res = await ai_funnel.rules_check(trade.symbol, signal["timeframe"], sig, ctx, active)
+    res = await ai_funnel.rules_check(trade.symbol, signal["timeframe"], sig, ctx, active, **({} if currency == "USDT" else {"market": FX_MARKET}))
     if res["violates"]:
         r = await ai_rules.miss(engine.db, res["rule"]["id"])
         off = " · regla APAGADA automáticamente" if not r["enabled"] else ""
-        await engine.log("AI_EVAL", f"{trade.symbol}: operación ganadora ({trade.pnl:+.2f} USDT) que la regla «{r['text']}» habría bloqueado · {r['misses']}/{ai_rules.MAX_MISSES} fallos{off}")
+        await engine.log("AI_EVAL", f"{trade.symbol}: operación ganadora ({trade.pnl:+.2f} {currency}) que la regla «{r['text']}» habría bloqueado · {r['misses']}/{ai_rules.MAX_MISSES} fallos{off}")
         if off:
             await engine.tg(f"📚 <b>Regla apagada</b>: habría bloqueado {r['misses']} operaciones ganadoras\n«{r['text']}»", "ai")

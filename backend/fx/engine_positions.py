@@ -1,6 +1,8 @@
 """FxEngine mixin · positions: paper tick (SL/TP, time stop, partial, trailing), REAL sync with HFM, adoption of orphan broker positions,
 open/close with sizing and all the MetaApi failure paths."""
 import time
+import asyncio
+import trade_learning
 from datetime import datetime, timezone
 from bson import ObjectId
 from models import Position, Trade, now_iso
@@ -284,7 +286,13 @@ class PositionsMixin:
                       exit_mode=p.exit_mode, tags=[EMA_TEST_TAG] if p.exit_mode == "cross" else [])
         res = await self.db.trades.insert_one(trade.to_mongo())
         trade.id = str(res.inserted_id)
+        if self.profile.rules_only and trade.exit_mode != "cross":
+            asyncio.create_task(self._learn(trade))
         return trade
+
+    async def _learn(self, trade: Trade):
+        if (await self.get_settings()).rules_auto_learn:
+            await trade_learning.learn(self, trade, "USD", "s")
 
     # ---------- execution ----------
     def _slot_block(self, open_docs: list, settings: FxSettings, horizon: str):

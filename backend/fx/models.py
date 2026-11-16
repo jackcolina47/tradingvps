@@ -26,6 +26,7 @@ class FxSettings(BaseModel):
     min_rr: float = 1.5
     max_spread_sl_pct: float = 25.0
     ai_news_weight: str = "normal"
+    rules_auto_learn: bool = True
     ai_position_review_enabled: bool = False
     ai_position_review_minutes: int = 30
     ai_position_review_mode: str = "auto"
@@ -212,6 +213,7 @@ class FxSettingsUpdate(BaseModel):
     min_rr: Optional[float] = Field(default=None, ge=0, le=5)
     max_spread_sl_pct: Optional[float] = Field(default=None, ge=0, le=100)
     ai_news_weight: Optional[str] = Field(default=None, pattern="^(normal|bajo)$")
+    rules_auto_learn: Optional[bool] = None
     ai_position_review_enabled: Optional[bool] = None
     ai_position_review_minutes: Optional[int] = Field(default=None, ge=5, le=240)
     ai_position_review_mode: Optional[str] = Field(default=None, pattern="^(notify|auto)$")

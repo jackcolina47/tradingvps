@@ -12,7 +12,7 @@ const Stat = ({ label, value, testId }) => (
 
 const PROFILE_TONE = ["text-emerald-300", "text-lime-300", "text-amber-300", "text-orange-300", "text-rose-300"];
 
-export default function BotPanel({ settings: s, meta, account, equity, profileActive, fmtLeverage = (v) => `${v}x` }) {
+export default function BotPanel({ settings: s, meta, account, equity, profileActive, fmtLeverage = (v) => `${v}x`, rulesOnly = false }) {
   const info = meta?.strategy_info || {};
   const active = activeStrategies(s, meta?.strategy_keys || undefined);
   const profile = profileActive != null ? meta?.profiles?.[profileActive] : null;
@@ -61,14 +61,15 @@ export default function BotPanel({ settings: s, meta, account, equity, profileAc
       <div data-testid="ai-config-card" className="rounded-sm border border-purple-500/30 bg-purple-500/[0.08] p-3">
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-1.5 text-[13px] font-semibold text-purple-300">
-            <Sparkles className="h-3.5 w-3.5" /> Reglas aprendidas
+            <Sparkles className="h-3.5 w-3.5" /> {rulesOnly ? "Reglas aprendidas" : "Confirmación IA"}
           </span>
-          <span data-testid="ai-status-label" className={`font-mono text-[10px] font-bold uppercase ${s.rules_auto_learn ? "text-purple-300" : "text-slate-500"}`}>
-            {s.rules_auto_learn ? "Aprendiendo" : "Aprendizaje apagado"}
+          <span data-testid="ai-status-label" className={`font-mono text-[10px] font-bold uppercase ${(rulesOnly ? s.rules_auto_learn : s.ai_enabled) ? "text-purple-300" : "text-slate-500"}`}>
+            {rulesOnly ? (s.rules_auto_learn ? "Aprendiendo" : "Aprendizaje apagado") : s.ai_enabled ? "Activa" : "Inactiva"}
           </span>
         </div>
         <p className="mt-1 text-[12px] leading-relaxed text-slate-400">
-          Cada señal detectada se abre directamente. El único filtro son las reglas aprendidas de las operaciones cerradas (Ajustes → Reglas aprendidas).
+          {rulesOnly ? "Cada señal detectada se abre directamente. El único filtro son las reglas aprendidas de las operaciones cerradas (Ajustes → Reglas aprendidas)."
+            : `La IA revisa cada señal y solo se ejecuta si la aprueba con confianza ≥ ${s.ai_min_confidence}%.`}
         </p>
       </div>
 

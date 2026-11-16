@@ -47,6 +47,9 @@ const EXTRA_TOGGLES = [
   { k: "price_action_block", label: "Bloqueo por precio extendido", hint: "Regla dura: sin entradas tras N velas grandes seguidas en la dirección de la señal ni pegadas a un swing contrario (resistencia en LONG / soporte en SHORT). La señal queda en sombra PRECIO_EXTENDIDO" },
   { k: "partial_tp_enabled", label: "Cierre parcial de beneficios", hint: "Cierra una parte al alcanzar el nivel en R y deja correr el resto con trailing" },
 ];
+const RULES_ONLY_HIDE = ["ai_enabled", "ai_funnel_enabled", "ai_min_confidence", "min_rr", "vol_filter_enabled", "seasonality_bias", "usd_regime_filter", "fomc_rule", "price_action_block",
+  "vol_min_pct", "vol_high_pct", "seasonality_size_factor", "price_action_max_candles", "price_action_swing_atr"];
+const LEARN_TOGGLE = { k: "rules_auto_learn", label: "Aprendizaje automático", hint: "La IA analiza cada operación cerrada: de las pérdidas evitables guarda una regla nueva y apaga las reglas que habrían bloqueado 3 operaciones ganadoras. Gasta saldo de IA por operación cerrada" };
 const EXTRA_NUMS = [
   { k: "min_lot_max_risk", label: "Riesgo máx. lote mínimo (%)", step: 0.5, min: 0, max: 10,
     hint: "Si el tamaño ideal queda por debajo de 0.01 lotes (típico en oro/plata con poco capital), se abre el lote mínimo siempre que su riesgo no supere este % de la equidad. 0 = nunca." },
@@ -76,6 +79,7 @@ const PLAN_INTRO = (brand) => `Plan de crecimiento compuesto para la cuenta fore
 export default function FxDashboard({ onLogout, bot = "fx" }) {
   setApiBase(bot);
   const brand = BRANDS[bot] || BRANDS.fx;
+  const rulesOnly = bot === "fx";  // HotForex: entries gated only by risk limits + learned rules
   const nav = useNavigate();
   const [meta, setMeta] = useState(null);
   const [symbol, setSymbol] = useState("XAUUSD");
@@ -157,7 +161,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <Watchlist items={data.watchlist} selected={symbol} onSelect={setSymbol} />
           <PriceChart symbol={symbol} defaultTf={data.settings.timeframe} kind={meta?.symbol_info?.[symbol]?.name || "Forex"} tfs={FX_TFS} />
-          <BotPanel settings={data.settings} meta={meta} account={data.account} equity={data.equity} profileActive={data.profile_active} fmtLeverage={fmtLev} />
+          <BotPanel settings={data.settings} meta={meta} account={data.account} equity={data.equity} profileActive={data.profile_active} fmtLeverage={fmtLev} rulesOnly={rulesOnly} />
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
           <Panel testId="fx-operations-panel" className="lg:col-span-8" delay={220}>
@@ -208,11 +212,15 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
               </TabsContent>
             </Tabs>
           </Panel>
-          <AiSignals signals={data.signals} ai={data.status.ai} usage={data.status.ai_usage} minConfidence={data.settings.ai_min_confidence} />
+          <AiSignals signals={data.signals} ai={data.status.ai} usage={data.status.ai_usage} minConfidence={data.settings.ai_min_confidence} rulesOnly={rulesOnly}
+            {...(rulesOnly ? { title: "Señales y reglas aprendidas", emptyText: "Cada señal detectada se abre directamente; aquí verás si alguna regla aprendida la bloqueó y por qué." } : {})} />
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          <SettingsPanel settings={data.settings} meta={meta} profileActive={data.profile_active} leverageMax={500} maxPositions={12} extraToggles={EXTRA_TOGGLES} extraNums={EXTRA_NUMS}
-            extraChips={[...SESSION_CHIPS(meta), ...SEASON_CHIPS(meta)]} extraSelects={EXTRA_SELECTS} fmtLeverage={fmtLev} strategyKeys={meta?.strategy_keys} longKeys={meta?.long_horizon_keys}
+          <SettingsPanel settings={data.settings} meta={meta} profileActive={data.profile_active} leverageMax={500} maxPositions={12}
+            hide={rulesOnly ? RULES_ONLY_HIDE : []}
+            extraToggles={rulesOnly ? [LEARN_TOGGLE, ...EXTRA_TOGGLES.filter((t) => !RULES_ONLY_HIDE.includes(t.k))] : EXTRA_TOGGLES}
+            extraNums={rulesOnly ? EXTRA_NUMS.filter((n) => !RULES_ONLY_HIDE.includes(n.k)) : EXTRA_NUMS}
+            extraChips={[...SESSION_CHIPS(meta), ...(rulesOnly ? [] : SEASON_CHIPS(meta))]} extraSelects={rulesOnly ? EXTRA_SELECTS.filter((x) => x.k !== "ai_news_weight") : EXTRA_SELECTS} fmtLeverage={fmtLev} strategyKeys={meta?.strategy_keys} longKeys={meta?.long_horizon_keys}
             onSave={(body) => act(() => http.put("/settings", body), "Configuración guardada")}
             onProfile={(level) => act(() => http.post("/profile", { level }), `Perfil de riesgo aplicado: ${meta?.profiles?.[level]?.name || level}`)} />
           <Terminal logs={data.logs} onClear={() => act(() => http.delete("/logs"))} />

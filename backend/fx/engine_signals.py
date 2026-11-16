@@ -15,6 +15,7 @@ from fx.ai import evaluate_signal
 import ai_funnel
 import price_action
 import ai_rules
+import trade_learning
 from ai_advisor import label as ai_label
 from fx.backtest import build_fx_df
 from fx.shadow import open_shadow
@@ -202,18 +203,19 @@ class SignalsMixin:
         await self.log("SIGNAL", f"{symbol} {sig['side'].upper()} · {FX_STRATEGY_INFO[sig['strategy']]['name']} · {sig['score']} confirmaciones" + (" · largo plazo" if horizon == "long" else ""))
         acc = await self.account_summary()
         block, kind, open_syms = await self._blocks(symbol, settings, acc, sig["side"], horizon)
-        news_block, risk_factor = self.news.gate(symbol) if self.news else (None, 1.0)
+        rules_only = self.profile.rules_only  # only risk limits + learned rules decide (no news / market / price-action / R:R gates, no AI approval)
+        news_block, risk_factor = self.news.gate(symbol) if self.news and not rules_only else (None, 1.0)
         if not block and news_block:
             block, kind = news_block, "NOTICIAS"
-        g_block, g_kind, g_factor, g_ctx = await self._market_gates(symbol, sig["side"], settings, horizon)
+        g_block, g_kind, g_factor, g_ctx = await self._market_gates(symbol, sig["side"], settings, horizon) if not rules_only else (None, None, 1.0, {})
         if not block and g_block:
             block, kind = g_block, g_kind
         pa = price_action.from_df(df, sig["side"], sig["price"], sig["indicators"].get("atr", 0), sig["sl"], sig["tp"], upto=len(df) - 1,
                                   max_run=settings.price_action_max_candles, swing_atr=settings.price_action_swing_atr)
-        pa_block = price_action.hard_block(pa) if settings.price_action_block and horizon == "short" else ""
+        pa_block = price_action.hard_block(pa) if settings.price_action_block and horizon == "short" and not rules_only else ""
         if not block and pa_block:
             block, kind = pa_block, "PRECIO_EXTENDIDO"
-        pf_block, pf_kind = ai_funnel.pre_filter(sig, settings.min_rr, SPECS[symbol]["spread"], settings.max_spread_sl_pct) if horizon == "short" else (None, None)
+        pf_block, pf_kind = ai_funnel.pre_filter(sig, 0 if rules_only else settings.min_rr, SPECS[symbol]["spread"], settings.max_spread_sl_pct) if horizon == "short" else (None, None)
         if not block and pf_block:
             block, kind = pf_block, pf_kind
             logger.info(f"[STAGE 0 REJECT] {symbol} {sig['side']} · {pf_block}")
@@ -236,8 +238,33 @@ class SignalsMixin:
                 await open_shadow(self, str(res.inserted_id), symbol, sig, settings, kind, acc, risk_factor=risk_factor, note=block)
             return
         signal = Signal(**base, ai_decision="SIN_IA")
-        approve, shadow_kind = True, None
-        if settings.ai_enabled:
+        approve, shadow_kind, rule = True, None, None
+        if rules_only:
+            rules = await ai_rules.active(self.db, symbol)
+            if not rules:
+                signal.ai_reasoning = "Sin reglas aprendidas activas: entrada directa"
+            else:
+                try:
+                    res = await ai_funnel.rules_check(symbol, tf, sig, {**context, "price_action": pa, "recent_changes": [round(x, 3) for x in (df["close"].iloc[-22:-1].pct_change().dropna() * 100).tolist()]},
+                                                      rules, market=trade_learning.FX_MARKET)
+                    signal.ai_stage, signal.ai_model, signal.ai_ms = 1, res["model"], res["ms"]
+                    if res["violates"]:
+                        rule, approve, shadow_kind = res["rule"], False, "REGLA"
+                        signal.ai_decision, signal.ai_reasoning = "RECHAZADA", f"Regla incumplida: «{rule['text']}» · {res['reason']}"
+                        await ai_rules.hit(self.db, rule["id"])
+                        await self.tg(f"📚 <b>{symbol} {sig['side'].upper()} bloqueada por regla</b>\n{signal.ai_reasoning[:300]}", "ai")
+                    else:
+                        signal.ai_decision, signal.ai_reasoning = "APROBADA", f"No incumple ninguna de las {len(rules)} reglas aprendidas"
+                        signal.ai_adjusted_sl, signal.ai_adjusted_tp = res["sl"], res["tp"]
+                        change = ai_funnel.apply_levels(sig, res["sl"], res["tp"], 1.0, SPECS[symbol]["spread"], SPECS[symbol]["digits"])
+                        if change:
+                            signal.sl, signal.tp, signal.default_sl, signal.default_tp, signal.ai_levels_applied = sig["sl"], sig["tp"], sig["default_sl"], sig["default_tp"], True
+                            signal.ai_reasoning += f" · niveles ajustados por lo aprendido: {change}" + (f" · {res['reason']}" if res["reason"] else "")
+                except Exception as e:
+                    logger.exception("rules check")
+                    signal.note = f"Reglas no comprobadas (IA sin respuesta: {str(e)[:120]}) · se abre sin filtro"
+                await self.log("AI_EVAL", f"{symbol}: {signal.ai_reasoning or signal.note}" + (f" · {signal.ai_model} · {signal.ai_ms} ms" if signal.ai_model else ""))
+        elif settings.ai_enabled:
             await self.log("AI_EVAL", f"{ai_label()} evaluando {symbol} {sig['side'].upper()}...")
             closes = df["close"].iloc[-22:-1]
             ctx = {
@@ -293,7 +320,8 @@ class SignalsMixin:
             if not pos:
                 await open_shadow(self, sid, symbol, sig, settings, "NO_EJECUTADA", acc, signal.ai_confidence, signal.ai_risk, risk_factor, note=reason or "")
         elif shadow_kind:
-            await open_shadow(self, sid, symbol, sig, settings, shadow_kind, acc, signal.ai_confidence, signal.ai_risk, risk_factor, note=signal.note or signal.ai_reasoning)
+            await open_shadow(self, sid, symbol, sig, settings, shadow_kind, acc, signal.ai_confidence, signal.ai_risk, risk_factor, note=signal.note or signal.ai_reasoning,
+                              rule_id=rule["id"] if rule else None)
 
     async def _scan_slow(self, settings: FxSettings) -> int:
         """Month-end London fix reversion on 15m candles (long horizon). Only evaluated inside the 30-minute window after the fix (two 15m candles)."""

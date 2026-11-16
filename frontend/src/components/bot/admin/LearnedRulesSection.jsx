@@ -39,7 +39,7 @@ export default function LearnedRulesSection() {
       actions={<span data-testid="learned-rules-count" className="font-mono text-[10px] uppercase tracking-wider text-slate-500">{active} activas · {(rules || []).length}/{max}</span>}>
       <p className="text-[12px] text-slate-400">
         Lecciones de los análisis de operaciones cerradas o reglas propias. La IA las comprueba en cada señal de este bot y cita la regla cuando una señal la incumple.
-        En Bybit son el <span className="text-amber-300">único filtro de entrada</span> y se crean solas tras cada pérdida evitable; en los bots de forex acompañan a la evaluación IA. Debajo de cada regla ves cuántas señales bloqueó y qué habría pasado sin ella.
+        En Bybit y HotForex son el <span className="text-amber-300">único filtro de entrada</span> y se crean solas tras cada pérdida evitable; en Pepperstone acompañan a la evaluación IA. Debajo de cada regla ves cuántas señales bloqueó y qué habría pasado sin ella.
       </p>
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-[240px] flex-1">
