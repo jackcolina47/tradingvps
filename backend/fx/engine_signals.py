@@ -266,6 +266,12 @@ class SignalsMixin:
                     signal.ai_stage, signal.ai_model, signal.ai_ms = 2, res["model"], res["ms"] + (fast["ms"] if fast else 0)
                     signal.ai_adjusted_sl, signal.ai_adjusted_tp = res.get("adjusted_sl"), res.get("adjusted_tp")
                     approve = res["decision"] == "APROBADA" and res["confidence"] >= settings.ai_min_confidence  # risk is informative only
+                    change = ai_funnel.apply_levels(sig, res.get("adjusted_sl"), res.get("adjusted_tp"), settings.min_rr, SPECS[symbol]["spread"],
+                                                    SPECS[symbol]["digits"]) if approve and ctx["learned_rules"] else None
+                    if change:
+                        signal.sl, signal.tp, signal.default_sl, signal.default_tp, signal.ai_levels_applied = sig["sl"], sig["tp"], sig["default_sl"], sig["default_tp"], True
+                        signal.ai_reasoning = f"{signal.ai_reasoning} · Niveles ajustados por lo aprendido: {change}"[:900]
+                        await self.log("AI_EVAL", f"{symbol}: niveles ajustados por las reglas aprendidas · {change}")
                     if res["decision"] == "APROBADA" and not approve:
                         signal.note = f"Confianza {res['confidence']}% menor al mínimo ({settings.ai_min_confidence}%)"
                         shadow_kind = "BAJA_CONFIANZA"

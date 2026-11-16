@@ -19,7 +19,8 @@ SYSTEM = (
     "Aprueba solo setups con confluencia clara. "
     "Responde EXCLUSIVAMENTE con un objeto JSON válido, sin texto adicional, con este formato: "
     '{"decision":"APROBAR" o "RECHAZAR","confidence":entero 0-100,"risk":"BAJO"|"MEDIO"|"ALTO","reasoning":"máximo 3 frases en español",'
-    '"adjusted_sl":número o null (solo si un stop distinto sería claramente mejor),"adjusted_tp":número o null}'
+    '"adjusted_sl":número o null,"adjusted_tp":número o null} '
+    "(adjusted_sl/adjusted_tp: solo cuando una regla aprendida del trader lo justifique; sin reglas aprendidas deja ambos en null)"
 )
 
 NEWS_SYSTEM = (

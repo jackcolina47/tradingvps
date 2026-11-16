@@ -379,8 +379,11 @@ class Signal(BaseDocument):
     ai_stage: Optional[int] = None  # funnel stage that decided: 0 pre-filter, 1 quick filter, 2 final evaluation
     ai_model: Optional[str] = None
     ai_ms: Optional[int] = None
-    ai_adjusted_sl: Optional[float] = None  # suggested by the AI, recorded only (not applied)
+    ai_adjusted_sl: Optional[float] = None  # proposed by the AI; applied (within safe bounds) only when ai_levels_applied
     ai_adjusted_tp: Optional[float] = None
+    ai_levels_applied: bool = False
+    default_sl: Optional[float] = None
+    default_tp: Optional[float] = None
     ai_risk: str = "-"
     ai_reasoning: str = ""
     executed: bool = False

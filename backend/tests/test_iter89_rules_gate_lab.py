@@ -192,3 +192,34 @@ def test_lab_is_isolated_paper_and_tagged(monkeypatch):
         tr = await lab.close_position(str(p["_id"]), 101.0, "MANUAL")
         assert tr and await db.lab_trades.count_documents({}) == 1 and await db.trades.count_documents({}) == 0
     asyncio.run(run())
+
+
+def test_apply_levels_bounds():
+    import ai_funnel as f
+    base = {"side": "long", "price": 100.0, "sl": 98.0, "tp": 104.0}
+    assert f.apply_levels(dict(base), None, None) is None
+    s = dict(base); assert f.apply_levels(s, 97.0, None) and s["sl"] == 97.0 and s["tp"] == 104.0 and s["default_sl"] == 98.0
+    s = dict(base); f.apply_levels(s, 90.0, None); assert abs(s["sl"] - 96.4) < 1e-9          # capped at 1.8x
+    s = dict(base); f.apply_levels(s, 99.9, None); assert abs(s["sl"] - 98.8) < 1e-9          # floor 0.6x
+    s = dict(base); assert f.apply_levels(s, 101.0, 99.0) is None and s["sl"] == 98.0          # wrong side ignored
+    s = dict(base); f.apply_levels(s, None, 100.5, min_rr=1.5); assert s["tp"] == 103.0        # R:R floor
+    s = dict(base); f.apply_levels(s, None, 150.0); assert s["tp"] == 110.0                    # cap 2.5x
+    s = {"side": "short", "price": 100.0, "sl": 102.0, "tp": 96.0}; f.apply_levels(s, 103.0, 95.0); assert (s["sl"], s["tp"]) == (103.0, 95.0)
+    s = dict(base); f.apply_levels(s, 99.5, None, spread=0.5); assert s["sl"] == 98.0 or s["sl"] <= 98.0  # never tighter than 4x spread
+
+
+def test_levels_applied_on_open(monkeypatch):
+    async def run():
+        e, db = await mk("g")
+        await ai_rules.add(db, ai_rules.RuleIn(text="Stop detrás del último swing"))
+
+        async def ok(symbol, tf, sig, ctx, rules):
+            return {"violates": False, "rule": None, "reason": "swing en 97", "sl": 97.0, "tp": None, "model": "m", "ms": 1}
+        monkeypatch.setattr(ai_funnel, "rules_check", ok)
+        await e._handle_signal("BTCUSDT", dict(SIG), await e.get_settings(), DF, 1, "4h")
+        s = await db.signals.find_one({})
+        p = await db.positions.find_one({})
+        await db.client.drop_database(db.name)
+        assert s["ai_levels_applied"] and s["sl"] == 97.0 and s["default_sl"] == SIG["sl"]
+        assert abs((p["entry_price"] - p["sl"]) - 3.0) < 0.2
+    asyncio.run(run())

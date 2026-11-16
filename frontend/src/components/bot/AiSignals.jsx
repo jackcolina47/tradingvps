@@ -68,7 +68,9 @@ function SignalCard({ s, minConfidence, rulesOnly }) {
       {s.ai_stage != null && (
         <p data-testid={`ai-stage-${s.id}`} className="mt-1 font-mono text-[10px] text-slate-500">
           {rulesOnly ? "Filtro de reglas" : `Etapa ${s.ai_stage}`} · {s.ai_model} · {s.ai_ms} ms
-          {(s.ai_adjusted_sl || s.ai_adjusted_tp) && <span className="text-sky-300"> · IA sugiere{s.ai_adjusted_sl ? ` SL ${fmtPrice(s.ai_adjusted_sl)}` : ""}{s.ai_adjusted_tp ? ` TP ${fmtPrice(s.ai_adjusted_tp)}` : ""} (solo registrado)</span>}
+          {s.ai_levels_applied
+            ? <span data-testid={`signal-levels-applied-${s.id}`} className="text-sky-300"> · Niveles ajustados por lo aprendido (estrategia: SL {fmtPrice(s.default_sl)} · TP {fmtPrice(s.default_tp)})</span>
+            : (s.ai_adjusted_sl || s.ai_adjusted_tp) && <span className="text-slate-500"> · IA sugirió{s.ai_adjusted_sl ? ` SL ${fmtPrice(s.ai_adjusted_sl)}` : ""}{s.ai_adjusted_tp ? ` TP ${fmtPrice(s.ai_adjusted_tp)}` : ""} (no aplicado)</span>}
         </p>
       )}
       {s.note && <p className="mt-1.5 text-[11px] text-orange-300">{s.note}</p>}

@@ -862,6 +862,11 @@ class TradingEngine:
                     await ai_rules.hit(self.db, rule["id"])
                 else:
                     signal.ai_decision, signal.ai_reasoning = "APROBADA", f"No incumple ninguna de las {len(rules)} reglas aprendidas"
+                    signal.ai_adjusted_sl, signal.ai_adjusted_tp = res["sl"], res["tp"]
+                    change = ai_funnel.apply_levels(sig, res["sl"], res["tp"])
+                    if change:
+                        signal.sl, signal.tp, signal.default_sl, signal.default_tp, signal.ai_levels_applied = sig["sl"], sig["tp"], sig["default_sl"], sig["default_tp"], True
+                        signal.ai_reasoning += f" · niveles ajustados por lo aprendido: {change}" + (f" · {res['reason']}" if res["reason"] else "")
             except Exception as e:
                 logger.exception("rules check")
                 signal.note = f"Reglas no comprobadas (IA sin respuesta: {str(e)[:120]}) · se abre sin filtro"

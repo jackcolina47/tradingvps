@@ -100,13 +100,46 @@ async def final_eval(evaluate, *args) -> dict:
     return res
 
 
+SL_BAND, TP_MAX = (0.6, 1.8), 2.5  # AI levels: stop within 0.6–1.8× the strategy stop distance, target at most 2.5× the strategy target distance
+
+
+def apply_levels(sig: dict, sl, tp, min_rr: float = 1.0, spread: float = 0.0, digits: int = None):
+    """Applies AI-proposed SL/TP to the signal inside safe bounds (right side of the entry, stop band, minimum R:R, target cap).
+    Returns a short description of what changed, or None when the strategy defaults are kept."""
+    d = 1 if sig["side"] == "long" else -1
+    price, sl0, tp0 = sig["price"], sig["sl"], sig["tp"]
+    risk0, reward0 = abs(price - sl0), abs(tp0 - price)
+    if risk0 <= 0 or reward0 <= 0 or (sl is None and tp is None):
+        return None
+    risk = risk0
+    if sl is not None and (price - sl) * d > 0:
+        risk = min(max((price - sl) * d, SL_BAND[0] * risk0, 4 * spread), max(SL_BAND[1] * risk0, 4 * spread))
+    lo, hi = max(min_rr, 1.0) * risk, TP_MAX * reward0
+    reward = (tp - price) * d if tp is not None and (tp - price) * d > 0 else reward0
+    reward = max(reward, lo) if lo <= hi else None
+    if reward is None:
+        return None
+    reward = min(reward, hi)
+    new_sl, new_tp = price - risk * d, price + reward * d
+    if digits is not None:
+        new_sl, new_tp = round(new_sl, digits), round(new_tp, digits)
+    if abs(new_sl - sl0) < 1e-9 * price and abs(new_tp - tp0) < 1e-9 * price:
+        return None
+    sig.update(sl=new_sl, tp=new_tp, default_sl=sl0, default_tp=tp0)
+    return f"SL {sl0:.6g} → {new_sl:.6g} · TP {tp0:.6g} → {new_tp:.6g} (R:R {reward / risk:.2f})"
+
+
 RULES_SYSTEM = (
     "Eres el filtro de reglas de un bot de trading de criptomonedas (perpetuos USDT). Recibes una señal de entrada y una lista numerada de REGLAS "
     "aprendidas de operaciones pasadas. Tu ÚNICA tarea es decidir si la señal incumple claramente alguna regla con los datos recibidos. "
     "No juzgues si la señal es buena o mala por ningún otro motivo: si no incumple ninguna regla, pasa. Si los datos no permiten comprobar una regla, "
     "considérala cumplida. Una regla marcada «(solo SÍMBOLO)» únicamente aplica a ese par. "
+    "Además, si la señal pasa y alguna regla habla de dónde colocar el stop o el objetivo (stop demasiado ajustado, detrás de un swing, objetivo antes de una "
+    "resistencia, etc.) y con los datos recibidos procede aplicarla, propón el SL y/o TP ajustados como precios; en cualquier otro caso deja sl y tp en null "
+    "y se usarán los niveles por defecto de la estrategia. "
     'Responde EXCLUSIVAMENTE con JSON válido, sin texto adicional: {"violates":true|false,"rule":número de la regla incumplida (0 si ninguna),'
-    '"reason":"máx. 25 palabras en español citando el dato concreto que incumple la regla; vacío si pasa"}'
+    '"reason":"máx. 25 palabras en español citando el dato concreto que incumple la regla, o por qué ajustas los niveles; vacío si pasa sin cambios",'
+    '"sl":número o null,"tp":número o null}'
 )
 
 
@@ -135,7 +168,9 @@ async def rules_check(symbol: str, timeframe: str, sig: dict, ctx: dict, rules: 
     except (TypeError, ValueError):
         n = 0
     violates = bool(data.get("violates")) and 1 <= n <= len(rules)
+    num = lambda v: float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else None  # noqa: E731
     out = {"violates": violates, "rule": rules[n - 1] if violates else None, "reason": str(data.get("reason") or "")[:200],
+           "sl": None if violates else num(data.get("sl")), "tp": None if violates else num(data.get("tp")),
            "model": label(cfg["model"]), "ms": int((time.monotonic() - t0) * 1000)}
     logger.info(f"[RULES {'BLOCK' if violates else 'PASS'}] {symbol} {sig['side']} · {cfg['model']} · {out['ms']} ms · {len(rules)} reglas · {out['reason']}")
     return out

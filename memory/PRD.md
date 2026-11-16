@@ -586,3 +586,4 @@
 - HotForex y Pepperstone sin cambios (siguen con evaluación IA).
 - Tests: `tests/test_iter89_rules_gate_lab.py`. Tests antiguos de la puerta IA de Bybit quedan obsoletos.
 - Iter 90: Bybit Lab — capital ficticio configurable en el diálogo «Reiniciar» (10–10.000.000 USDT, `Header resetCapital`, POST /api/lab/account/reset {initial_balance}).
+- Iter 91: ajuste IA de SL/TP por reglas aprendidas (`ai_funnel.apply_levels`: SL 0.6–1.8× distancia de la estrategia, ≥4× spread en FX, R:R ≥ max(min_rr,1), TP ≤ 2.5×). Bybit: `rules_check` devuelve sl/tp; FX: `adjusted_sl/tp` de la evaluación IA se aplican solo si hay reglas activas. Sin reglas → niveles por defecto. Test EMA y Lab no se ajustan. Signal: `ai_levels_applied`, `default_sl/tp`.

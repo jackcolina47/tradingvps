@@ -110,5 +110,7 @@ def prompt_lines(rules: Optional[List[dict]]) -> str:
     if not rules:
         return ""
     lines = "\n".join(f"- {r['text']}" + (f" (solo {r['symbol']})" if r.get("symbol") else "") for r in rules)
-    return ("REGLAS APRENDIDAS DEL TRADER (prioridad alta: si la señal incumple alguna, RECHAZA o baja mucho la confianza y cita la regla):\n"
+    return ("REGLAS APRENDIDAS DEL TRADER (prioridad alta: si la señal incumple alguna, RECHAZA o baja mucho la confianza y cita la regla; "
+            "si apruebas y alguna regla habla de dónde colocar el stop o el objetivo y procede aplicarla, devuelve adjusted_sl/adjusted_tp acordes, "
+            "que se aplicarán a la orden; si no, déjalos en null):\n"
             f"{lines}\n")
