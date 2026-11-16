@@ -70,6 +70,11 @@ async def manual(engine, amount: float, note: str = "", currency: str = "USDT") 
     return await apply(engine, amount, "paper", note, currency=currency)
 
 
+def _ms(iso: str) -> int:
+    d = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+    return int((d if d.tzinfo else d.replace(tzinfo=timezone.utc)).timestamp() * 1000)
+
+
 async def poll(engine, source: str, force: bool = False, currency: str = "USDT") -> bool:
     """REAL mode: asks the broker for transfers since the last check (every POLL_SEC, or now if `force`). Returns True if a new flow was applied."""
     if not (engine.live and engine.broker):
@@ -79,8 +84,11 @@ async def poll(engine, source: str, force: bool = False, currency: str = "USDT")
         return False
     engine._cash_checked = now
     acc = await engine.db.account.find_one({"_id": "main"}, {"cash_checked_at": 1, "created_at": 1})
-    since_iso = acc.get("cash_checked_at") or (engine.cfg.live_since if engine.cfg and getattr(engine.cfg, "live_since", None) else None) or acc["created_at"]
-    since_ms = int(datetime.fromisoformat(since_iso).timestamp() * 1000) - OVERLAP_MS
+    # Baseline = when the current statistics started (last reset or switch to REAL, whichever is later): the starting capital was read from the
+    # broker at that moment and already contains every earlier transfer, so older balance operations must never be counted again.
+    live_since = getattr(engine.cfg, "live_since", None) if engine.cfg else None
+    base_ms = max(_ms(x) for x in (acc["created_at"], live_since) if x)
+    since_ms = max(_ms(acc["cash_checked_at"]) - OVERLAP_MS, base_ms) if acc.get("cash_checked_at") else base_ms
     try:
         flows = await engine.broker.cash_flows(since_ms)
     except Exception as e:
@@ -88,6 +96,8 @@ async def poll(engine, source: str, force: bool = False, currency: str = "USDT")
         return False
     applied = False
     for f in flows:
+        if f.get("ts") and _ms(f["ts"]) < base_ms:
+            continue
         if await apply(engine, f["amount"], source, f.get("note", ""), ext_id=f["id"], ts=f.get("ts"), currency=currency):
             applied = True
     if applied and hasattr(engine.broker, "invalidate"):
