@@ -5,7 +5,6 @@ from bson import ObjectId
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-MAX_RULES = 30
 MAX_MISSES = 3  # winners a rule would have blocked before it is switched off automatically
 
 
@@ -25,7 +24,7 @@ class RulePatch(BaseModel):
 def _pub(d: dict) -> dict:
     return {"id": str(d["_id"]), "text": d["text"], "symbol": d.get("symbol") or "", "enabled": d.get("enabled", True),
             "source_trade_id": d.get("source_trade_id"), "verdict": d.get("verdict"), "created_at": d.get("created_at"), "hits": d.get("hits", 0),
-            "misses": d.get("misses", 0), "auto": bool(d.get("auto"))}
+            "misses": d.get("misses", 0), "auto": bool(d.get("auto")), "ai_edited_at": d.get("ai_edited_at"), "ai_note": d.get("ai_note")}
 
 
 async def list_rules(db) -> List[dict]:
@@ -40,14 +39,10 @@ async def list_rules(db) -> List[dict]:
 
 
 async def auto_add(db, text: str, trade_id: str, verdict: str) -> Optional[dict]:
-    """Rule learned from a closed trade. When the list is full the oldest switched-off rule makes room; returns None if nothing can be added."""
+    """Rule learned from a closed trade; returns None when the same text already exists."""
     text = " ".join(text.split())[:300]
     if await db.ai_rules.find_one({"text": text}):
         return None
-    if await db.ai_rules.count_documents({}) >= MAX_RULES:
-        old = await db.ai_rules.find_one_and_delete({"enabled": False}, sort=[("_id", 1)])
-        if not old:
-            return None
     doc = {"text": text, "symbol": "", "enabled": True, "source_trade_id": trade_id, "verdict": verdict, "auto": True,
            "created_at": datetime.now(timezone.utc).isoformat(), "hits": 0, "misses": 0}
     res = await db.ai_rules.insert_one(doc)
@@ -71,12 +66,10 @@ async def active(db, symbol: str = None) -> List[dict]:
     q = {"enabled": True}
     if symbol:
         q["$or"] = [{"symbol": ""}, {"symbol": None}, {"symbol": symbol}]
-    return [_pub(d) async for d in db.ai_rules.find(q).sort("_id", -1).limit(MAX_RULES)]
+    return [_pub(d) async for d in db.ai_rules.find(q).sort("_id", -1)]
 
 
 async def add(db, body: RuleIn) -> dict:
-    if await db.ai_rules.count_documents({}) >= MAX_RULES:
-        raise HTTPException(400, f"Máximo {MAX_RULES} reglas: borra alguna antes de añadir otra")
     text = " ".join(body.text.split())
     if await db.ai_rules.find_one({"text": text}):
         raise HTTPException(409, "Esa regla ya existe")
@@ -95,6 +88,8 @@ async def patch(db, rule_id: str, body: RulePatch) -> dict:
         upd["misses"] = 0  # switched back on by hand: the miss counter starts again
     if "text" in upd:
         upd["text"] = " ".join(upd["text"].split())
+        if await db.ai_rules.find_one({"text": upd["text"], "_id": {"$ne": ObjectId(rule_id)}}):
+            raise HTTPException(409, "Ya existe otra regla con ese texto")
     doc = await db.ai_rules.find_one_and_update({"_id": ObjectId(rule_id)}, {"$set": upd}, return_document=True) if upd else await db.ai_rules.find_one({"_id": ObjectId(rule_id)})
     if not doc:
         raise HTTPException(404, "Regla no encontrada")
@@ -114,3 +109,34 @@ def prompt_lines(rules: Optional[List[dict]]) -> str:
             "si apruebas y alguna regla habla de dónde colocar el stop o el objetivo y procede aplicarla, devuelve adjusted_sl/adjusted_tp acordes, "
             "que se aplicarán a la orden; si no, déjalos en null):\n"
             f"{lines}\n")
+
+
+ACTIONS = ("DESACTIVAR", "MODIFICAR", "ELIMINAR")
+
+
+async def event(db, action: str, text: str, reason: str = "", trade: dict = None, prev: str = None) -> None:
+    """Audit trail of what the automatic learning did to the rules (shown in the settings panel)."""
+    await db.ai_rule_events.insert_one({"at": datetime.now(timezone.utc).isoformat(), "action": action, "text": text, "prev": prev, "reason": reason[:300], **(trade or {})})
+
+
+async def events(db, limit: int = 30) -> List[dict]:
+    return [{k: v for k, v in d.items() if k != "_id"} async for d in db.ai_rule_events.find().sort("_id", -1).limit(limit)]
+
+
+async def apply_action(db, rule: dict, action: str, text: str, reason: str, trade: dict) -> Optional[str]:
+    """Applies one maintenance action decided by the trade post-mortem. Returns a log line, or None when nothing changed."""
+    oid = ObjectId(rule["id"])
+    if action == "DESACTIVAR" and rule["enabled"]:
+        await db.ai_rules.update_one({"_id": oid}, {"$set": {"enabled": False, "ai_edited_at": datetime.now(timezone.utc).isoformat(), "ai_note": f"Apagada por la IA: {reason}"[:300]}})
+    elif action == "ELIMINAR":
+        await db.ai_rules.delete_one({"_id": oid})
+    elif action == "MODIFICAR":
+        text = " ".join((text or "").split())[:300]
+        if len(text) < 5 or text == rule["text"] or await db.ai_rules.find_one({"text": text}):
+            return None
+        await db.ai_rules.update_one({"_id": oid}, {"$set": {"text": text, "ai_edited_at": datetime.now(timezone.utc).isoformat(), "ai_note": f"Reescrita por la IA: {reason}"[:300], "misses": 0}})
+    else:
+        return None
+    await event(db, action, text if action == "MODIFICAR" else rule["text"], reason, trade, rule["text"] if action == "MODIFICAR" else None)
+    verb = {"DESACTIVAR": "apagada", "ELIMINAR": "eliminada", "MODIFICAR": "reescrita"}[action]
+    return f"Regla {verb}: «{rule['text']}»" + (f" → «{text}»" if action == "MODIFICAR" else "") + (f" · {reason}" if reason else "")

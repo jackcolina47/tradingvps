@@ -64,7 +64,7 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
 
     @router.get("/ai-rules")
     async def ai_rules_list():
-        return {"rules": await ai_rules.list_rules(engine.db), "max": ai_rules.MAX_RULES}
+        return {"rules": await ai_rules.list_rules(engine.db), "max": None, "events": await ai_rules.events(engine.db)}
 
     @router.post("/ai-rules")
     async def ai_rules_add(body: ai_rules.RuleIn):

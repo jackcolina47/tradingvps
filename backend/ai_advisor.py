@@ -425,7 +425,13 @@ async def analyze_trade(t: dict, signal: dict | None, pa: dict, before: list, du
         f"Nota del usuario: {t.get('note') or '—'}\n"
         + ("REGLAS YA GUARDADAS (la «lesson» se guardará como regla nueva que filtra entradas futuras: debe poder comprobarse con los datos de una señal "
            "—indicadores, tendencia, velas previas, niveles, hora— y si ya está cubierta por alguna de estas, devuelve \"lesson\":\"\"):\n"
-           + "\n".join(f"- {r}" for r in known_rules) + "\n" if known_rules is not None else "")
+           + "\n".join(f"{i}. [{'activa' if r['enabled'] else 'apagada'} · {r.get('hits', 0)} bloqueos · {r.get('misses', 0)} ganadoras que habría bloqueado] {r['text']}"
+                        + (f" (solo {r['symbol']})" if r.get("symbol") else "") for i, r in enumerate(known_rules, 1)) + "\n"
+           "MANTENIMIENTO DE REGLAS: además del análisis, añade al JSON el campo \"rule_actions\": lista (normalmente vacía, máximo 3) de cambios sobre las reglas "
+           "numeradas, solo cuando ESTA operación aporte evidencia clara: {\"n\":número de regla,\"action\":\"DESACTIVAR\"|\"MODIFICAR\"|\"ELIMINAR\","
+           "\"text\":\"nuevo texto de la regla (solo MODIFICAR, máx. 40 palabras)\",\"reason\":\"1 frase\"}. DESACTIVAR si la regla es dudosa o esta operación la contradice; "
+           "MODIFICAR para precisarla, corregirla o fusionar en ella la lección nueva (entonces deja \"lesson\" vacío); ELIMINAR solo si es errónea, contradice a otra "
+           "o está duplicada. Si dudas, no toques nada.\n" if known_rules is not None else "")
         + "Haz el análisis."
     )
     data = parse_json(await _ask(_chat(REVIEW_SYSTEM, "trade-review"), prompt), "análisis de operación")
@@ -434,6 +440,7 @@ async def analyze_trade(t: dict, signal: dict | None, pa: dict, before: list, du
         "why_opened": str(data.get("why_opened", ""))[:900], "chart_context": str(data.get("chart_context", ""))[:1200],
         "what_happened": str(data.get("what_happened", ""))[:700], "better_decision": str(data.get("better_decision", ""))[:900],
         "verdict": verdict if verdict in ("BUENA", "ACEPTABLE", "EVITABLE", "MALA") else "ACEPTABLE", "verdict_reason": str(data.get("verdict_reason", ""))[:300],
+        "rule_actions": [a for a in (data.get("rule_actions") or []) if isinstance(a, dict)][:3] if known_rules is not None else [],
         "lesson": str(data.get("lesson", ""))[:300], "confidence": int(max(0, min(100, int(data.get("confidence", 0) or 0)))),
         "price_action": pa.get("summary"), "model": label(_cfg["model"]), "at": datetime.now(timezone.utc).isoformat(),
     }

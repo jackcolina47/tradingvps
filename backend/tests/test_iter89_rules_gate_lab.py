@@ -223,3 +223,30 @@ def test_levels_applied_on_open(monkeypatch):
         assert s["ai_levels_applied"] and s["sl"] == 97.0 and s["default_sl"] == SIG["sl"]
         assert abs((p["entry_price"] - p["sl"]) - 3.0) < 0.2
     asyncio.run(run())
+
+
+def test_no_cap_and_ai_maintenance(monkeypatch):
+    async def run():
+        e, db = await mk("h")
+        for i in range(40):
+            await ai_rules.add(db, ai_rules.RuleIn(text=f"Regla número {i} de prueba"))
+        rules = await ai_rules.list_rules(db)
+        assert len(rules) == 40 and len(await ai_rules.active(db, "BTCUSDT")) == 40
+
+        async def fake_review(engine, t, currency, unit, known):
+            assert len(known) == 40
+            return {"verdict": "ACEPTABLE", "verdict_reason": "ok", "lesson": "", "rule_actions": [
+                {"n": 1, "action": "DESACTIVAR", "reason": "dudosa"}, {"n": 2, "action": "MODIFICAR", "text": "Regla reescrita por la IA", "reason": "más precisa"},
+                {"n": 3, "action": "ELIMINAR", "reason": "duplicada"}, {"n": 99, "action": "ELIMINAR"}, {"n": 4, "action": "BORRAR_TODO"}]}
+        monkeypatch.setattr(trade_learning, "review", fake_review)
+        tr = Trade(symbol="BTCUSDT", side="long", strategy="trend_ema", entry_price=100, exit_price=99, qty=1, leverage=3, margin=33, pnl=-1.0, pnl_pct=-3, fees=0.1,
+                   reason="SL", opened_at=now_iso())
+        tr.id = "x"
+        await trade_learning.learn(e, tr)
+        after = {r["id"]: r for r in await ai_rules.list_rules(db)}
+        ev = await ai_rules.events(db)
+        await db.client.drop_database(db.name)
+        assert len(after) == 39 and rules[2]["id"] not in after
+        assert after[rules[0]["id"]]["enabled"] is False and after[rules[1]["id"]]["text"] == "Regla reescrita por la IA"
+        assert sorted(x["action"] for x in ev) == ["DESACTIVAR", "ELIMINAR", "MODIFICAR"]
+    asyncio.run(run())

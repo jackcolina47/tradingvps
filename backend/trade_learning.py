@@ -63,11 +63,21 @@ async def learn(engine, trade: Trade, currency: str = "USDT", before_unit: str =
     """Runs after every closed trade of a rules-only bot (never raises)."""
     try:
         rules = await ai_rules.list_rules(engine.db)
-        out = await review(engine, trade, currency, before_unit, [r["text"] for r in rules])
+        out = await review(engine, trade, currency, before_unit, rules)
         await engine.log("AI_EVAL", f"{trade.symbol}: operación cerrada analizada · {out['verdict']} · {out['verdict_reason']}")
+        src = {"trade_id": trade.id, "symbol": trade.symbol, "pnl": trade.pnl}
+        for a in out.get("rule_actions") or []:
+            n, action = a.get("n"), str(a.get("action", "")).upper()
+            if not isinstance(n, int) or not 1 <= n <= len(rules) or action not in ai_rules.ACTIONS:
+                continue
+            line = await ai_rules.apply_action(engine.db, rules[n - 1], action, str(a.get("text") or ""), str(a.get("reason") or ""), src)
+            if line:
+                await engine.log("AI_EVAL", f"{line} (análisis de {trade.symbol} {trade.pnl:+.2f} {currency})")
+                await engine.tg(f"📚 <b>{line[:350]}</b>\nTras analizar {trade.side.upper()} {trade.symbol} ({trade.pnl:+.2f} {currency})", "ai")
         if trade.pnl < 0 and out["verdict"] in RULE_VERDICTS and len(out["lesson"]) >= 5:
             rule = await ai_rules.auto_add(engine.db, out["lesson"], trade.id, out["verdict"])
             if rule:
+                await ai_rules.event(engine.db, "NUEVA", rule["text"], out["verdict_reason"], src)
                 await engine.log("AI_EVAL", f"Regla aprendida de {trade.symbol} ({trade.pnl:+.2f} {currency}): «{rule['text']}»")
                 await engine.tg(f"📚 <b>Regla aprendida</b> · {trade.side.upper()} {trade.symbol} ({trade.pnl:+.2f} {currency} · {out['verdict']})\n«{rule['text']}»", "ai")
         elif trade.pnl > 0:
@@ -92,4 +102,5 @@ async def _check_winner(engine, trade: Trade, currency: str = "USDT"):
         off = " · regla APAGADA automáticamente" if not r["enabled"] else ""
         await engine.log("AI_EVAL", f"{trade.symbol}: operación ganadora ({trade.pnl:+.2f} {currency}) que la regla «{r['text']}» habría bloqueado · {r['misses']}/{ai_rules.MAX_MISSES} fallos{off}")
         if off:
+            await ai_rules.event(engine.db, "DESACTIVAR", r["text"], f"habría bloqueado {r['misses']} operaciones ganadoras", {"trade_id": trade.id, "symbol": trade.symbol, "pnl": trade.pnl})
             await engine.tg(f"📚 <b>Regla apagada</b>: habría bloqueado {r['misses']} operaciones ganadoras\n«{r['text']}»", "ai")
