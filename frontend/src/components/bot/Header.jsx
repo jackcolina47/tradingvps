@@ -35,7 +35,10 @@ const StatusPill = ({ status }) => {
   );
 };
 
-export default function Header({ status, onToggle, onScan, onReset, busy, onSettings, onDocs, onDeploy, onLogout, view, onSwitchBot, brand = CRYPTO_BRAND, bot = "crypto", onRefresh, hideChat = false }) {
+export default function Header({ status, onToggle, onScan, onReset, busy, onSettings, onDocs, onDeploy, onLogout, view, onSwitchBot, brand = CRYPTO_BRAND, bot = "crypto", onRefresh, hideChat = false, resetCapital }) {
+  const [capital, setCapital] = useState(resetCapital ?? "");
+  useEffect(() => { if (resetCapital != null) setCapital(resetCapital); }, [resetCapital]);
+  const capitalOk = resetCapital == null || (Number(capital) >= 10 && Number(capital) <= 10000000);
   const [count, setCount] = useState(status.next_scan_in);
   useEffect(() => setCount(status.next_scan_in), [status.next_scan_in]);
   useEffect(() => {
@@ -102,9 +105,17 @@ export default function Header({ status, onToggle, onScan, onReset, busy, onSett
                 <AlertDialogTitle className="font-display">¿Reiniciar la cuenta paper?</AlertDialogTitle>
                 <AlertDialogDescription>{brand.resetHint}</AlertDialogDescription>
               </AlertDialogHeader>
+              {resetCapital != null && (
+                <label className="block">
+                  <span className="mb-1 block font-mono text-[10px] uppercase tracking-wider text-slate-500">Capital ficticio inicial (USDT)</span>
+                  <input data-testid="reset-capital-input" type="number" min={10} max={10000000} step="any" value={capital} onChange={(e) => setCapital(e.target.value)}
+                    className="num h-9 w-full rounded-sm border border-[#1E293B] bg-[#07090E] px-3 text-sm text-slate-100 outline-none focus:border-fuchsia-500/60" />
+                  <span className={`mt-1 block text-[11px] ${capitalOk ? "text-slate-500" : "text-rose-300"}`}>Entre 10 y 10.000.000 USDT. La cuenta empieza de cero con este capital.</span>
+                </label>
+              )}
               <AlertDialogFooter>
                 <AlertDialogCancel data-testid="reset-cancel-button">Cancelar</AlertDialogCancel>
-                <AlertDialogAction data-testid="reset-confirm-button" onClick={onReset} className="bg-rose-500 text-white hover:bg-rose-600">
+                <AlertDialogAction data-testid="reset-confirm-button" disabled={!capitalOk} onClick={() => onReset(resetCapital != null ? Number(capital) : undefined)} className="bg-rose-500 text-white hover:bg-rose-600">
                   Reiniciar cuenta
                 </AlertDialogAction>
               </AlertDialogFooter>

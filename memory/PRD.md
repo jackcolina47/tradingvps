@@ -585,3 +585,4 @@
 - **Bybit Lab** (`backend/lab.py`, `/api/lab`, ruta `/lab`, colecciones `lab_*`): clon solo paper, solo Test cruce EMA, comparte datos de mercado con Bybit, sin IA/noticias/REAL. Telegram con clave de bot `lab` (hay que marcarlo en cada chat).
 - HotForex y Pepperstone sin cambios (siguen con evaluación IA).
 - Tests: `tests/test_iter89_rules_gate_lab.py`. Tests antiguos de la puerta IA de Bybit quedan obsoletos.
+- Iter 90: Bybit Lab — capital ficticio configurable en el diálogo «Reiniciar» (10–10.000.000 USDT, `Header resetCapital`, POST /api/lab/account/reset {initial_balance}).

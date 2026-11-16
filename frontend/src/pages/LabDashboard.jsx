@@ -26,7 +26,7 @@ const BRAND = {
   liveLabel: () => "Paper",
   dataLabel: (s) => (s.provider === "bitget" ? "Datos: Bitget (espejo)" : "Datos: Bybit"),
   dataTooltip: () => "Comparte los precios y velas del bot de Bybit. Este bot nunca envía órdenes reales.",
-  resetHint: "Se borrarán posiciones, historial, cruces detectados y curva de equidad del laboratorio. El balance vuelve al capital inicial (por defecto $500 USDT).",
+  resetHint: "Se borrarán posiciones, historial, cruces detectados y curva de equidad del laboratorio. Elige abajo el capital ficticio con el que empieza la cuenta.",
 };
 const INTRO = (s) => `Test cruce EMA 10/20 sobre las últimas 1.000 velas reales con los ajustes guardados del laboratorio (entrada confirmada, filtro ADX, parcial + breakeven): ${s.risk_per_trade}% por operación, ${s.leverage}x y comisiones 0.055%.`;
 
@@ -80,7 +80,8 @@ export default function LabDashboard({ onLogout }) {
     <div data-testid="lab-dashboard" className="app-bg grain min-h-screen">
       <Header status={data.status} busy={busy} onToggle={toggleBot} view="panel" onLogout={onLogout} onSwitchBot={() => nav("/")} bot="lab" brand={BRAND} hideChat
         onScan={() => act(() => http.post("/bot/scan"), "Escaneo solicitado")}
-        onReset={() => act(() => http.post("/account/reset", {}), "Cuenta del laboratorio reiniciada")} />
+        resetCapital={data.account.initial_balance}
+        onReset={(capital) => act(() => http.post("/account/reset", { initial_balance: capital }), `Cuenta del laboratorio reiniciada con $${capital} USDT`)} />
       <main className="mx-auto max-w-[1920px] space-y-4 p-4 md:p-6">
         <div data-testid="lab-banner" className="rounded-md border border-fuchsia-500/30 bg-fuchsia-500/[0.07] px-4 py-2 text-[12px] text-fuchsia-100">
           Clon de Bybit solo para investigar: opera únicamente el <b>Test cruce EMA 10/20</b> en paper, con su propia cuenta, historial y ajustes. No usa IA, noticias ni reglas aprendidas y no puede pasar a modo REAL.
