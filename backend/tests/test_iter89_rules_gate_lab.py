@@ -250,3 +250,17 @@ def test_no_cap_and_ai_maintenance(monkeypatch):
         assert after[rules[0]["id"]]["enabled"] is False and after[rules[1]["id"]]["text"] == "Regla reescrita por la IA"
         assert sorted(x["action"] for x in ev) == ["DESACTIVAR", "ELIMINAR", "MODIFICAR"]
     asyncio.run(run())
+
+
+def test_rules_check_builds_prompt(monkeypatch):
+    seen = []
+
+    async def ask(chat, prompt):
+        seen.append(prompt)
+        return '{"violates": false, "rule": 0, "reason": "", "sl": null, "tp": null}'
+    monkeypatch.setattr(ai_funnel, "_ask", ask)
+    monkeypatch.setattr(ai_funnel, "_chat", lambda *a, **k: type("C", (), {})())
+    for ctx in ({"htf_tf": "4h"}, {"htf_tf": "4h", "sl_pips": 20, "spread_pips": 1.2, "sessions": "Londres"}):
+        out = asyncio.run(ai_funnel.rules_check("BTCUSDT", "1h", dict(SIG), ctx, [{"id": "1", "text": "regla", "symbol": ""}]))
+        assert out["violates"] is False
+    assert "REGLAS" in seen[0] and "Sesiones abiertas" in seen[1]

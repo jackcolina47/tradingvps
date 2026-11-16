@@ -157,7 +157,7 @@ async def rules_check(symbol: str, timeframe: str, sig: dict, ctx: dict, rules: 
         f"Confirmaciones ({sig['score']}): {'; '.join(sig['reasons'])}\n"
         f"Indicadores: {json.dumps(sig['indicators'])}\n"
         f"Tendencia TF superior ({ctx.get('htf_tf')}): {ctx.get('htf_trend')} | cambio 24h {ctx.get('change_24h') or 0:.2f}% | funding {ctx.get('funding_rate')}\n"
-        (f"Sesiones abiertas: {ctx.get('sessions')} | stop {ctx.get('sl_pips')} pips · spread {ctx.get('spread_pips')} pips\n" if ctx.get("sl_pips") else "")
+        + (f"Sesiones abiertas: {ctx.get('sessions')} | stop {ctx.get('sl_pips')} pips · spread {ctx.get('spread_pips')} pips\n" if ctx.get("sl_pips") else "")
         + f"Hora UTC: {time.strftime('%A %H:%M', time.gmtime())} | posiciones abiertas {ctx.get('open_positions')} | PnL del día {ctx.get('daily_pnl_pct')}%\n"
         + (f"Últimas velas (% por vela): {ctx.get('recent_changes')}\n" if ctx.get("recent_changes") else "")
         + (f"Acción del precio: {' '.join(pa.get('summary') or [])} · datos: {json.dumps({k: v for k, v in pa.items() if k != 'summary'})}\n" if pa else "")
