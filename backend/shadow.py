@@ -1,11 +1,11 @@
 from datetime import datetime, timezone
 from models import now_iso
-from risk import FEE_RATE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules, move_in_r
+from risk import FEE_RATE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules
 
 
 def shadow_be(rules: dict, d: dict, price: float) -> bool:
-    """Shadows don't take partials: breakeven is allowed once the partial level would have been reached (mirrors the real rule)."""
-    return bool(rules["breakeven_enabled"] and rules["partial_tp_enabled"] and move_in_r(d["side"], d["entry_price"], d["initial_sl"], price) >= rules["partial_tp_r"])
+    """Same rule as real positions: breakeven is an independent toggle."""
+    return bool(rules["breakeven_enabled"])
 
 MAX_AGE_H = 72
 KINDS = ("RECHAZADA", "BAJA_CONFIANZA", "FILTRO_IA", "BLOQUEADA", "NOTICIAS", "FUNDING", "REGIMEN", "ROTACION", "RR_BAJO", "SPREAD", "ERROR", "NO_EJECUTADA", "REGLA")
