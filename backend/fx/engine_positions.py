@@ -286,7 +286,7 @@ class PositionsMixin:
                       exit_mode=p.exit_mode, tags=[EMA_TEST_TAG] if p.exit_mode == "cross" else [])
         res = await self.db.trades.insert_one(trade.to_mongo())
         trade.id = str(res.inserted_id)
-        if self.profile.rules_only and trade.exit_mode != "cross":
+        if self.profile.rules_only and trade.exit_mode != "cross" and trade.strategy != "manual":
             asyncio.create_task(self._learn(trade))
         return trade
 

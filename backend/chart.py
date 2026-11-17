@@ -7,7 +7,7 @@ from models import Trade, Position
 WARMUP = 220
 MAX_LIMIT = 700
 DEFAULT_LIMIT = 300
-LINE_KEYS = ("ema9", "ema10", "ema20", "ema21", "ema50", "ema200", "bb_up", "bb_mid", "bb_low", "vwap", "rsi", "macd", "macd_signal", "adx", "gap")
+LINE_KEYS = ("ema9", "ema10", "ema20", "ema21", "ema50", "ema200", "bb_up", "bb_mid", "bb_low", "vwap", "rsi", "macd", "macd_signal", "adx", "gap", "atr")
 EMPTY_KEYS = ("candles", "volume", "macd_hist", *LINE_KEYS, "markers", "lines")
 
 

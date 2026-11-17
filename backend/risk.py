@@ -89,8 +89,8 @@ def ema_partial_due(rules: dict, side: str, entry: float, atr: float, price: flo
 
 
 def be_allowed(rules: dict, partial_done: bool) -> bool:
-    """Breakeven is a separate toggle and only kicks in once the position has banked its partial take-profit."""
-    return bool(rules["breakeven_enabled"] and partial_done)
+    """Breakeven is an independent toggle: it no longer waits for the partial take-profit."""
+    return bool(rules["breakeven_enabled"])
 
 
 def trade_rules(settings) -> dict:

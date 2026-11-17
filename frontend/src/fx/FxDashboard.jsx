@@ -160,7 +160,8 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
         {brand.lab && <LabModeCard lab={data.lab} onStart={() => act(() => http.post("/lab/start"), "Modo laboratorio activado · solo Cruce EMA 10/20")} onStop={() => act(() => http.post("/lab/stop"), "Laboratorio desactivado · ajustes restaurados")} />}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <Watchlist items={data.watchlist} selected={symbol} onSelect={setSymbol} />
-          <PriceChart symbol={symbol} defaultTf={data.settings.timeframe} kind={meta?.symbol_info?.[symbol]?.name || "Forex"} tfs={FX_TFS} />
+          <PriceChart symbol={symbol} defaultTf={data.settings.timeframe} kind={meta?.symbol_info?.[symbol]?.name || "Forex"} tfs={FX_TFS}
+            trade={{ riskPct: data.settings.risk_per_trade, equity: data.account.equity, live: data.status.mode === "REAL", currency: "USD", onDone: refresh }} />
           <BotPanel settings={data.settings} meta={meta} account={data.account} equity={data.equity} profileActive={data.profile_active} fmtLeverage={fmtLev} rulesOnly={rulesOnly} />
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">

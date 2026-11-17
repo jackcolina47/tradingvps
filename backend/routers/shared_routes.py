@@ -14,6 +14,8 @@ import ai_advisor
 import position_review
 import ai_rules
 import trade_learning
+from fx.market import market_open as fx_market_open
+from models import ManualOrder
 import performance
 from auth import hash_password, verify_password, create_token
 from ai_advisor import ping as ai_ping, current as ai_current, friendly_error, key_hint, ORIGIN_LABELS
@@ -65,6 +67,30 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
     @router.get("/ai-rules")
     async def ai_rules_list():
         return {"rules": await ai_rules.list_rules(engine.db), "max": None, "events": await ai_rules.events(engine.db)}
+
+    @router.post("/manual-order")
+    async def manual_order(body: ManualOrder):
+        """Manual market order from the chart: SL/TP chosen by the user, size by fixed-fractional risk. Bypasses AI, rules and filters; risk limits still apply."""
+        settings = await engine.get_settings()
+        price = (engine.market.tickers.get(body.symbol) or {}).get("price")
+        if not price:
+            raise HTTPException(400, "Sin precio en vivo para ese par")
+        if getattr(engine, "profile", None) and not fx_market_open():
+            raise HTTPException(400, "Mercado cerrado")
+        d = 1 if body.side == "long" else -1
+        if (price - body.sl) * d <= 0 or (body.tp - price) * d <= 0:
+            raise HTTPException(400, f"Niveles inválidos para el precio actual ({price:.6g}): el SL debe quedar {'por debajo' if d > 0 else 'por encima'} y el TP al otro lado")
+        if (await engine.account_summary())["daily_paused"]:
+            raise HTTPException(400, "Límite de pérdida diaria alcanzado")
+        sig = {"side": body.side, "strategy": "manual", "price": price, "sl": body.sl, "tp": body.tp, "atr": body.atr, "score": 0,
+               "reasons": ["Operación manual desde el gráfico"], "indicators": {"atr": body.atr}, "key_ts": int(time.time() * 1000), "tp_mode": "fixed"}
+        await engine.log("ORDER", f"{body.symbol}: orden MANUAL {body.side.upper()} · riesgo {body.risk_pct:g}% · SL {body.sl:.6g} · TP {body.tp:.6g}")
+        engine._open_fail = None
+        res = await engine.open_position(body.symbol, sig, settings.model_copy(update={"risk_per_trade": body.risk_pct}), None)
+        pos, reason = res if isinstance(res, tuple) else (res, getattr(engine, "_open_fail", None))
+        if not pos:
+            raise HTTPException(400, f"No se abrió: {reason or 'apertura cancelada'}")
+        return pos.model_dump()
 
     @router.post("/ai-rules/cleanup")
     async def ai_rules_cleanup():

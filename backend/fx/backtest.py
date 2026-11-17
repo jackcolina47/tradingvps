@@ -106,7 +106,7 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
                 if use_trailing or rules["breakeven_enabled"]:
                     pos["sl"], pos["be"] = risk.update_trailing(pos["side"], pos["entry"], pos["sl"], pos["init_sl"], pos["atr"], closes[i], spread,
                                                                 rules["be_start_r"], rules["trail_start_r"], rules["trail_atr_mult"],
-                                                                be_enabled=rules["breakeven_enabled"] and pos["partial"], trail_enabled=use_trailing)
+                                                                be_enabled=rules["breakeven_enabled"], trail_enabled=use_trailing)
         weekend = before_weekend(i)
         if pos and weekend:
             close(closes[i], "FIN_SEMANA", i)

@@ -34,6 +34,7 @@ export const SUBS = {
   rsi: { label: "RSI 14", color: "#F472B6", width: 1, keys: ["rsi"], levels: [[70, "rgba(239,68,68,0.45)"], [30, "rgba(16,185,129,0.45)"]] },
   macd: { label: "MACD 12,26,9", color: "#60A5FA", width: 1, keys: ["macd", "macd_signal"], hist: "macd_hist", levels: [] },
   adx: { label: "ADX 14", color: "#A78BFA", width: 1, keys: ["adx"], levels: [[24, "rgba(247,166,0,0.5)"]] },
+  atr: { label: "ATR 14", color: "#FB7185", width: 1, keys: ["atr"], fine: true, levels: [] },
   gap: { label: "Dist. EMA 10/20 (×ATR)", color: "#2DD4BF", width: 1, keys: ["gap"], levels: [[0.5, "rgba(148,163,184,0.45)"], [0, "rgba(148,163,184,0.25)"], [-0.5, "rgba(148,163,184,0.45)"]] },
 };
 export const DEFAULT_STYLE = {
@@ -87,9 +88,9 @@ function syncPanes(a, ind, d, style) {
     const list = [];
     if (def.hist) list.push({ key: def.hist, series: a.chart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false, priceFormat: fine }, i + 1), fine: true });
     def.keys.forEach((key, j) => {
-      const series = a.chart.addSeries(LineSeries, { ...lineOpts(j ? SIGNAL_COLOR : st.color, j ? 1 : st.width), lastValueVisible: !j, priceFormat: def.hist ? fine : fmt }, i + 1);
+      const series = a.chart.addSeries(LineSeries, { ...lineOpts(j ? SIGNAL_COLOR : st.color, j ? 1 : st.width), lastValueVisible: !j, priceFormat: def.hist || def.fine ? fine : fmt }, i + 1);
       if (!j) def.levels.forEach(([price, color]) => series.createPriceLine({ price, color, lineStyle: LineStyle.Dashed, lineWidth: 1, axisLabelVisible: false }));
-      list.push({ key, series, styled: !j, fine: !!def.hist });
+      list.push({ key, series, styled: !j, fine: !!(def.hist || def.fine) });
     });
     if (d) list.forEach((s) => s.series.setData(shift(d[s.key] || [], a.daily)));
     a.sub[k] = list;

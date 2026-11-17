@@ -7,6 +7,7 @@ import { useDrawings } from "./chart/useDrawings";
 import { DrawToolbar, DrawingBar } from "./chart/DrawToolbar";
 import ChartLegend from "./chart/ChartLegend";
 import ChartStyle from "./chart/ChartStyle";
+import ManualOrderDialog from "./chart/ManualOrderDialog";
 import { useHistory } from "./chart/useHistory";
 
 const TFS = ["1m", "5m", "15m", "1h", "4h", "1d"];
@@ -23,7 +24,8 @@ const loadInd = () => {
   try { return { ...DEFAULT_IND, ...JSON.parse(localStorage.getItem("chart.indicators") || "{}") }; } catch (e) { return DEFAULT_IND; }
 };
 
-export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs = TFS }) {
+export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs = TFS, trade }) {
+  const [order, setOrder] = useState(null);
   const [tf, setTf] = useState(defaultTf);
   const [fs, setFs] = useState(false);
   const [ind, setInd] = useState(loadInd);
@@ -124,6 +126,12 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
         </div>
       }>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-3 font-mono text-[11px]">
+        {trade && (
+          <span className="flex items-center gap-1">
+            <button data-testid="chart-buy-btn" onClick={() => setOrder("long")} disabled={!last} className="rounded-sm bg-emerald-500 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-[#07090E] transition-colors hover:bg-emerald-400 disabled:opacity-50">Buy</button>
+            <button data-testid="chart-sell-btn" onClick={() => setOrder("short")} disabled={!last} className="rounded-sm bg-rose-500 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-[#07090E] transition-colors hover:bg-rose-400 disabled:opacity-50">Sell</button>
+          </span>
+        )}
         <span data-testid="chart-last-price" className="text-base font-semibold text-slate-50">{fmtPrice(last?.close, data?.digits)}</span>
         {IND.map(([k, label]) => (
           <button key={k} data-testid={`chart-ind-${k}`} onClick={() => setInd((v) => ({ ...v, [k]: !v[k] }))} aria-pressed={!!ind[k]} style={ind[k] ? { color: style.lines[k]?.color || "#94A3B8" } : undefined}
@@ -144,6 +152,7 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
         <ChartLegend api={api} ready={ready} data={data} ind={ind} style={style} offset={tools ? 44 : 8} />
         {tools && <DrawToolbar dr={dr} />}
         <DrawingBar dr={dr} />
+        {trade && <ManualOrderDialog side={order} symbol={symbol} price={last?.close} atr={[...(data?.atr || [])].reverse().find((x) => x.value > 0)?.value} digits={data?.digits} tf={tf} trade={trade} onClose={() => setOrder(null)} />}
       </div>
     </Panel>
   );

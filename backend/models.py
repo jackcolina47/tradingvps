@@ -417,6 +417,15 @@ class ResetRequest(BaseModel):
     initial_balance: Optional[float] = Field(default=None, ge=10, le=10_000_000)
 
 
+class ManualOrder(BaseModel):
+    symbol: str
+    side: str = Field(pattern="^(long|short)$")
+    sl: float = Field(gt=0)
+    tp: float = Field(gt=0)
+    atr: float = Field(gt=0)
+    risk_pct: float = Field(ge=0.1, le=5)
+
+
 class PlanRequest(BaseModel):
     initial_capital: float = Field(default=500, ge=50, le=10_000_000)
     monthly_deposit: float = Field(default=0, ge=0, le=1_000_000)

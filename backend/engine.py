@@ -49,7 +49,7 @@ class TradingEngine:
 
     def _after_close(self, trade: Trade):
         """Automatic learning: every closed trade (except the EMA test, immune to the rules) is analysed in the background."""
-        if trade.exit_mode != "cross":
+        if trade.exit_mode != "cross" and trade.strategy != "manual":
             asyncio.create_task(self._learn(trade))
 
     async def _learn(self, trade: Trade):
@@ -637,7 +637,7 @@ class TradingEngine:
         await self.log("ORDER", f"ABIERTA {tag}{sig['side'].upper()} {symbol} @ {entry:.6g} · qty {qty:.6g} · {settings.leverage}x · {levels}{reduced}{how}{lp}")
         await self.tg(f"{'🟢' if long else '🔴'} <b>ABIERTA {tag}{sig['side'].upper()} {symbol}</b> @ {entry:.6g}{lp}\n"
                  f"Cantidad {qty:.6g} · {settings.leverage}x · margen ${margin:,.2f}\n{levels}\n"
-                 f"Estrategia: {STRATEGY_INFO[sig['strategy']]['name']}{reduced}{how}", "orders")
+                 f"Estrategia: {STRATEGY_INFO.get(sig['strategy'], {}).get('name', sig['strategy'])}{reduced}{how}", "orders")
         return pos
 
     async def close_position(self, pos_id: str, price: float = None, reason: str = "MANUAL"):

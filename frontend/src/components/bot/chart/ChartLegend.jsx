@@ -33,7 +33,7 @@ export default function ChartLegend({ api, ready, data, ind, style, offset }) {
         <span key={key} data-testid={`chart-legend-${key}`} style={{ color: style.lines[key].color }}>{def.label} {def.keys.map((s) => fmtPrice(val(s), data.digits)).join(" / ")}</span>
       ))}
       {Object.entries(SUBS).filter(([key]) => ind[key]).map(([key, def]) => (
-        <span key={key} data-testid={`chart-legend-${key}`} style={{ color: style.lines[key].color }}>{def.label.split(" (")[0]} {def.keys.map((s) => num(val(s), def.hist ? Math.max(2, data.digits) : 2)).join(" / ")}</span>
+        <span key={key} data-testid={`chart-legend-${key}`} style={{ color: style.lines[key].color }}>{def.label.split(" (")[0]} {def.keys.map((s) => num(val(s), def.hist || def.fine ? Math.max(2, data.digits) : 2)).join(" / ")}</span>
       ))}
     </div>
   );
