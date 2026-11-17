@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { computeZones, paintZones } from "./zones";
 import { COLORS, hit, load, magnet, nPoints, paint, save, scale, toScreen } from "./drawings";
 
 const xy = (e, el) => {
@@ -9,7 +10,8 @@ const xy = (e, el) => {
 const typing = () => ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName);
 
 /** Overlay canvas with TradingView-style drawings, kept per pair in this browser. `wrap` = element holding the chart + canvas. */
-export function useDrawings(api, data, symbol, wrap, canvas) {
+export function useDrawings(api, data, symbol, wrap, canvas, zonesOn = false) {
+  const zc = useRef({ key: "", zones: [] });
   const [tool, setTool] = useState(null);
   const [selected, setSelected] = useState(null);
   const [hidden, setHidden] = useState(false);
@@ -17,7 +19,7 @@ export function useDrawings(api, data, symbol, wrap, canvas) {
   const [, bump] = useState(0);
   const st = useRef({ list: [], draft: null, cursor: null, drag: null, v: 0 });
   const live = useRef({});
-  live.current = { tool, selected, hidden, snap, data, symbol };
+  live.current = { tool, selected, hidden, snap, data, symbol, zonesOn };
 
   const touch = useCallback((persist = true) => {
     st.current.v++;
@@ -56,16 +58,21 @@ export function useDrawings(api, data, symbol, wrap, canvas) {
       const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
       const ref = c.s.candles[c.s.n - 1];
       const s = st.current;
-      const now = [w, h, c.W, c.H, c.s.x(ref.time), c.s.x(c.s.candles[0].time), c.s.y(ref.close), c.s.y(ref.close * 1.01), s.v, s.cursor?.t, s.cursor?.p, live.current.hidden, live.current.selected, c.a.mainType].join();
+      const now = [w, h, c.W, c.H, c.s.x(ref.time), c.s.x(c.s.candles[0].time), c.s.y(ref.close), c.s.y(ref.close * 1.01), s.v, s.cursor?.t, s.cursor?.p, live.current.hidden, live.current.selected, c.a.mainType, live.current.zonesOn].join();
       if (now === sig) return;
       sig = now;
       if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
       const g = cv.getContext("2d");
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       g.clearRect(0, 0, w, h);
-      if (live.current.hidden) return;
       g.save();
       g.beginPath(); g.rect(0, 0, c.W, c.H); g.clip();
+      if (live.current.zonesOn) {
+        const d = live.current.data, key = `${live.current.symbol}:${c.s.n}:${c.s.candles[0].time}:${ref.time}:${ref.close}`;
+        if (zc.current.key !== key) zc.current = { key, zones: computeZones(d.candles, d.atr || []) };
+        paintZones(g, zc.current.zones, c.s, c.W, c.digits);
+      }
+      if (live.current.hidden) { g.restore(); return; }
       s.list.forEach((d) => paint(g, d, c.s, c.W, c.H, c.digits, d.id === live.current.selected));
       if (s.draft && s.cursor) paint(g, { ...s.draft, pts: [...s.draft.pts, s.cursor] }, c.s, c.W, c.H, c.digits, true);
       g.restore();

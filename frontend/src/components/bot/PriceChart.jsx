@@ -12,8 +12,8 @@ import { useHistory } from "./chart/useHistory";
 
 const TFS = ["1m", "5m", "15m", "1h", "4h", "1d"];
 const SOURCE = { bybit: "Velas Bybit", bitget: "Velas Bitget", hfm: "Velas del bróker · MetaTrader", yahoo: "Velas Yahoo Finance" };
-const IND = [...Object.entries({ ...OVERLAYS, ...SUBS }).map(([k, v]) => [k, v.label]), ["vol", "Volumen"]];
-const DEFAULT_IND = { ema9: true, ema21: true, ema200: true, rsi: true, adx: true, gap: true, vol: true };
+const IND = [...Object.entries({ ...OVERLAYS, ...SUBS }).map(([k, v]) => [k, v.label]), ["vol", "Volumen"], ["zones", "Zonas oferta/demanda"]];
+const DEFAULT_IND = { ema9: true, ema21: true, ema200: true, rsi: true, adx: true, gap: true, vol: true, zones: true };
 const loadStyle = () => {
   try {
     const s = JSON.parse(localStorage.getItem("chart.style") || "{}");
@@ -38,7 +38,7 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
   const { data, meta, loadOlder } = useHistory(symbol, tf);
   const api = useChart(ref, () => { if (fitted.current === `${symbol}-${tf}`) loadOlder(); });
 
-  const dr = useDrawings(api, data, symbol, wrap, canvas);
+  const dr = useDrawings(api, data, symbol, wrap, canvas, !!ind.zones);
   const [ready, setReady] = useState(false);
   useEffect(() => setReady(true), []);
 
@@ -62,7 +62,7 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
     g.fillStyle = "#07090E";
     g.fillRect(0, 0, out.width, out.height);
     g.drawImage(shot, 0, 0);
-    if (canvas.current && !dr.hidden) g.drawImage(canvas.current, 0, 0, out.width, out.height);
+    if (canvas.current) g.drawImage(canvas.current, 0, 0, out.width, out.height);
     const link = document.createElement("a");
     link.download = `${symbol}-${tf}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.png`;
     link.href = out.toDataURL("image/png");
