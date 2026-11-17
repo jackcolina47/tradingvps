@@ -307,6 +307,11 @@ class PositionsMixin:
         """One position per pair; with `dual_pair` (HotForex) the Test cruce EMA and the normal strategies are counted separately."""
         return any(p["symbol"] == symbol and (not self.profile.dual_pair or (p.get("exit_mode") == "cross") == cross) for p in open_docs)
 
+    async def _log_sizing(self, symbol, sig, lots, equity, real_risk, entry, sl, tp):
+        k, f = sig.get("atr_levels"), lambda v: fmt_price(symbol, v)  # noqa: E731
+        await self.log("RISK", f"{symbol}: tamaño {lots:.2f} lotes · equidad {equity:.2f} · riesgo real {real_risk:g}% · stop {pips(symbol, abs(entry - sl)):.1f} pips · "
+                               f"ATR {f(sig['atr'])}" + (f" · SL {k[0]:g}×ATR · TP {k[1]:g}×ATR" if k else "") + f" · entrada {f(entry)} · SL {f(sl)} · TP {f(tp)}")
+
     async def open_position(self, symbol: str, sig: dict, settings: FxSettings, signal_id: str, risk_factor: float = 1.0,
                             risk_reason: str = "noticias", expires_at: str = None, horizon: str = "short", exit_mode: str = None):
         """Returns (Position | None, reason) — reason explains why nothing was opened.
@@ -347,6 +352,7 @@ class PositionsMixin:
                                   f"(objetivo {risk_pct:g}%, tope {settings.min_lot_max_risk:g}%)")
                         await self.log("RISK", f"{symbol}: {reason}")
                         return None, reason
+                    await self._log_sizing(symbol, sig, lots, info["equity"], real_risk, entry, sl, tp)
                     r = await self.broker.open(symbol, sig["side"], lots, sl, None if cross else tp)
                 except MetaApiError as e:
                     if e.kind == "unknown":
@@ -401,6 +407,7 @@ class PositionsMixin:
                               f"(objetivo {risk_pct:g}%, tope con lote mínimo {settings.min_lot_max_risk:g}%) · sube el capital, el tope o usa una temporalidad menor")
                     await self.log("RISK", f"{symbol}: {reason}")
                     return None, reason
+                await self._log_sizing(symbol, sig, lots, s["equity"], real_risk, entry, sl, tp)
                 fee = risk.spread_cost(symbol, lots, tickers)
                 pos = Position(symbol=symbol, side=sig["side"], strategy=sig["strategy"], entry_price=entry, qty=lots, initial_qty=lots, leverage=settings.leverage,
                                margin=margin, sl=sl, tp=tp, initial_sl=sl, atr=sig["atr"], fees=fee, mark_price=price, signal_id=signal_id, expires_at=expires_at, horizon=horizon,

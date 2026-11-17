@@ -6,7 +6,7 @@ from bson import ObjectId
 from models import Settings, Position, Trade, Signal, LogEntry, now_iso
 from market import MarketData, HTF
 from indicators import build_df, trend_label, htf_trend
-from strategies import evaluate, exit_signal, ema_test, ema_test_params, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST, EMA_TEST_TAG, STRATEGY_INFO as FAST_INFO
+from strategies import evaluate, exit_signal, ema_test, ema_test_params, atr_params, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST, EMA_TEST_TAG, STRATEGY_INFO as FAST_INFO
 from strategies_slow import SLOW_INFO, SLOW_KEYS, evaluate_slow
 from risk import FEE_RATE, MAKER_FEE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules, move_in_r, tp_in_r, partial_qty, be_allowed, ema_partial_due, EMA_PARTIAL_PCT
 import price_action
@@ -542,12 +542,18 @@ class TradingEngine:
         """Order size on the real wallet; None (and _open_fail set) when below Bybit's minimum lot or margin."""
         w = await self.broker.wallet(max_age=0)
         lot = await self.broker.lot(symbol)
-        qty, margin = position_size(w["equity"], w["available"], risk_pct, entry, sl, leverage, lot=lot)
+        inst = await self.broker.client.instrument(symbol)
+        qty, margin = position_size(w["equity"], w["available"], risk_pct, entry, sl, leverage, lot=lot, min_notional=float(inst.get("min_notional") or 5))
         if qty <= 0 or margin < 1:
             await self.log("RISK", f"{symbol}: tamaño por debajo del lote mínimo de Bybit ({lot[0]}) o margen insuficiente")
             self._open_fail = f"tamaño por debajo del lote mínimo de Bybit ({lot[0]}) o margen insuficiente"
             return None
-        return {"qty": qty, "margin": margin}
+        return {"qty": qty, "margin": margin, "equity": w["equity"]}
+
+    async def _log_sizing(self, symbol, sig, qty, equity, risk_pct, entry, sl, tp):
+        k = sig.get("atr_levels")
+        await self.log("RISK", f"{symbol}: tamaño {qty:.6g} = {equity:.2f} × {risk_pct:g}% / distancia SL {abs(entry - sl):.6g} (riesgo {abs(entry - sl) * qty:.2f} USDT) · "
+                               f"ATR {sig['atr']:.6g}" + (f" · SL {k[0]:g}×ATR · TP {k[1]:g}×ATR" if k else "") + f" · entrada {entry:.6g} · SL {sl:.6g} · TP {tp:.6g}")
 
     async def open_position(self, symbol: str, sig: dict, settings: Settings, signal_id: str, risk_factor: float = 1.0, risk_reason: str = "noticias",
                             horizon: str = "short", entry_type: str = "market", fill: dict = None, exit_mode: str = None):
@@ -586,6 +592,7 @@ class TradingEngine:
                         size = await self.live_size(symbol, entry, sl, risk_pct, settings.leverage)
                         if not size:
                             return None
+                        await self._log_sizing(symbol, sig, size["qty"], size["equity"], risk_pct, entry, sl, tp)
                         r = await self.broker.open(symbol, sig["side"], size["qty"], sl, None if cross else tp, settings.leverage)
                     except Exception as e:
                         await self.log("ERROR", f"{symbol}: orden REAL rechazada por Bybit · {str(e)[:160]}")
@@ -609,6 +616,7 @@ class TradingEngine:
                     await self.log("RISK", f"{symbol}: tamaño por debajo del lote mínimo de Bybit o margen insuficiente · aumenta capital o riesgo")
                     self._open_fail = "tamaño por debajo del lote mínimo de Bybit o margen insuficiente"
                     return None
+                await self._log_sizing(symbol, sig, qty, s["equity"], risk_pct, entry, sl, tp)
                 fee = entry * qty * fee_rate
                 pos = Position(symbol=symbol, side=sig["side"], strategy=sig["strategy"], entry_price=entry, qty=qty, initial_qty=qty,
                                leverage=settings.leverage, margin=margin, sl=sl, tp=tp, initial_sl=sl, atr=sig["atr"],
@@ -715,7 +723,7 @@ class TradingEngine:
                             await self._handle_test_signal(symbol, tsig, settings, df)
                     if symbol not in settings.symbols:
                         continue  # test-only pair: no regular strategies
-                    sig = evaluate(df, i, settings.strategy, htf, params, settings.signal_mode, settings.disabled_strategies)
+                    sig = evaluate(df, i, settings.strategy, htf, {**params, **atr_params(settings)}, settings.signal_mode, settings.disabled_strategies)
                     self.analysis[symbol] = {
                         "trend": trend_label(row), "rsi": round(float(row["rsi"]), 1),
                         "macd_hist": float(row["macd_hist"]), "adx": round(float(row["adx"]), 1),

@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime, timezone, timedelta
 from models import Signal, now_iso
 from indicators import trend_label, htf_trend, snapshot
-from strategies import evaluate, exit_signal, ema_test, ema_test_params, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST
+from strategies import evaluate, exit_signal, ema_test, ema_test_params, atr_params, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST
 from fx.models import FxSettings
 from fx.market import HTF, market_open, market_status, in_sessions, session_names, closing_soon
 from fx.symbols import SPECS, pips
@@ -78,7 +78,7 @@ class SignalsMixin:
                             await self._handle_test_signal(symbol, tsig, settings)
                     if symbol not in settings.symbols:
                         continue  # test-only pair: no regular strategies
-                    sig = evaluate(df, i, settings.strategy, htf, params, settings.signal_mode, settings.disabled_strategies)
+                    sig = evaluate(df, i, settings.strategy, htf, {**params, **atr_params(settings)}, settings.signal_mode, settings.disabled_strategies)
                     vol_pct = filters.vol_percentile(df["atr"].values, i)
                     self.analysis[symbol] = {
                         "trend": trend_label(row), "rsi": round(float(row["rsi"]), 1), "macd_hist": float(row["macd_hist"]),

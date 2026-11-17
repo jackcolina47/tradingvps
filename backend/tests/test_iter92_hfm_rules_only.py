@@ -98,7 +98,7 @@ def test_pepperstone_still_uses_ai(monkeypatch):
             return {"decision": "RECHAZADA", "confidence": 80, "risk": "ALTO", "reasoning": "no", "model": "m", "ms": 1}
         monkeypatch.setattr(ai_funnel, "final_eval", final)
         s = await e.get_settings()
-        s.ai_funnel_enabled, s.price_action_block = False, False
+        s.ai_funnel_enabled, s.price_action_block, s.seasonality_bias, s.vol_filter_enabled, s.usd_regime_filter, s.fomc_rule = (False,) * 6
         await e._handle_signal("EURUSD", dict(SIG), s, DF, 1, "4h")
         n = await e.db.positions.count_documents({})
         doc = await e.db.signals.find_one({})

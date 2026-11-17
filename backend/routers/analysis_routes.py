@@ -6,7 +6,7 @@ from indicators import build_df
 from backtest import run_backtest, simulate
 from risk import trade_rules
 from strategies_slow import SLOW_INFO, scan_slow
-from strategies import EMA_TEST, ema_test_params
+from strategies import EMA_TEST, ema_test_params, atr_params
 from plan import build_plan, SCENARIOS
 from optimizer import optimize
 from review import plan_stats
@@ -84,8 +84,7 @@ async def backtest(req: BacktestRequest):
         result.pop("r_multiples", None)
         return {"symbol": req.symbol, "strategy": req.strategy, "timeframe": tf, **result}
     params = s.symbol_params.get(req.symbol) or {}
-    if req.strategy == EMA_TEST:
-        params = {**params, **ema_test_params(s)}
+    params = {**params, **(ema_test_params(s) if req.strategy == EMA_TEST else atr_params(s))}
     df = build_df(await engine.market.fetch_klines(req.symbol, req.timeframe, 1000, cache_sec=60), int(params.get("atr_period", 14)))
     result = run_backtest(df, req.strategy, req.risk_per_trade, req.leverage, trade_rules(s), initial=acc["initial_balance"], symbol=req.symbol,
                           params=params or None, mode=s.signal_mode, disabled=s.disabled_strategies)

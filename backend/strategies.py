@@ -358,10 +358,26 @@ def active_strategies(strategy: str, disabled=()) -> list:
     return [k for k in STRATEGIES if k not in set(disabled or ()) and k not in TEST_ONLY]
 
 
+def atr_params(settings) -> dict:
+    """User-level «SL/TP dinámico por ATR»: one pair of multipliers for every normal strategy (the EMA test keeps its own exits)."""
+    return {"atr_levels": (settings.atr_sl_mult, settings.atr_tp_mult)} if settings.atr_levels_enabled else {}
+
+
+def apply_atr_levels(sig: dict, levels) -> dict:
+    """SL = price ∓ sl_k × ATR, TP = price ± tp_k × ATR. With no usable ATR the strategy's own levels are kept."""
+    atr = sig.get("atr") or 0
+    if not levels or sig.get("exit_mode") == "cross" or not atr > 0 or not sig["price"] > 0:
+        return sig
+    sl_k, tp_k = levels
+    d = 1 if sig["side"] == "long" else -1
+    return {**sig, "sl": sig["price"] - d * sl_k * atr, "tp": sig["price"] + d * tp_k * atr, "tp_mode": "atr", "atr_levels": [sl_k, tp_k],
+            "reasons": [*sig["reasons"], f"SL/TP por ATR: SL {sl_k:g}×ATR · TP {tp_k:g}×ATR (ATR {atr:.6g})"]}
+
+
 def evaluate(df, i, strategy: str, htf=None, params=None, mode: str = "strict", disabled=()) -> Optional[dict]:
     m = MODES.get(mode, MODES["strict"])
     for k in active_strategies(strategy, disabled):
         sig = STRATEGIES[k](df, i, htf, params, m)
         if sig:
-            return sig
+            return apply_atr_levels(sig, (params or {}).get("atr_levels"))
     return None

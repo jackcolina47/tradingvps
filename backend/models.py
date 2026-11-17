@@ -65,6 +65,9 @@ class Settings(BaseModel):
     ema_test_symbols: List[str] = ["ENAUSDT", "ONDOUSDT", "ARBUSDT", "UNIUSDT"]
     ema_test_adx_filter: bool = False
     ema_test_adx_min: float = 20.0
+    atr_levels_enabled: bool = False
+    atr_sl_mult: float = 2.0
+    atr_tp_mult: float = 4.0
     ema_test_partial_enabled: bool = False
     ema_test_partial_atr: float = 1.5
     ema_test_confirm_enabled: bool = False
@@ -234,6 +237,9 @@ class SettingsUpdate(BaseModel):
     ema_test_symbols: Optional[List[str]] = None
     ema_test_adx_filter: Optional[bool] = None
     ema_test_adx_min: Optional[float] = Field(default=None, ge=5, le=60)
+    atr_levels_enabled: Optional[bool] = None
+    atr_sl_mult: Optional[float] = Field(default=None, ge=0.5, le=10)
+    atr_tp_mult: Optional[float] = Field(default=None, ge=0.5, le=20)
     ema_test_partial_enabled: Optional[bool] = None
     ema_test_partial_atr: Optional[float] = Field(default=None, ge=0.5, le=3.0)
     ema_test_confirm_enabled: Optional[bool] = None

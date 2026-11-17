@@ -10,6 +10,7 @@ import RiskProfileBar from "./RiskProfileBar";
 import { STRATEGY_LABELS, STRATEGY_KEYS, MODE_LABELS, activeStrategies } from "@/lib/api";
 import AiPositionReviewSettings from "./settings/AiPositionReviewSettings";
 import EmaTestSettings from "./settings/EmaTestSettings";
+import AtrLevelsSettings from "./settings/AtrLevelsSettings";
 
 const NUMS = [
   { k: "risk_per_trade", label: "Riesgo por operación (%)", step: 0.1, min: 0.1, max: 5 },
@@ -85,6 +86,12 @@ export default function SettingsPanel({ settings, meta, profileActive, onSave, o
       if (!(k in body)) return;
       const v = Number(body[k]);
       body[k] = Math.min(max, Math.max(min, (k.endsWith("bars") ? Math.round(v) : v) || def));
+      if (body[k] !== v) clamped.push(`${label} → ${body[k]}`);
+    });
+    [["atr_sl_mult", 0.5, 10, 2, "Multiplicador SL (×ATR)"], ["atr_tp_mult", 0.5, 20, 4, "Multiplicador TP (×ATR)"]].forEach(([k, min, max, def, label]) => {
+      if (!(k in body)) return;
+      const v = Number(body[k]);
+      body[k] = Math.min(max, Math.max(min, v || def));
       if (body[k] !== v) clamped.push(`${label} → ${body[k]}`);
     });
     delete body.bot_running;
@@ -188,6 +195,7 @@ export default function SettingsPanel({ settings, meta, profileActive, onSave, o
             <Switch data-testid={`settings-${t.k.replace(/_/g, "-")}-switch`} checked={form[t.k]} onCheckedChange={(v) => set(t.k, v)} />
           </label>
         ))}
+        {!testOnly && <AtrLevelsSettings form={form} set={set} />}
         {!testOnly && <AiPositionReviewSettings form={form} set={set} />}
         <EmaTestSettings form={form} set={set} meta={meta} />
       </div>

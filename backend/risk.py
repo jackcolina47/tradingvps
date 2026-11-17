@@ -19,7 +19,7 @@ def lot_qty(symbol: str, qty: float, lot: tuple = None) -> float:
 
 
 def position_size(equity: float, available: float, risk_pct: float, entry: float, sl: float, leverage: int,
-                  symbol: str = None, lot: tuple = None):
+                  symbol: str = None, lot: tuple = None, min_notional: float = MIN_NOTIONAL):
     dist = abs(entry - sl)
     if dist <= 0 or entry <= 0:
         return 0.0, 0.0
@@ -28,7 +28,7 @@ def position_size(equity: float, available: float, risk_pct: float, entry: float
     qty = min(qty, max_notional / entry)
     if symbol or lot:
         qty = lot_qty(symbol, qty, lot)
-    if qty * entry < MIN_NOTIONAL:
+    if qty * entry < min_notional:
         return 0.0, 0.0
     return qty, qty * entry / leverage
 
