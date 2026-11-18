@@ -633,6 +633,10 @@ Decisiones del usuario: eliminar TODO backtest/optimizador/walk-forward; mantene
 - Bloqueo gratis contra 4H (decisión del usuario): candidatos del Paso 1 y decisiones del Paso 2 contra `bias` se descartan.
 - Tested: pytest 173/173; `scripts/funnel_dry_run.py bybit` real (Gemini 3.5 Flash → Sonnet 5.5) y candidato forzado contra 4H bloqueado; hfm sin cambios (Haiku). Sin testing agent.
 
+## Iteración 104 (2026-11) — Multitemporal 4H/1H también en HotForex y Pepperstone
+- `funnel_mtf = ("4h","1h")` en `fx/engine_signals.py`: mismo Paso 1 con Gemini 3.5 Flash, bloque multitemporal en Paso 2 y bloqueo gratis contra 4H. UI/docs/knowledge actualizados (ya no «solo Bybit»).
+- Tested: pytest + `scripts/funnel_dry_run.py hfm|pepperstone` reales. Sin testing agent.
+
 ### Pendiente
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.

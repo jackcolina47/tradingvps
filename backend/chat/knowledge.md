@@ -12,7 +12,7 @@ Ya NO existen estrategias estáticas, backtest, optimizador, walk-forward, perfi
 Ciclo cada 60 s, solo dentro del horario operativo y con huecos libres:
 - **Paso 0** (sin IA): EMA 20/50/200, RSI, MACD, ADX, ATR, actividad (volumen o rango) y zonas de oferta/demanda. Descarta pares planos lejos de zonas.
 - **Paso 1** (modelo rápido): elige 0–3 candidatos en una llamada. No se repite si ningún par se movió 0,15 ATR en la misma vela.
-- **Solo Bybit · multitemporal**: el Paso 1 usa Gemini 3.5 Flash (respaldo: modelo rápido normal) y evalúa 4H (estructura) + 1H (confirmación); `timeframe` es la temporalidad de entrada (recomendado 15m). Lado permitido = tendencia de 4H (ALCISTA→solo long, BAJISTA→solo short, MIXTA→ambos); lo contrario se bloquea sin IA.
+- **Multitemporal (los tres bots)**: el Paso 1 usa Gemini 3.5 Flash (respaldo: modelo rápido normal) y evalúa 4H (estructura) + 1H (confirmación); `timeframe` es la temporalidad de entrada (recomendado 15m). Lado permitido = tendencia de 4H (ALCISTA→solo long, BAJISTA→solo short, MIXTA→ambos); lo contrario se bloquea sin IA.
 - **Paso 2** (modelo potente + reglas aprendidas): BUY / SELL / PASS con confianza 0–100.
 - Un candidato del Paso 1 vuelve al Paso 2 cada 5 minutos (`DEEP_COOLDOWN_SEC`) hasta que haya operación ejecutable o se llene `max_positions`. Los pares descartados en el Paso 1 no llegan al Paso 2.
 - `ai_min_confidence` (10..90 en pasos de 10): confianza > umbral → se ejecuta; ≤ umbral → sombra `BAJA_CONFIANZA` (una por vela).

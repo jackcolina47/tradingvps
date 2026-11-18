@@ -30,7 +30,7 @@ MIN_RR = 1.0
 DEEP_COOLDOWN_SEC = 300    # a stage-1 candidate goes back to the strong model every 5 min until it trades or the slots fill up
 REPEAT_MOVE_ATR = 0.15     # stage 1 is not repeated while no eligible pair moved this much (in ATR) since the last call on the same candle
 MTF_TTL = {"4h": 300, "1h": 120}   # seconds a higher-timeframe frame is reused (multi-timeframe engines only)
-MTF_FAST = {"provider": "gemini", "model": "gemini-3.5-flash"}   # cheap model of the multi-timeframe stage 1 (Bybit)
+MTF_FAST = {"provider": "gemini", "model": "gemini-3.5-flash"}   # cheap model of the multi-timeframe stage 1
 BIAS_SIDE = {"ALCISTA": "long", "BAJISTA": "short"}
 MARKET = {"crypto": "criptomonedas (futuros perpetuos USDT)", "fx": "forex y metales (CFD)"}
 

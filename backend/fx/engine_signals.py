@@ -59,6 +59,8 @@ class SignalsMixin:
             self.scanning = False
 
     # ---------- AI funnel adapter ----------
+    funnel_mtf = ("4h", "1h")   # 4H structure + 1H confirmation before the entry timeframe
+
     async def funnel_frame(self, symbol: str, tf: str, limit: int = 300):
         """Candles with the broker's tick volume while the MetaApi account is deployed; Yahoo (no volume → candle range) otherwise."""
         b = self.broker

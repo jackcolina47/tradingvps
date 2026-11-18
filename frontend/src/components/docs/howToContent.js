@@ -23,8 +23,7 @@ export function buildHowTo(bot) {
         "Pulsa «Iniciar bot». Cada 60 segundos corre un ciclo del embudo y cada 5 segundos se vigilan las posiciones abiertas.",
         `El embudo solo trabaja dentro del horario operativo (hora de Nueva York, todos los días): ${hours}. Fuera de él no se llama a la IA.`,
         "Paso 0: se calculan los indicadores de cada par y se descartan los que están planos y lejos de cualquier zona. No cuesta nada.",
-        fx ? "Paso 1: el modelo rápido ve la tabla completa y elige de 0 a 3 candidatos. Lo normal es que muchas veces no elija ninguno."
-           : "Paso 1: Gemini 3.5 Flash evalúa cada par en 4H y 1H y elige de 0 a 3 candidatos a favor de la tendencia de 4H. La temporalidad que eliges en Configuración es la de entrada (se recomienda 15m).",
+        "Paso 1: Gemini 3.5 Flash evalúa cada par en 4H y 1H y elige de 0 a 3 candidatos a favor de la tendencia de 4H. La temporalidad que eliges en Configuración es la de entrada (se recomienda 15m).",
         "Paso 2: el modelo potente analiza cada candidato y responde BUY, SELL o PASS con un % de confianza. Verás su razonamiento en «Decisiones del embudo IA» y en el registro.",
         "Si un candidato no acaba en operación, vuelve al modelo potente cada 5 minutos mientras el modelo rápido lo siga eligiendo. Se detiene cuando hay una operación ejecutable o el bot llena el máximo de posiciones.",
         "«Escanear» fuerza un ciclo inmediato. «Detener bot» no cierra posiciones: siguen protegidas por su stop y objetivo.",
