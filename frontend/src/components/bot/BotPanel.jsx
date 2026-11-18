@@ -1,7 +1,7 @@
 import { ShieldCheck, Sparkles } from "lucide-react";
 import { Area, ComposedChart, Line, ResponsiveContainer, Tooltip, YAxis } from "recharts";
 import { Panel } from "./Panel";
-import { fmtUsd, STRATEGY_LABELS, MODE_LABELS, activeStrategies } from "@/lib/api";
+import { fmtUsd } from "@/lib/api";
 
 const Stat = ({ label, value, testId }) => (
   <div className="rounded-sm border border-[#1E293B] bg-[#07090E]/60 px-3 py-2">
@@ -10,12 +10,13 @@ const Stat = ({ label, value, testId }) => (
   </div>
 );
 
-const PROFILE_TONE = ["text-emerald-300", "text-lime-300", "text-amber-300", "text-orange-300", "text-rose-300"];
+const STAGES = [
+  ["Etapa 0 · Filtro técnico (sin IA)", "EMAs 20/50/200, RSI, MACD, ADX, ATR, volumen y zonas de oferta/demanda de cada par. Descarta mercados planos, pares con posición abierta y pares bloqueados por evento rojo."],
+  ["Etapa 1 · Modelo rápido", "Una sola llamada con la tabla de todos los pares: elige como máximo 3 candidatos."],
+  ["Etapa 2 · Modelo potente", "Analiza cada candidato como un trader profesional, aplica las reglas aprendidas y responde BUY / SELL / PASS con un % de confianza. No repite el par hasta que cierra la vela."],
+];
 
-export default function BotPanel({ settings: s, meta, account, equity, profileActive, fmtLeverage = (v) => `${v}x`, rulesOnly = false }) {
-  const info = meta?.strategy_info || {};
-  const active = activeStrategies(s, meta?.strategy_keys || undefined);
-  const profile = profileActive != null ? meta?.profiles?.[profileActive] : null;
+export default function BotPanel({ settings: s, account, equity, fmtLeverage = (v) => `${v}x` }) {
   const used = Math.min(100, Math.max(0, (-account.daily_pnl_pct / s.daily_loss_limit) * 100));
   const nd0 = equity.length ? equity[0].net_deposits || 0 : 0;
   const hasFlows = equity.some((e) => (e.net_deposits || 0) !== nd0);
@@ -25,20 +26,19 @@ export default function BotPanel({ settings: s, meta, account, equity, profileAc
   return (
     <Panel testId="bot-plan-panel" title="Plan de trading" icon={ShieldCheck} className="lg:col-span-3" bodyClass="p-4 space-y-4 overflow-y-auto thin-scroll max-h-[540px]" delay={180}>
       <div>
-        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">
-          Perfil · <span data-testid="plan-profile-name" className={profile ? PROFILE_TONE[profileActive] : "text-slate-300"}>{profile ? profile.name : "Personalizado"}</span> · {s.timeframe} · criterios {MODE_LABELS[s.signal_mode]?.toLowerCase()}
-        </p>
-        <p data-testid="active-strategy-name" className="font-display mt-1 text-lg font-bold text-amber-400">
-          {active.length > 1 ? `Multi-estrategia (${active.length})` : STRATEGY_LABELS[active[0]]}
-        </p>
+        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">Temporalidad {s.timeframe} · ciclo cada 60 s</p>
+        <p data-testid="active-strategy-name" className="font-display mt-1 text-lg font-bold text-amber-400">Embudo IA</p>
         <ul className="mt-2 space-y-2">
-          {active.map((k) => info[k] && (
-            <li key={k} className="border-l-2 border-amber-500/40 pl-2.5">
-              <p className="text-[13px] font-semibold text-slate-200">{info[k].name}</p>
-              <p className="text-[12px] leading-relaxed text-slate-400">{info[k].rules}</p>
+          {STAGES.map(([name, text]) => (
+            <li key={name} className="border-l-2 border-amber-500/40 pl-2.5">
+              <p className="text-[13px] font-semibold text-slate-200">{name}</p>
+              <p className="text-[12px] leading-relaxed text-slate-400">{text}</p>
             </li>
           ))}
         </ul>
+        <p data-testid="plan-levels" className="mt-2 text-[12px] text-slate-400">
+          SL/TP: {s.atr_levels_enabled ? `fijos · SL ${s.atr_sl_mult}×ATR · TP ${s.atr_tp_mult}×ATR` : `los decide la IA (si no son válidos: ${s.atr_sl_mult}×ATR / ${s.atr_tp_mult}×ATR)`}
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
@@ -61,15 +61,15 @@ export default function BotPanel({ settings: s, meta, account, equity, profileAc
       <div data-testid="ai-config-card" className="rounded-sm border border-purple-500/30 bg-purple-500/[0.08] p-3">
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-1.5 text-[13px] font-semibold text-purple-300">
-            <Sparkles className="h-3.5 w-3.5" /> {rulesOnly ? "Reglas aprendidas" : "Confirmación IA"}
+            <Sparkles className="h-3.5 w-3.5" /> Embudo IA
           </span>
-          <span data-testid="ai-status-label" className={`font-mono text-[10px] font-bold uppercase ${(rulesOnly ? s.rules_auto_learn : s.ai_enabled) ? "text-purple-300" : "text-slate-500"}`}>
-            {rulesOnly ? (s.rules_auto_learn ? "Aprendiendo" : "Aprendizaje apagado") : s.ai_enabled ? "Activa" : "Inactiva"}
+          <span data-testid="ai-status-label" className={`font-mono text-[10px] font-bold uppercase ${"text-purple-300"}`}>
+            {`Umbral ${s.ai_min_confidence}%`}
           </span>
         </div>
         <p className="mt-1 text-[12px] leading-relaxed text-slate-400">
-          {rulesOnly ? "Cada señal detectada se abre directamente. El único filtro son las reglas aprendidas de las operaciones cerradas (Ajustes → Reglas aprendidas)."
-            : `La IA revisa cada señal y solo se ejecuta si la aprueba con confianza ≥ ${s.ai_min_confidence}%.`}
+          Cada 60 s, dentro del horario operativo y con huecos libres: filtro técnico sin IA → el modelo rápido elige hasta 3 candidatos → el modelo potente decide BUY / SELL / PASS.
+          Solo se abre si su confianza supera el {s.ai_min_confidence}%; el resto se sigue como sombra. Tamaño siempre por riesgo fijo ({s.risk_per_trade}% por operación).
         </p>
       </div>
 

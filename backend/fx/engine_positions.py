@@ -3,6 +3,7 @@ open/close with sizing and all the MetaApi failure paths."""
 import time
 import asyncio
 import trade_learning
+import trade_guard
 from datetime import datetime, timezone
 from bson import ObjectId
 from models import Position, Trade, now_iso
@@ -90,6 +91,28 @@ class PositionsMixin:
     def _ema_be(p: Position) -> float:
         spread = SPECS[p.symbol]["spread"]
         return round(p.entry_price + spread if p.side == "long" else p.entry_price - spread, SPECS[p.symbol]["digits"])
+
+    async def news_protect(self, p: Position, event: dict) -> bool:
+        """Red event in ≤15 min: in profit → stop to breakeven; in loss → close now. Returns True once the position is handled."""
+        long = p.side == "long"
+        be = self._ema_be(p)
+        label = trade_guard.event_label(event)
+        if (p.sl >= be) if long else (p.sl <= be):
+            return True
+        price = self.market.tickers.get(p.symbol, {}).get("price") or p.mark_price
+        if (price > be) if long else (price < be):
+            if p.live:
+                try:
+                    await self.broker.set_stop(p.symbol, p.order_id, be, p.tp)
+                except Exception as e:
+                    await self.log("ERROR", f"{p.symbol}: no se pudo mover el stop a breakeven antes del evento rojo · {str(e)[:120]}")
+                    return False
+            await self.db.positions.update_one({"_id": ObjectId(p.id)}, {"$set": {"sl": be, "breakeven": True}})
+            await self.log("RISK", f"{p.symbol}: evento rojo en menos de {trade_guard.BEFORE_MIN} min ({label}) · posición en ganancia → stop a breakeven ({fmt_price(p.symbol, be)})")
+            await self.tg(f"🛡 <b>{p.symbol} {p.side.upper()} a breakeven</b> ({fmt_price(p.symbol, be)})\nEvento rojo: {label}", "orders")
+            return True
+        await self.log("RISK", f"{p.symbol}: evento rojo en menos de {trade_guard.BEFORE_MIN} min ({label}) · posición en pérdida → cierre inmediato")
+        return await self.close_position(p.id, None, "NOTICIA") is not None
 
     async def _announce_ema_partial(self, p: Position, part: float, price: float, net: float, be: float, rules: dict):
         tag = "REAL " if p.live else ""
@@ -286,7 +309,7 @@ class PositionsMixin:
                       exit_mode=p.exit_mode, tags=[EMA_TEST_TAG] if p.exit_mode == "cross" else [])
         res = await self.db.trades.insert_one(trade.to_mongo())
         trade.id = str(res.inserted_id)
-        if self.profile.rules_only and trade.exit_mode != "cross" and trade.strategy != "manual":
+        if self.profile.rules_only and trade.exit_mode != "cross" and trade.strategy != "manual" and trade.reason != "NOTICIA":
             asyncio.create_task(self._learn(trade))
         return trade
 

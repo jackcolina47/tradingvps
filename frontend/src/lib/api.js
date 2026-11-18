@@ -79,7 +79,7 @@ export const MODE_LABELS = { strict: "Estrictos", relaxed: "Relajados", minimal:
 export const activeStrategies = (s, keys = STRATEGY_KEYS) => (s.strategy === "all" ? keys.filter((k) => !(s.disabled_strategies || []).includes(k)) : [s.strategy]);
 export const HORIZON_LABELS = { short: "Corto plazo", long: "Largo plazo" };
 export const ENTRY_LABELS = { market: "A mercado", maker: "Límite maker", market_fallback: "Mercado tras espera" };
-export const REASON_LABELS = { TP: "Take Profit", SL: "Stop Loss", TRAILING: "Trailing", BREAKEVEN: "Breakeven", MANUAL: "Manual", TIEMPO: "Tiempo máx.", FIN_SEMANA: "Fin de semana", CRUCE: "Cruce EMA contrario", IA_REVISION: "Revisión IA" };
+export const REASON_LABELS = { TP: "Take Profit", SL: "Stop Loss", TRAILING: "Trailing", BREAKEVEN: "Breakeven", MANUAL: "Manual", TIEMPO: "Tiempo máx.", FIN_SEMANA: "Fin de semana", CRUCE: "Cruce EMA contrario", IA_REVISION: "Revisión IA", NOTICIA: "Evento rojo" };
 export const SESSION_NAMES = { sydney: "Sídney", tokyo: "Tokio", london: "Londres", newyork: "Nueva York" };
 export const errMsg = (e) => {
   const d = e?.response?.data?.detail;

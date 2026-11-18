@@ -20,6 +20,7 @@ from fx.shadow import monitor_shadows
 import evolution
 import position_review
 import broker_health
+import trade_guard
 from broker_health import fmt_duration, fresh_health as _fresh_health  # noqa: F401 (re-exported for tests)
 from fx.engine_core import (logger, INITIAL_BALANCE, LIVE_GRACE_SEC, HFM_HEALTH_SEC, HFM_HEALTH_RETRY_SEC, TRANSIENT_TG_SEC, PENDING_TTL_SEC,  # noqa: F401
                             HFM_OK_STATES, HFM_OK_CONN, BLOCK_BY, HORIZON_LABEL, NEWS_STRATEGY, FX_STRATEGY_INFO, today, PrefixedDB)
@@ -32,6 +33,8 @@ from fx import wfcheck as fx_wfcheck
 
 
 class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
+    guard_kind = "fx"
+
     def __init__(self, db, profile: BrokerProfile = HFM, market: FxMarket = None):
         self.profile = profile
         self.db = PrefixedDB(db, profile.prefix)
@@ -64,6 +67,8 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
         self.hfm = _fresh_health()
         self._last_equity = None
         self._cash_checked = 0.0
+        self.funnel_said, self.funnel_last = {}, {}
+        self.usage_kind = f"{profile.ai_kind}-signal"
 
     async def apply_config(self, cfg):
         self.cfg = cfg
@@ -223,6 +228,8 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
                     await self.log("RISK", f"{self.broker.our_symbol(xp['symbol'])}: posición externa detectada en {self.bk} (no gestionada por el bot) · {xp['volume']:.2f} lotes")
         if ex is not None:
             await self._expire_pending(now)
+        if market_open(now):
+            await trade_guard.protect_positions(self, now)
         await monitor_shadows(self, tickers, settings, now)
         await self._update_account_metrics(settings)
         if market_open(now) and position_review.due(self, settings):

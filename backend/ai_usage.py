@@ -2,9 +2,9 @@
 from datetime import datetime, timezone
 
 BOT_KINDS = {
-    "crypto": {"signals": ("signal",), "news": ("news",), "news_trades": (), "reviews": ("advisor",)},
-    "fx": {"signals": ("fx-signal",), "news": ("fx-news",), "news_trades": ("fx-news-trade",), "reviews": ("fx-advisor",)},
-    "pepper": {"signals": ("pep-signal",), "news": ("pep-news",), "news_trades": ("pep-news-trade",), "reviews": ("pep-advisor",)},
+    "crypto": {"signals": ("signal", "signal-fast"), "news": ("news",), "news_trades": (), "reviews": ("advisor",)},
+    "fx": {"signals": ("fx-signal", "fx-signal-fast"), "news": ("fx-news",), "news_trades": ("fx-news-trade",), "reviews": ("fx-advisor",)},
+    "pepper": {"signals": ("pep-signal", "pep-signal-fast"), "news": ("pep-news",), "news_trades": ("pep-news-trade",), "reviews": ("pep-advisor",)},
 }
 
 

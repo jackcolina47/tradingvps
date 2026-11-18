@@ -6,13 +6,16 @@ from models import Signal, now_iso
 from indicators import trend_label, htf_trend, snapshot
 from strategies import evaluate, exit_signal, ema_test, ema_test_params, atr_params, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST
 from fx.models import FxSettings
-from fx.market import HTF, market_open, market_status, in_sessions, session_names, closing_soon
+from fx.market import HTF, market_open, market_status, closing_soon
 from fx.symbols import SPECS, pips
 from fx import filters
 from fx import regime as fx_regime
 from fx.strategies_slow import fix_signal, fix_window
 from fx.ai import evaluate_signal
 import ai_funnel
+import trade_guard
+import funnel
+from bson import ObjectId
 import price_action
 import ai_rules
 import trade_learning
@@ -34,9 +37,9 @@ class SignalsMixin:
             except Exception as e:
                 logger.exception("scan error")
                 await self.log("ERROR", f"Error en escaneo: {e}")
-            self.next_scan_ts = time.time() + settings.scan_interval_sec
+            self.next_scan_ts = time.time() + funnel.CYCLE_SEC
             try:
-                await asyncio.wait_for(self.scan_event.wait(), timeout=settings.scan_interval_sec)
+                await asyncio.wait_for(self.scan_event.wait(), timeout=funnel.CYCLE_SEC)
             except asyncio.TimeoutError:
                 pass
             self.scan_event.clear()
@@ -46,59 +49,77 @@ class SignalsMixin:
         return build_fx_df(klines, atr_period)
 
     async def scan_once(self, settings: FxSettings):
+        """One AI-funnel cycle (see funnel.py). Legacy positions of the old EMA-cross strategies keep their exit on the opposite cross."""
         if not market_open():
             if not self._closed_logged:
                 self._closed_logged = True
                 nxt = market_status()["next_change"]
-                await self.log("SCAN", f"Mercado forex cerrado · sin escaneos hasta {nxt[:16].replace('T', ' ')} UTC")
+                await self.log("SCAN", f"Mercado forex cerrado · sin análisis hasta {nxt[:16].replace('T', ' ')} UTC")
             return
         self._closed_logged = False
         self.scanning = True
-        found = 0
-        htf_tf = HTF[settings.timeframe]
-        test_syms = set(settings.ema_test_symbols) if settings.ema_test_enabled else set()
-        # pairs with an open test position keep being scanned (even with the toggle off) so the opposite cross can still close them
-        open_test = {d["symbol"] for d in await self.db.positions.find({"exit_mode": "cross"}, {"symbol": 1}).to_list(100)}
         try:
-            for symbol in list(dict.fromkeys([*settings.symbols, *test_syms, *open_test])):
-                try:
-                    params = settings.symbol_params.get(symbol) or {}
-                    df = self._df(await self.market.fetch_klines(symbol, settings.timeframe, 300, cache_sec=60), int(params.get("atr_period", 14)))
-                    i = len(df) - 2
-                    row = df.iloc[i]
-                    htf = None
-                    if settings.htf_filter and symbol in settings.symbols:
-                        htf = htf_trend(self._df(await self.market.fetch_klines(symbol, htf_tf, 200, cache_sec=300)))
-                    if self.running:
-                        await self._exit_on_cross(symbol, df, i)
-                    if symbol in test_syms:
-                        tsig = ema_test(df, i, params=ema_test_params(settings))
-                        if tsig and self.running:
-                            found += 1
-                            await self._handle_test_signal(symbol, tsig, settings)
-                    if symbol not in settings.symbols:
-                        continue  # test-only pair: no regular strategies
-                    sig = evaluate(df, i, settings.strategy, htf, {**params, **atr_params(settings)}, settings.signal_mode, settings.disabled_strategies)
-                    vol_pct = filters.vol_percentile(df["atr"].values, i)
-                    self.analysis[symbol] = {
-                        "trend": trend_label(row), "rsi": round(float(row["rsi"]), 1), "macd_hist": float(row["macd_hist"]),
-                        "adx": round(float(row["adx"]), 1), "atr_pips": round(pips(symbol, float(row["atr"])), 1), "htf": htf,
-                        "vol_pct": vol_pct, "vol_regime": filters.vol_label(vol_pct, settings), "season_bias": filters.seasonality_bias(symbol),
-                        "signal": sig["side"] if sig else None, "signal_strategy": sig["strategy"] if sig else None, "updated_at": now_iso(),
-                    }
-                    if sig and self.running:
-                        found += 1
-                        await self._handle_signal(symbol, sig, settings, df, htf, htf_tf)
-                except Exception as e:
-                    logger.exception(f"scan {symbol}")
-                    await self.log("ERROR", f"{symbol}: {e}")
-            if self.running and "fix_reversion" not in settings.disabled_strategies and settings.strategy in ("all", "fix_reversion"):
-                found += await self._scan_slow(settings)
-            self.last_scan = now_iso()
             if self.running:
-                await self.log("SCAN", f"Escaneo {settings.timeframe} completado · {len(settings.symbols)} pares · {found} señales")
+                for symbol in {d["symbol"] for d in await self.db.positions.find({"strategy": {"$in": list(EXIT_ON_CROSS)}}, {"symbol": 1}).to_list(100)}:
+                    df = self._df(await self.market.fetch_klines(symbol, settings.timeframe, 300, cache_sec=60))
+                    await self._exit_on_cross(symbol, df, len(df) - 2)
+            await funnel.run(self, settings)
+            self.last_scan = now_iso()
         finally:
             self.scanning = False
+
+    # ---------- AI funnel adapter ----------
+    async def funnel_frame(self, symbol: str, tf: str, limit: int = 300):
+        """Candles with the broker's tick volume while the MetaApi account is deployed; Yahoo (no volume → candle range) otherwise."""
+        b = self.broker
+        if b and self.cfg and self.cfg.hfm_state == "DEPLOYED" and time.time() - b.chart_fail_ts > 60:
+            try:
+                rows = await b.candles(symbol, tf, None, limit, cache_sec=45)
+                if rows and len(rows) >= 220:
+                    return self._df(rows), sum(r[5] for r in rows[-50:]) > 0
+            except Exception as e:
+                b.chart_fail_ts = time.time()
+                logger.warning(f"velas {self.bk} {symbol} {tf}: {e} → usando Yahoo")
+        return self._df(await self.market.fetch_klines(symbol, tf, limit, cache_sec=60)), False
+
+    @staticmethod
+    def funnel_htf(tf: str) -> str:
+        return HTF[tf]
+
+    @staticmethod
+    def funnel_digits(symbol: str):
+        return SPECS[symbol]["digits"]
+
+    def funnel_analysis(self, symbol: str, m: dict) -> dict:
+        return {"htf": None, "atr_pips": round(pips(symbol, m["atr"]), 1)}
+
+    def funnel_ctx(self, symbol: str) -> dict:
+        t = self.market.tickers.get(symbol, {})
+        return {"modo": self.mode_label, "cambio_dia_pct": t.get("change_pct"), "spread_pips": round(pips(symbol, t.get("spread") or SPECS[symbol]["spread"]), 1),
+                "sesiones_abiertas": [x["name"] for x in market_status()["sessions"] if x["open"]]}
+
+    async def funnel_state(self, settings: FxSettings) -> dict:
+        acc = await self.account_summary()
+        docs = await self.db.positions.find({}, {"symbol": 1, "horizon": 1, "exit_mode": 1}).to_list(100)
+        used = len([p for p in docs if (p.get("horizon") or "short") == "short" and p.get("exit_mode") != "cross"])
+        block = ("límite de pérdida diaria alcanzado" if acc["daily_paused"] else filters.rollover_block(settings.rollover_guard)
+                 or (f"cuenta {self.bk} sin conexión con MetaApi" if self.live and self.hfm["down_since"] else None)
+                 or ("cierre de fin de semana inminente" if settings.close_before_weekend and closing_soon(30) else None)
+                 or (f"máximo de posiciones alcanzado ({settings.max_positions})" if used >= settings.max_positions else None))
+        return {"acc": acc, "open": {p["symbol"] for p in docs}, "free": settings.max_positions - used, "block": block}
+
+    async def funnel_open(self, symbol: str, sig: dict, settings: FxSettings, signal_id: str, acc: dict):
+        block, _, _ = await self._blocks(symbol, settings, acc, sig["side"])
+        if block:
+            await self.log("RISK", f"{symbol}: entrada del embudo no ejecutada · {block}")
+            return False, block
+        pos, reason = await self.open_position(symbol, sig, settings, signal_id)
+        if pos:
+            await self.db.signals.update_one({"_id": ObjectId(signal_id)}, {"$set": {"executed": True}})
+        return bool(pos), reason
+
+    async def funnel_shadow(self, signal_id: str, symbol: str, sig: dict, settings: FxSettings, kind: str, acc: dict, confidence: int):
+        await open_shadow(self, signal_id, symbol, sig, settings, kind, acc, ai_confidence=confidence)
 
     async def _exit_on_cross(self, symbol: str, df, i: int):
         """Strategy exits decided at candle close (ema_cross: the EMAs crossed back against the position)."""
@@ -140,8 +161,9 @@ class SignalsMixin:
         open_syms = [p["symbol"] for p in open_docs]
         if not market_open():
             return "mercado cerrado", "MERCADO", open_syms
-        if horizon == "short" and not in_sessions(settings.sessions_allowed):
-            return f"fuera de las sesiones permitidas ({session_names(settings.sessions_allowed)})", "SESION", open_syms
+        g_reason, g_code = trade_guard.entry_block(self.guard_kind, symbol)
+        if g_reason:
+            return g_reason, g_code, open_syms
         if self._pair_taken(open_docs, symbol, False):
             return "ya existe una posición abierta en el par", "BLOQUEADA", open_syms
         slot = self._slot_block(open_docs, settings, horizon)

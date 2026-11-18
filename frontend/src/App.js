@@ -7,7 +7,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { http, errMsg, getToken, setToken, setApiBase, fmtTime } from "@/lib/api";
 import BotSelector from "@/pages/BotSelector";
 import FxDashboard from "@/fx/FxDashboard";
-import LabDashboard from "@/pages/LabDashboard";
 import { usePolling } from "@/hooks/usePolling";
 import Header from "@/components/bot/Header";
 import Login from "@/components/bot/Login";
@@ -20,12 +19,12 @@ import PriceChart from "@/components/bot/PriceChart";
 import BotPanel from "@/components/bot/BotPanel";
 import PositionsTable from "@/components/bot/PositionsTable";
 import TradeHistory from "@/components/bot/TradeHistory";
-import Backtest from "@/components/bot/Backtest";
 import Performance from "@/components/bot/Performance";
 import PairRanking from "@/components/bot/performance/PairRanking";
 import GrowthPlan from "@/components/bot/GrowthPlan";
-import Optimizer from "@/components/bot/Optimizer";
 import NewsPanel from "@/components/bot/NewsPanel";
+import GuardStrip, { useGuard } from "@/components/bot/GuardStrip";
+import RedCalendar from "@/components/bot/RedCalendar";
 import AiSignals from "@/components/bot/AiSignals";
 import EvolutionPanel from "@/components/bot/EvolutionPanel";
 import { AiHealthBanner } from "@/components/bot/AiHealthBanner";
@@ -43,6 +42,7 @@ function Dashboard({ onLogout }) {
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState("panel");
   const { data, refresh } = usePolling(() => http.get("/dashboard").then((r) => r.data), 3000);
+  const { data: guard, refresh: refreshGuard } = useGuard();
 
   useEffect(() => {
     document.title = "Bybit AI Trader · Panel de control";
@@ -87,7 +87,7 @@ function Dashboard({ onLogout }) {
         onSettings={() => setView((v) => (v === "settings" ? "panel" : "settings"))}
         onDocs={() => setView((v) => (v === "docs" ? "panel" : "docs"))}
         onDeploy={() => setView((v) => (v === "deploy" ? "panel" : "deploy"))}
-        onScan={() => act(() => http.post("/bot/scan"), "Escaneo solicitado")}
+        onScan={() => act(() => http.post("/bot/scan"), "Ciclo del embudo solicitado")}
         onReset={() => act(() => http.post("/account/reset", {}), "Cuenta paper reiniciada")} />
       {view === "deploy" ? (
         <main className="mx-auto max-w-[1920px] p-4 md:p-6"><VpsInstall onBack={() => setView("panel")} /></main>
@@ -105,12 +105,13 @@ function Dashboard({ onLogout }) {
               : <>Bybit sin respuesta: {data.status.exchange_error} · mostrando los últimos datos locales</>}
           </div>
         )}
+        <GuardStrip guard={guard} />
         <KpiStrip account={data.account} />
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <Watchlist items={data.watchlist} selected={symbol} onSelect={setSymbol} />
           <PriceChart symbol={symbol} defaultTf={data.settings.timeframe}
             trade={{ riskPct: data.settings.risk_per_trade, equity: data.account.equity, live: data.status.mode === "REAL", currency: "USDT", onDone: refresh }} />
-          <BotPanel settings={data.settings} meta={meta} account={data.account} equity={data.equity} profileActive={data.profile_active} rulesOnly />
+          <BotPanel settings={data.settings} meta={meta} account={data.account} equity={data.equity} profileActive={data.profile_active} />
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
           <Panel testId="operations-panel" className="lg:col-span-8" delay={220}>
@@ -120,13 +121,11 @@ function Dashboard({ onLogout }) {
                 <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto bg-transparent p-0 [scrollbar-width:none]">
                   <TabsTrigger data-testid="tab-positions" value="positions" className={TAB_CLS}>Posiciones ({data.positions.length})</TabsTrigger>
                   <TabsTrigger data-testid="tab-history" value="history" className={TAB_CLS}>Historial</TabsTrigger>
-                  <TabsTrigger data-testid="tab-backtest" value="backtest" className={TAB_CLS}>Backtest</TabsTrigger>
                   <TabsTrigger data-testid="tab-performance" value="performance" className={TAB_CLS}>Rendimiento</TabsTrigger>
                   <TabsTrigger data-testid="tab-pairs" value="pairs" className={TAB_CLS}>Pares 30d</TabsTrigger>
-                  <TabsTrigger data-testid="tab-optimizer" value="optimizer" className={TAB_CLS}>Optimizador</TabsTrigger>
                   <TabsTrigger data-testid="tab-news" value="news" className={`${TAB_CLS} relative`}>
                     Noticias
-                    {(data.news?.risk === "ALTO" || data.news?.blocked || data.news?.critical?.length > 0) && (
+                    {(Object.keys(guard?.blocked || {}).length > 0 || data.news?.critical?.length > 0) && (
                       <span data-testid="tab-news-alert" className="pulse-dot absolute -right-1 -top-1 bg-rose-400" />
                     )}
                   </TabsTrigger>
@@ -145,43 +144,31 @@ function Dashboard({ onLogout }) {
                   onCloseAll={() => act(() => http.post("/positions/close-all"), "Cierre de emergencia ejecutado")} />
               </TabsContent>
               <TabsContent value="history" className="mt-0"><TradeHistory trades={data.trades} /></TabsContent>
-              <TabsContent value="backtest" className="mt-0"><Backtest meta={meta} settings={data.settings} /></TabsContent>
               <TabsContent value="performance" className="mt-0">
                 <Performance tradeCount={data.account.total_trades} settings={data.settings} strategyKeys={meta?.strategy_keys} onSave={(body) => act(() => http.put("/settings", body), "Configuración actualizada")} />
               </TabsContent>
               <TabsContent value="pairs" className="mt-0">
                 <PairRanking tradeCount={data.account.total_trades} settings={data.settings} refresh={refresh} onSave={(body) => act(() => http.put("/settings", body), "Pares actualizados")} />
               </TabsContent>
-              <TabsContent value="optimizer" className="mt-0">
-                <Optimizer settings={data.settings} refresh={refresh} onSave={(body) => act(() => http.put("/settings", body), "Parámetros del bot actualizados")} />
-              </TabsContent>
-              <TabsContent value="news" className="mt-0"><NewsPanel summary={data.news} symbols={data.settings.symbols} /></TabsContent>
+              <TabsContent value="news" className="mt-0"><RedCalendar guard={guard} onRefresh={refreshGuard} /><NewsPanel summary={data.news} symbols={data.settings.symbols} /></TabsContent>
               <TabsContent value="plan" className="mt-0">
                 <GrowthPlan account={data.account} settings={data.settings} checkin={data.checkin} refresh={refresh}
                   onSave={(body) => act(() => http.put("/settings", body), "Plan actualizado")} />
               </TabsContent>
             </Tabs>
           </Panel>
-          <AiSignals signals={data.signals} ai={data.status.ai} usage={data.status.ai_usage} rulesOnly title="Señales y reglas aprendidas"
-            emptyText="Cada señal detectada se abre directamente; aquí verás si alguna regla aprendida la bloqueó y por qué." />
+          <AiSignals signals={data.signals} ai={data.status.ai} usage={data.status.ai_usage} minConfidence={data.settings.ai_min_confidence} title="Decisiones del embudo IA"
+            emptyText="Aquí aparecen las decisiones BUY / SELL del modelo potente: las que superan el umbral de confianza se ejecutan y el resto se sigue como sombra." />
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          <SettingsPanel settings={data.settings} meta={meta} profileActive={data.profile_active} strategyKeys={meta?.strategy_keys} longKeys={meta?.long_horizon_keys}
-            extraNums={[{ k: "max_long_positions", label: "Máx. posiciones largo plazo", min: 1, max: 6, step: 1 }, { k: "maker_wait_bars", label: "Espera orden maker (velas)", min: 1, max: 3, step: 1 },
+          <SettingsPanel settings={data.settings} meta={meta}
+            extraNums={[{ k: "maker_wait_bars", label: "Espera orden maker (velas)", min: 1, max: 3, step: 1 },
               { k: "be_start_r", label: "Breakeven a (R)", min: 0.5, max: 3, step: 0.25 }, { k: "trail_start_r", label: "Trailing desde (R)", min: 0.5, max: 3, step: 0.25 },
               { k: "trail_atr_mult", label: "Distancia trailing (ATR)", min: 0.5, max: 3, step: 0.25 }, { k: "partial_tp_r", label: "Cierre parcial a (R)", min: 0.5, max: 3, step: 0.25 },
-              { k: "partial_tp_pct", label: "Cierre parcial (%)", min: 25, max: 75, step: 5 },
-              { k: "auto_prune_pf", label: "Poda: PF mínimo (30 d)", min: 0.3, max: 1.5, step: 0.05, hint: "Un par activo con factor de beneficio por debajo de este valor en los últimos 30 días entra en poda" },
-              { k: "auto_prune_min_trades", label: "Poda: más de N operaciones", min: 3, max: 100, step: 1, hint: "Solo se poda con más de N operaciones cerradas en 30 días (muestra suficiente)" }]}
-            hide={["ai_min_confidence", "min_rr", "ai_enabled", "ai_funnel_enabled"]}
-            extraToggles={[{ k: "rules_auto_learn", label: "Aprendizaje automático", hint: "La IA analiza cada operación cerrada: de las pérdidas evitables guarda una regla nueva y apaga las reglas que habrían bloqueado 3 operaciones ganadoras. Gasta saldo de IA por operación cerrada" },
-              { k: "partial_tp_enabled", label: "Cierre parcial de beneficios", hint: "Cierra una parte al alcanzar el nivel en R y deja correr el resto con trailing" },
-              { k: "reopt_enabled", label: "Re-optimización semanal", hint: "Cada 7 días repite el optimizador SL/TP/ATR en los pares marcados abajo, aplica el mejor resultado robusto y avisa por Telegram si un par apagado pasa a ser rentable" },
-              { k: "auto_prune_enabled", label: "Poda automática de pares", hint: "Cada día revisa los últimos 30 días: un par con más de N operaciones y PF bajo recibe aviso por Telegram y, si sigue igual al día siguiente, se apaga solo" }]}
-            extraChips={[{ k: "reopt_symbols", label: "Pares a re-optimizar cada semana", emptyLabel: "ninguno", options: (meta?.symbols || []).map((s) => ({ id: s, name: s.replace("USDT", "") })),
-              hint: "Máximo 6 pares. Los parámetros propios (SL/TP/ATR) de cada uno se actualizan si el optimizador encuentra una combinación robusta mejor." }]}
-            onSave={(body) => act(() => http.put("/settings", body), "Configuración guardada")}
-            onProfile={(level) => act(() => http.post("/profile", { level }), `Perfil de riesgo aplicado: ${meta?.profiles?.[level]?.name || level}`)} />
+              { k: "partial_tp_pct", label: "Cierre parcial (%)", min: 25, max: 75, step: 5 }]}
+            extraToggles={[{ k: "rules_auto_learn", label: "Aprendizaje automático", hint: "La IA analiza cada operación cerrada: de las pérdidas evitables guarda una regla nueva que el modelo potente aplicará, y apaga las reglas que habrían bloqueado 3 operaciones ganadoras. Gasta saldo de IA por operación cerrada" },
+              { k: "partial_tp_enabled", label: "Cierre parcial de beneficios", hint: "Cierra una parte al alcanzar el nivel en R y deja correr el resto con trailing" }]}
+            onSave={(body) => act(() => http.put("/settings", body), "Configuración guardada")} />
           <Terminal logs={data.logs} onClear={() => act(() => http.delete("/logs"))} />
         </div>
         <p className="pb-4 pt-2 font-mono text-[10px] uppercase tracking-wider text-slate-600">
@@ -208,7 +195,6 @@ export default function App() {
           <Route path="/" element={<BotSelector onLogout={logout} />} />
           <Route path="/bybit" element={<Dashboard onLogout={logout} />} />
           <Route path="/hotforex" element={<FxDashboard onLogout={logout} bot="fx" />} />
-          <Route path="/lab" element={<LabDashboard onLogout={logout} />} />
           <Route path="/pepperstone" element={<FxDashboard onLogout={logout} bot="pepper" />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

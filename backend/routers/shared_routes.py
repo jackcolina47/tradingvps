@@ -14,6 +14,7 @@ import ai_advisor
 import position_review
 import ai_rules
 import trade_learning
+import trade_guard
 from fx.market import market_open as fx_market_open
 from models import ManualOrder
 import performance
@@ -59,6 +60,17 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
         if not doc:
             raise HTTPException(404, "Operación no encontrada")
         return Trade.from_mongo(doc)
+
+    @router.get("/guard")
+    async def guard_status():
+        """Operating hours (New York) and the red-news calendar with the pairs each event blocks."""
+        return trade_guard.status(engine.guard_kind, (await engine.get_settings()).symbols)
+
+    @router.post("/guard/refresh")
+    async def guard_refresh():
+        if not await trade_guard.calendar.refresh():
+            raise HTTPException(424, trade_guard.calendar.error)
+        return trade_guard.status(engine.guard_kind, (await engine.get_settings()).symbols)
 
     @router.get("/auth/me")
     async def auth_me():

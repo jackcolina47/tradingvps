@@ -34,7 +34,7 @@ class FxSettings(BaseModel):
     price_action_block: bool = True
     price_action_max_candles: int = 3
     price_action_swing_atr: float = 1.0
-    scan_interval_sec: int = 120
+    scan_interval_sec: int = 60
     trailing_enabled: bool = True
     breakeven_enabled: bool = True
     htf_filter: bool = True
@@ -81,6 +81,15 @@ class FxSettings(BaseModel):
     ema_test_confirm_dist_atr: float = 0.5
     ema_test_confirm_bars: int = 20
     bot_running: bool = False
+
+    @field_validator("ai_min_confidence", mode="before")
+    @classmethod
+    def _confidence_level(cls, v):
+        """«Confianza IA para abrir operación»: 10 %…90 % in steps of 10 (older free values are snapped)."""
+        try:
+            return min(90, max(10, int(round(float(v) / 10) * 10)))
+        except (TypeError, ValueError):
+            return 60
 
     @field_validator("ema_test_symbols")
     @classmethod

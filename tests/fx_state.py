@@ -1,5 +1,5 @@
 import os, sys, json, requests
-B = "https://repo-workspace-14--8ursakdp.preview.emergentagent.com"
+B = "https://ai-trader-pro-73--0fkjair5.preview.emergentagent.com"
 t = requests.post(f"{B}/api/auth/login", json={"password": "BlackCat2233@"}).json()["token"]
 H = {"Authorization": f"Bearer {t}"}
 d = requests.get(f"{B}/api/fx/dashboard", headers=H).json()

@@ -112,6 +112,15 @@ class Settings(BaseModel):
     partial_tp_pct: int = 50
     bot_running: bool = False
 
+    @field_validator("ai_min_confidence", mode="before")
+    @classmethod
+    def _confidence_level(cls, v):
+        """«Confianza IA para abrir operación»: 10 %…90 % in steps of 10 (older free values are snapped)."""
+        try:
+            return min(90, max(10, int(round(float(v) / 10) * 10)))
+        except (TypeError, ValueError):
+            return 60
+
     @field_validator("be_start_r", "trail_start_r", "partial_tp_r")
     @classmethod
     def _r_levels(cls, v):
@@ -306,6 +315,7 @@ class Position(BaseDocument):
     link_id: Optional[str] = None
     expires_at: Optional[str] = None
     horizon: str = "short"
+    news_guard: Optional[str] = None  # key of the red event this position was already protected for
     exit_mode: Optional[str] = None  # "cross": no SL/TP, closes on the opposite EMA cross (Test cruce EMA 10/20)
     pips: Optional[float] = None
 

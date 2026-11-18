@@ -19,7 +19,7 @@ const ALERTS = [
   ["system", "Conexión con el bróker (HFM, Pepperstone / MetaApi) caída o restablecida"],
 ];
 
-const BOTS = [["bybit", "Bybit"], ["hfm", "HotForex"], ["pepperstone", "Pepperstone"], ["lab", "Bybit Lab"]];
+const BOTS = [["bybit", "Bybit"], ["hfm", "HotForex"], ["pepperstone", "Pepperstone"]];
 const ALL_BOTS = BOTS.map(([k]) => k);
 
 function BotPicker({ id, value, onChange }) {

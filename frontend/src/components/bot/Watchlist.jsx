@@ -9,6 +9,9 @@ const TREND_CLS = {
   NEUTRAL: "text-slate-400 bg-slate-500/10 border-slate-500/25",
 };
 
+const FUNNEL_CLS = { EJECUTADA: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300", SOMBRA: "border-purple-500/40 bg-purple-500/10 text-purple-300",
+  NOTICIAS: "border-rose-500/40 bg-rose-500/10 text-rose-300", NO_EJECUTADA: "border-orange-500/40 bg-orange-500/10 text-orange-300" };
+const FUNNEL_LABEL = { DESCARTADO: "descartado", PASS: "pass", SOMBRA: "sombra", EJECUTADA: "abierta", NOTICIAS: "noticia", NO_EJECUTADA: "no ejecutada" };
 const FUNDING_CLS = { EXTREMO: "bg-rose-500/15 text-rose-300", ALTO: "bg-amber-500/15 text-amber-300" };
 const pct = (v) => `${v > 0 ? "+" : ""}${(v * 100).toFixed(3)}%`;
 
@@ -66,9 +69,10 @@ function Row({ w, active, onSelect }) {
           )}
           {w.rsi != null && <span className="num text-[10px] text-slate-500">RSI {w.rsi}</span>}
           {w.funding_rate != null && <FundingChip w={w} />}
-          {w.signal && (
-            <span data-testid={`watchlist-signal-${w.symbol}`} className="rounded-sm bg-amber-500 px-1.5 py-px font-mono text-[9px] font-bold uppercase text-[#07090E]">
-              Señal {w.signal}
+          {w.funnel && (
+            <span data-testid={`watchlist-funnel-${w.symbol}`} title={`Embudo IA · etapa ${w.funnel.stage} · ${w.funnel.text}`}
+              className={`rounded-sm border px-1.5 py-px font-mono text-[9px] font-semibold uppercase ${FUNNEL_CLS[w.funnel.state] || "border-[#1E293B] text-slate-500"}`}>
+              E{w.funnel.stage} {FUNNEL_LABEL[w.funnel.state] || w.funnel.state}{w.funnel.confidence != null ? ` ${w.funnel.confidence}%` : ""}
             </span>
           )}
         </div>

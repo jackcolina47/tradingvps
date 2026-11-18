@@ -26,13 +26,6 @@ const BOTS = [
     desc: "Instancia independiente del motor forex para Pepperstone: cuenta Razor (spread crudo + comisión) o Standard, símbolos sin sufijo, sus propios ajustes, plan, revisión IA y Telegram.",
     tags: ["XAUUSD · XAGUSD · EURUSD…", "Razor / Standard", "Yahoo Finance · Pepperstone"],
   },
-  {
-    key: "lab", path: "/lab", icon: FlaskConical, accent: "fuchsia",
-    title: <>Bybit <span className="text-fuchsia-400">Lab</span></>,
-    subtitle: "Investigación de estrategias · solo paper",
-    desc: "Clon de Bybit para probar el Test cruce EMA 10/20 sin riesgo: cuenta paper, historial y ajustes propios, backtest y gráfico. Sin IA, sin noticias y sin modo REAL.",
-    tags: ["Test cruce EMA 10/20", "Solo paper", "Datos del bot Bybit"],
-  },
 ];
 const ACCENT = {
   fuchsia: { ring: "hover:border-fuchsia-500/60 hover:shadow-[0_0_0_1px_rgba(217,70,239,0.35),0_30px_80px_-30px_rgba(217,70,239,0.35)]", mark: "bg-fuchsia-500 text-[#07090E]", btn: "bg-fuchsia-500 text-[#07090E] hover:bg-fuchsia-400", tag: "border-fuchsia-500/30 text-fuchsia-300" },
@@ -66,9 +59,9 @@ export default function BotSelector({ onLogout }) {
     setApiBase("");
     document.title = "AI Trading · Selecciona un bot";
     const load = async () => {
-      const [c, f, p, l] = await Promise.allSettled([api.get("/overview"), api.get("/fx/overview"), api.get("/pepper/overview"), api.get("/lab/overview")]);
+      const [c, f, p] = await Promise.allSettled([api.get("/overview"), api.get("/fx/overview"), api.get("/pepper/overview")]);
       const v = (r) => (r.status === "fulfilled" ? r.value.data : { error: true });
-      setStatus({ crypto: v(c), fx: v(f), pepper: v(p), lab: v(l) });
+      setStatus({ crypto: v(c), fx: v(f), pepper: v(p) });
     };
     load();
   }, []);
@@ -80,7 +73,7 @@ export default function BotSelector({ onLogout }) {
           <div>
             <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-slate-500">Panel de control · acceso verificado</p>
             <h1 className="font-display mt-2 text-3xl font-extrabold uppercase leading-none tracking-tight text-slate-50 md:text-4xl">¿Qué bot quieres operar?</h1>
-            <p className="mt-3 max-w-xl text-sm text-slate-400">Bots independientes, cada uno con su cuenta paper, su historial y sus ajustes. Bybit Lab es solo para investigar estrategias en paper.</p>
+            <p className="mt-3 max-w-xl text-sm text-slate-400">Bots independientes, cada uno con su cuenta paper, su historial y sus ajustes. Los tres operan con el mismo embudo de IA, horario operativo y bloqueo por eventos rojos.</p>
           </div>
           <Button data-testid="selector-logout-button" variant="ghost" onClick={onLogout} className="h-9 font-mono text-[11px] uppercase tracking-wider text-slate-400 hover:bg-[#111827] hover:text-rose-300">
             <LogOut className="mr-1.5 h-3.5 w-3.5" /> Cerrar sesión
