@@ -621,10 +621,15 @@ Decisiones del usuario: eliminar TODO backtest/optimizador/walk-forward; mantene
 - **Docs**: components/docs/{features,howTo,faq}Content.js reescritos; backend/chat/knowledge.md; README.md; deploy/INSTALACION.md, deploy/README.md, install.sh/update*.sh (quitan cron walk-forward), vpsContent.js; `.emergent/crons.yml` sin walk-forward.
 - Tested: testing_agent iteration_101 — backend 173/173 (`tests/test_iter101_cleanup_retry.py` 77 nuevos: endpoints eliminados, reintento 5 min con stage1/stage2 simulados, cancelación selectiva de pendientes), frontend 100 % en los 3 bots.
 
+## Iteración 102 (2026-11) — Calibrador de confianza + textos de Ajustes
+- `performance.confidence_calibration(db)` → clave `calibration` en /performance (3 bots): une sombras BAJA_CONFIANZA + trades reales del embudo (join por signal_id, ai_stage 2) y calcula ops/acierto/PF/PnL para cada umbral 10..90 (confianza > umbral). Recomienda el de mayor PnL con ≥5 ops si la muestra ≥20 y PnL > 0; estados `insufficient` / `no_edge` / `ok`. Decisión del usuario: SOLO recomendar (sin botón de aplicar).
+- `components/bot/performance/ConfidenceCalibrator.jsx` en Rendimiento (encima de Operaciones sombra).
+- Quitados de Ajustes: menciones a «agente de noticias» y `admin/FundingSection.jsx`.
+- Tested: cálculo verificado con datos sintéticos en BD temporal; UI verificada por captura (vacío real + respuesta simulada, escritorio y móvil); pytest 173/173. Sin testing agent.
+
 ### Pendiente
-- P3 Texto descriptivo de AdminSettings.jsx:40 y fx/FxAdminSettings.jsx:53 aún menciona «agente de noticias».
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
-- P3 funding.py / FundingSection: el nivel de funding solo se muestra en la watchlist (ya no es puerta de entrada); decidir si se retira.
+- P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.
 - P2 Redondeo del umbral de confianza para valores antiguos (45 → 40).
 - P1 Validar en REAL (Bybit testnet / MetaApi) el ciclo completo: orden límite maker, cancelación por evento rojo y protección pre-noticia.
 - P1 Telegram end-to-end en el VPS.

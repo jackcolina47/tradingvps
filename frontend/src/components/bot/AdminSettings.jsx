@@ -10,7 +10,6 @@ import LearnedRulesSection from "./admin/LearnedRulesSection";
 import AccountSection from "./admin/AccountSection";
 import BybitSection from "./admin/BybitSection";
 import LiveModeSection from "./admin/LiveModeSection";
-import FundingSection from "./admin/FundingSection";
 import BackupSection from "./admin/BackupSection";
 
 export default function AdminSettings({ account, refresh }) {
@@ -37,7 +36,7 @@ export default function AdminSettings({ account, refresh }) {
     <div data-testid="admin-settings" className="space-y-4">
       <div>
         <h2 className="font-display text-base font-bold uppercase tracking-[0.12em] text-slate-100 md:text-lg">Ajustes del sistema</h2>
-        <p className="text-[12px] text-slate-500">Cuenta real de Bybit y cambio de modo, clave de acceso, inteligencia artificial, alertas de Telegram, revisión automática, agente de noticias, cuenta paper y copias de seguridad. La estrategia y el riesgo se siguen configurando desde el panel principal.</p>
+        <p className="text-[12px] text-slate-500">Cuenta real de Bybit y cambio de modo, clave de acceso, inteligencia artificial, alertas de Telegram, revisión automática, cuenta paper y copias de seguridad. El riesgo y la confianza IA se siguen configurando desde el panel principal.</p>
       </div>
       <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
         <BybitSection config={config} onSave={save} />
@@ -47,7 +46,6 @@ export default function AdminSettings({ account, refresh }) {
         <LearnedRulesSection />
         <TelegramSection config={config} onSave={save} />
         <AutoReviewSection config={config} onSave={save} onRan={load} />
-        <FundingSection config={config} onSave={save} />
         <AccountSection account={account} refresh={refresh} />
         <BackupSection />
       </div>

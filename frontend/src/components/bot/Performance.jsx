@@ -5,6 +5,7 @@ import { Empty } from "./Panel";
 import { TH, TD } from "./PositionsTable";
 import { http, fmtSignedUsd, fmtUsd, pnlClass, STRATEGY_LABELS, REASON_LABELS, HORIZON_LABELS, ENTRY_LABELS } from "@/lib/api";
 import ShadowStats from "./performance/ShadowStats";
+import ConfidenceCalibrator from "./performance/ConfidenceCalibrator";
 import ExcursionStats from "./performance/ExcursionStats";
 import DailyPnl from "./performance/DailyPnl";
 
@@ -102,6 +103,7 @@ export default function Performance({ tradeCount, settings, onSave }) {
         </div>
       )}
       <ExcursionStats data={data.excursion} />
+      <ConfidenceCalibrator data={data.calibration} current={settings.ai_min_confidence} />
       <ShadowStats data={data.shadow} />
     </div>
   );

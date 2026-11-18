@@ -50,7 +50,7 @@ export default function FxAdminSettings({ account, refresh }) {
     <div data-testid="fx-admin-settings" className="space-y-4">
       <div>
         <h2 className="font-display text-base font-bold uppercase tracking-[0.12em] text-slate-100 md:text-lg">Ajustes · {brand.name}</h2>
-        <p className="text-[12px] text-slate-500">Cuenta real de {brand.broker} (vía MetaApi) y cambio de modo, agente de noticias y trading por noticias, revisión IA automática, resumen semanal y cuenta paper. La clave de acceso, la IA y Telegram son compartidos con los otros bots. La estrategia y el riesgo se configuran desde el panel principal.</p>
+        <p className="text-[12px] text-slate-500">Cuenta real de {brand.broker} (vía MetaApi) y cambio de modo, revisión IA automática, resumen semanal y cuenta paper. La clave de acceso, la IA y Telegram son compartidos con los otros bots. El riesgo y la confianza IA se configuran desde el panel principal.</p>
       </div>
       <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
         <HfmSection config={config} onSave={save} onRefresh={() => { load(); refresh?.(); }} account={account} />

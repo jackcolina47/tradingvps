@@ -46,7 +46,7 @@ export default function ShadowStats({ data }) {
         <p className="mt-1 text-[12px] leading-relaxed text-slate-400">
           Cada señal que no se operó (rechazada por la IA, fuera de sesión, bloqueada por riesgo o noticias, con error o sin poder abrirse) se simula igual que una operación real
           (mismo tamaño, SL, TP y trailing). «Evitó» son las pérdidas que el filtro ahorró; «se perdió» las ganancias que dejó escapar. Valor neto positivo = el filtro suma.
-          La IA recibe estos datos en la revisión automática semanal y en «Optimizar todo con IA».
+          La IA recibe estos datos en la revisión automática.
         </p>
       </div>
       {t.trades === 0 ? (

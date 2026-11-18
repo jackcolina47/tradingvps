@@ -111,6 +111,31 @@ async def pair_ranking(db, symbols: list, days: int = 30, available: list = None
     return {"days": days, "since": since, "rows": out, "total_pnl": total, "trades": sum(r["trades"] for r in out)}
 
 
+CAL_LEVELS = (10, 20, 30, 40, 50, 60, 70, 80, 90)
+CAL_MIN_SAMPLE, CAL_MIN_TRADES = 20, 5
+
+
+async def confidence_calibration(db) -> dict:
+    """What every confidence threshold would have earned: low-confidence shadows + executed funnel trades, joined by AI confidence."""
+    rows = [(r.get("ai_confidence") or 0, float(r.get("pnl") or 0), False)
+            async for r in db.shadow_trades.find({"kind": "BAJA_CONFIANZA"}, {"ai_confidence": 1, "pnl": 1})]
+    conf = {str(s["_id"]): s.get("ai_confidence") or 0 async for s in db.signals.find({"ai_stage": 2, "executed": True}, {"ai_confidence": 1})}
+    async for t in db.trades.find({"signal_id": {"$in": list(conf)}}, {"signal_id": 1, "pnl": 1}):
+        rows.append((conf[t["signal_id"]], float(t.get("pnl") or 0), True))
+    levels = []
+    for lv in CAL_LEVELS:
+        sel = [r for r in rows if r[0] > lv]
+        gw, gl = sum(r[1] for r in sel if r[1] > 0), sum(r[1] for r in sel if r[1] <= 0)
+        levels.append({"threshold": lv, "trades": len(sel), "win_rate": round(sum(1 for r in sel if r[1] > 0) / len(sel) * 100, 1) if sel else 0,
+                       "pnl": round(gw + gl, 2), "profit_factor": round(gw / abs(gl), 2) if gl else None})
+    ok = [x for x in levels if x["trades"] >= CAL_MIN_TRADES]
+    best = max(ok, key=lambda x: (x["pnl"], x["threshold"])) if ok else None
+    status = "insufficient" if len(rows) < CAL_MIN_SAMPLE or not best else ("no_edge" if best["pnl"] <= 0 else "ok")
+    return {"sample": len(rows), "real": sum(1 for r in rows if r[2]), "shadow": sum(1 for r in rows if not r[2]),
+            "min_sample": CAL_MIN_SAMPLE, "min_trades": CAL_MIN_TRADES, "status": status,
+            "recommended": best["threshold"] if status == "ok" else None, "levels": levels}
+
+
 async def performance(db, shadow=shadow_stats, with_excursion: bool = True, tz_min: int = 0) -> dict:
     decisions = {r["_id"]: r["n"] async for r in db.signals.aggregate([{"$group": {"_id": "$ai_decision", "n": {"$sum": 1}}}])}
     return {
@@ -122,4 +147,5 @@ async def performance(db, shadow=shadow_stats, with_excursion: bool = True, tz_m
         "signals": {"total": sum(decisions.values()), "executed": await db.signals.count_documents({"executed": True}),
                     "by_decision": decisions},
         "shadow": await shadow(db),
+        "calibration": await confidence_calibration(db),
     }
