@@ -22,7 +22,6 @@ import TradeHistory from "@/components/bot/TradeHistory";
 import Performance from "@/components/bot/Performance";
 import PairRanking from "@/components/bot/performance/PairRanking";
 import GrowthPlan from "@/components/bot/GrowthPlan";
-import NewsPanel from "@/components/bot/NewsPanel";
 import GuardStrip, { useGuard } from "@/components/bot/GuardStrip";
 import RedCalendar from "@/components/bot/RedCalendar";
 import AiSignals from "@/components/bot/AiSignals";
@@ -111,7 +110,7 @@ function Dashboard({ onLogout }) {
           <Watchlist items={data.watchlist} selected={symbol} onSelect={setSymbol} />
           <PriceChart symbol={symbol} defaultTf={data.settings.timeframe}
             trade={{ riskPct: data.settings.risk_per_trade, equity: data.account.equity, live: data.status.mode === "REAL", currency: "USDT", onDone: refresh }} />
-          <BotPanel settings={data.settings} meta={meta} account={data.account} equity={data.equity} profileActive={data.profile_active} />
+          <BotPanel settings={data.settings} meta={meta} account={data.account} equity={data.equity} />
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
           <Panel testId="operations-panel" className="lg:col-span-8" delay={220}>
@@ -124,8 +123,8 @@ function Dashboard({ onLogout }) {
                   <TabsTrigger data-testid="tab-performance" value="performance" className={TAB_CLS}>Rendimiento</TabsTrigger>
                   <TabsTrigger data-testid="tab-pairs" value="pairs" className={TAB_CLS}>Pares 30d</TabsTrigger>
                   <TabsTrigger data-testid="tab-news" value="news" className={`${TAB_CLS} relative`}>
-                    Noticias
-                    {(Object.keys(guard?.blocked || {}).length > 0 || data.news?.critical?.length > 0) && (
+                    Eventos rojos
+                    {Object.keys(guard?.blocked || {}).length > 0 && (
                       <span data-testid="tab-news-alert" className="pulse-dot absolute -right-1 -top-1 bg-rose-400" />
                     )}
                   </TabsTrigger>
@@ -145,12 +144,12 @@ function Dashboard({ onLogout }) {
               </TabsContent>
               <TabsContent value="history" className="mt-0"><TradeHistory trades={data.trades} /></TabsContent>
               <TabsContent value="performance" className="mt-0">
-                <Performance tradeCount={data.account.total_trades} settings={data.settings} strategyKeys={meta?.strategy_keys} onSave={(body) => act(() => http.put("/settings", body), "Configuración actualizada")} />
+                <Performance tradeCount={data.account.total_trades} settings={data.settings} onSave={(body) => act(() => http.put("/settings", body), "Configuración actualizada")} />
               </TabsContent>
               <TabsContent value="pairs" className="mt-0">
                 <PairRanking tradeCount={data.account.total_trades} settings={data.settings} refresh={refresh} onSave={(body) => act(() => http.put("/settings", body), "Pares actualizados")} />
               </TabsContent>
-              <TabsContent value="news" className="mt-0"><RedCalendar guard={guard} onRefresh={refreshGuard} /><NewsPanel summary={data.news} symbols={data.settings.symbols} /></TabsContent>
+              <TabsContent value="news" className="mt-0"><RedCalendar guard={guard} onRefresh={refreshGuard} /></TabsContent>
               <TabsContent value="plan" className="mt-0">
                 <GrowthPlan account={data.account} settings={data.settings} checkin={data.checkin} refresh={refresh}
                   onSave={(body) => act(() => http.put("/settings", body), "Plan actualizado")} />

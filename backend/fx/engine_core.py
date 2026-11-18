@@ -1,8 +1,7 @@
 """Constants, helpers and the collection-prefix wrapper shared by the FX engine and its mixins."""
 import logging
 from datetime import datetime, timezone
-from strategies import STRATEGY_INFO
-from fx.strategies_slow import SLOW_INFO as FX_SLOW_INFO
+from legacy import INFO as LEGACY_INFO
 
 logger = logging.getLogger("fx.engine")
 INITIAL_BALANCE = 500.0
@@ -16,9 +15,8 @@ BLOCK_BY = {"NOTICIAS": "noticias", "BLOQUEADA": "riesgo", "MERCADO": "mercado c
             "ROLLOVER": "ventana de rollover", "VOLATILIDAD": "régimen de volatilidad", "ESTACIONAL": "estacionalidad intradía", "REGIMEN_USD": "régimen USD", "FOMC": "regla FOMC",
             "PRECIO_EXTENDIDO": "precio extendido", "RR_BAJO": "R:R insuficiente", "SPREAD": "spread", "HORARIO": "horario operativo"}
 HORIZON_LABEL = {"short": "corto plazo", "long": "largo plazo"}
-NEWS_STRATEGY = {"news_event": {"name": "Noticia macro", "rules": "Dato de alto impacto publicado con sorpresa clara frente a la previsión; Claude fija la dirección y la confianza, el precio debe confirmar en los primeros minutos. SL/TP por ATR 15m y cierre máximo por tiempo.", "basis": "Trading de noticias: el flujo posterior a sorpresas macro (tipos, NFP, IPC) tiende a persistir durante horas."}}
 import funnel  # noqa: E402
-FX_STRATEGY_INFO = {**STRATEGY_INFO, **NEWS_STRATEGY, **FX_SLOW_INFO, **funnel.INFO}
+FX_STRATEGY_INFO = {**LEGACY_INFO, **funnel.INFO}
 
 
 def today() -> str:

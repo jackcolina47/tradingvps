@@ -9,7 +9,6 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from pymongo.errors import DuplicateKeyError
 
 import notify
-import wfcheck
 import weekly
 import backup
 from review import run_auto_review
@@ -21,7 +20,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/cron")
 RUN_ID_TTL_DAYS = 30
 CRYPTO = {"engine": engine, "db": db, "store": store, "review": run_auto_review, "weekly": weekly.send_weekly, "label": "", "prefix": ""}
-FX_LIST = [{"engine": e, "db": e.db, "store": s, "review": fx_review.run_auto_review, "weekly": fx_weekly.send, "label": f" {e.profile.broker_long}", "prefix": fx_weekly.prefix(e)} for e, s, _ in FX_BOTS]
+FX_LIST = [{"engine": e, "db": e.db, "store": s, "review": fx_review.run_auto_review, "weekly": fx_weekly.send, "label": f" {e.profile.broker_long}", "prefix": fx_weekly.prefix(e)} for e, s in FX_BOTS]
 BOTS = [CRYPTO, *FX_LIST]
 
 
@@ -100,16 +99,6 @@ async def cron_ai_review(request: Request):
         if d:
             asyncio.create_task(_safe_auto_review(b))
     return {"accepted": True, "scheduled": due[0], "scheduled_fx": due[1], "scheduled_pepper": due[2]}
-
-
-@router.post("/walk-forward")
-async def cron_walk_forward(request: Request):
-    """Weekly revalidation of applied SL/TP for both bots (crypto on Bybit/Bitget data, HotForex on Yahoo data)."""
-    if await _accept(request):
-        return {"accepted": True, "duplicate": True}
-    started = await wfcheck.start_check(engine, db, store, "auto")
-    started_fx = [await wfcheck.start_check(e, e.db, s, "auto", e.wf_kit) for e, s, _ in FX_BOTS]
-    return {"accepted": True, "scheduled": started, "scheduled_fx": started_fx[0], "scheduled_pepper": started_fx[1]}
 
 
 @router.post("/weekly-summary")

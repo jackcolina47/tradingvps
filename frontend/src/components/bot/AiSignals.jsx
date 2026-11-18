@@ -86,8 +86,8 @@ function SignalCard({ s, minConfidence, rulesOnly }) {
 
 const UsageChip = ({ usage, ai }) => {
   if (!usage) return null;
-  const parts = [`${usage.signals} señales`, `${usage.news} noticias`, ...(usage.news_trades ? [`${usage.news_trades} op. noticias`] : []), `${usage.reviews} revisiones`];
-  const title = `Llamadas a la IA de hoy (UTC) de este bot: ${parts.join(" · ")}${usage.skipped_news ? ` · ${usage.skipped_news} análisis de noticias ahorrados (sin titulares nuevos)` : ""} · los tres bots: ${usage.total_all}`;
+  const parts = [`${usage.signals} embudo`, `${usage.reviews} revisiones`];
+  const title = `Llamadas a la IA de hoy (UTC) de este bot: ${parts.join(" · ")} · los tres bots: ${usage.total_all}`;
   return (
     <span data-testid="ai-usage-chip" title={title} className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider">
       <span className="rounded-sm border border-[#1E293B] bg-[#0D111A] px-1.5 py-0.5 text-slate-300">IA hoy <span className="num text-amber-300">{usage.total}</span>

@@ -1,10 +1,9 @@
-"""HotForex AI Trading engine: 24/7 paper trading of forex & metals with the same pipeline as the crypto bot
-(strategies → risk gates → news gate → Claude validation → paper execution), plus forex hours, weekend flatting and news trades.
+"""FX AI Trading engine (HotForex / Pepperstone): forex & metals with the same AI funnel as the crypto bot, plus forex hours and weekend flatting.
 
 Core = lifecycle, config, settings and the monitor loop; the rest lives in mixins:
   engine_account.py   account summary, re-base, plan check-in, daily metrics
   engine_positions.py paper tick, REAL sync/adoption, open/close
-  engine_signals.py   scan loop, gates, AI validation, fix scan, news trades
+  engine_signals.py   scan loop, AI-funnel adapter, risk gates
 """
 import time
 import asyncio
@@ -23,13 +22,11 @@ import broker_health
 import trade_guard
 from broker_health import fmt_duration, fresh_health as _fresh_health  # noqa: F401 (re-exported for tests)
 from fx.engine_core import (logger, INITIAL_BALANCE, LIVE_GRACE_SEC, HFM_HEALTH_SEC, HFM_HEALTH_RETRY_SEC, TRANSIENT_TG_SEC, PENDING_TTL_SEC,  # noqa: F401
-                            HFM_OK_STATES, HFM_OK_CONN, BLOCK_BY, HORIZON_LABEL, NEWS_STRATEGY, FX_STRATEGY_INFO, today, PrefixedDB)
+                            HFM_OK_STATES, HFM_OK_CONN, BLOCK_BY, HORIZON_LABEL, FX_STRATEGY_INFO, today, PrefixedDB)
 from fx.engine_account import AccountMixin
 from fx.engine_positions import PositionsMixin
 from fx.engine_signals import SignalsMixin
 from fx.broker import HFM, BrokerProfile
-from fx import review as fx_review
-from fx import wfcheck as fx_wfcheck
 
 
 class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
@@ -40,9 +37,6 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
         self.db = PrefixedDB(db, profile.prefix)
         self.market = market or FxMarket()
         self.costs = profile.costs()
-        self.review_job = fx_review.new_job()
-        self.wf_job = fx_wfcheck.new_job()
-        self.wf_kit = fx_wfcheck.make_kit(self)
         self.lock = asyncio.Lock()
         self.running = False
         self.scanning = False

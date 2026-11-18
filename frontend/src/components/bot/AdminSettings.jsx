@@ -10,7 +10,6 @@ import LearnedRulesSection from "./admin/LearnedRulesSection";
 import AccountSection from "./admin/AccountSection";
 import BybitSection from "./admin/BybitSection";
 import LiveModeSection from "./admin/LiveModeSection";
-import NewsSection from "./admin/NewsSection";
 import FundingSection from "./admin/FundingSection";
 import BackupSection from "./admin/BackupSection";
 
@@ -48,7 +47,6 @@ export default function AdminSettings({ account, refresh }) {
         <LearnedRulesSection />
         <TelegramSection config={config} onSave={save} />
         <AutoReviewSection config={config} onSave={save} onRan={load} />
-        <NewsSection config={config} onSave={save} />
         <FundingSection config={config} onSave={save} />
         <AccountSection account={account} refresh={refresh} />
         <BackupSection />

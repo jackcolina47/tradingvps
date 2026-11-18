@@ -50,18 +50,6 @@ def rr(sig: dict) -> float:
     return abs(sig["tp"] - sig["price"]) / max(abs(sig["price"] - sig["sl"]), 1e-12)
 
 
-def pre_filter(sig: dict, min_rr: float, spread: float = None, max_spread_sl_pct: float = None) -> tuple:
-    """Stage 0. Returns (block_reason | None, kind). Spread check only when a spread is known (FX static spec)."""
-    r = rr(sig)
-    if min_rr and r < float(min_rr):
-        return f"R:R {r:.2f} menor al mínimo {float(min_rr):.2f}", "RR_BAJO"
-    if spread and max_spread_sl_pct:
-        pct = spread / max(abs(sig["price"] - sig["sl"]), 1e-12) * 100
-        if pct > float(max_spread_sl_pct):
-            return f"spread {pct:.0f} % de la distancia al stop (máx. {float(max_spread_sl_pct):.0f} %)", "SPREAD"
-    return None, None
-
-
 def _fast_prompt(symbol: str, timeframe: str, sig: dict, ctx: dict) -> str:
     pa = ctx.get("price_action") or {}
     return (
@@ -75,58 +63,7 @@ def _fast_prompt(symbol: str, timeframe: str, sig: dict, ctx: dict) -> str:
     )
 
 
-async def quick_filter(symbol: str, timeframe: str, sig: dict, ctx: dict, kind: str, model_override: str = "") -> dict:
-    """Stage 1. Raises on provider error/timeout (caller rejects: fail-safe)."""
-    cfg = fast_cfg(model_override)
-    t0 = time.monotonic()
-    chat = _chat(FAST_SYSTEM.get(kind, FAST_SYSTEM["fx"]) + FAST_FORMAT, f"{kind}-fast", cfg)
-    chat._probe = False
-    text = await asyncio.wait_for(_ask(chat, _fast_prompt(symbol, timeframe, sig, ctx)), FAST_TIMEOUT_SEC)
-    data = parse_json(text, "filtro rápido")
-    conf = int(max(0, min(100, int(data.get("confidence", 0) or 0))))
-    passed = bool(data.get("pass_filter")) and conf >= FAST_MIN_CONFIDENCE
-    out = {"pass": passed, "confidence": conf, "reason": str(data.get("discard_reason") or "")[:160], "model": label(cfg["model"]),
-           "ms": int((time.monotonic() - t0) * 1000)}
-    logger.info(f"[STAGE 1 {'PASS' if passed else 'REJECT'}] {symbol} {sig['side']} · {cfg['model']} · {out['ms']} ms · {conf}% {out['reason']}")
-    return out
-
-
-async def final_eval(evaluate, *args) -> dict:
-    """Stage 2 wrapper: timeout + latency/model stamping around the existing evaluate_signal of each bot."""
-    t0 = time.monotonic()
-    res = await asyncio.wait_for(evaluate(*args), FINAL_TIMEOUT_SEC)
-    res["ms"], res["model"] = int((time.monotonic() - t0) * 1000), label(_cfg["model"])
-    logger.info(f"[STAGE 2 {'APPROVE' if res['decision'] == 'APROBADA' else 'REJECT'}] {args[0]} · {_cfg['model']} · {res['ms']} ms · {res['confidence']}%")
-    return res
-
-
 SL_BAND, TP_MAX = (0.6, 1.8), 2.5  # AI levels: stop within 0.6–1.8× the strategy stop distance, target at most 2.5× the strategy target distance
-
-
-def apply_levels(sig: dict, sl, tp, min_rr: float = 1.0, spread: float = 0.0, digits: int = None):
-    """Applies AI-proposed SL/TP to the signal inside safe bounds (right side of the entry, stop band, minimum R:R, target cap).
-    Returns a short description of what changed, or None when the strategy defaults are kept."""
-    d = 1 if sig["side"] == "long" else -1
-    price, sl0, tp0 = sig["price"], sig["sl"], sig["tp"]
-    risk0, reward0 = abs(price - sl0), abs(tp0 - price)
-    if risk0 <= 0 or reward0 <= 0 or (sl is None and tp is None):
-        return None
-    risk = risk0
-    if sl is not None and (price - sl) * d > 0:
-        risk = min(max((price - sl) * d, SL_BAND[0] * risk0, 4 * spread), max(SL_BAND[1] * risk0, 4 * spread))
-    lo, hi = max(min_rr, 1.0) * risk, TP_MAX * reward0
-    reward = (tp - price) * d if tp is not None and (tp - price) * d > 0 else reward0
-    reward = max(reward, lo) if lo <= hi else None
-    if reward is None:
-        return None
-    reward = min(reward, hi)
-    new_sl, new_tp = price - risk * d, price + reward * d
-    if digits is not None:
-        new_sl, new_tp = round(new_sl, digits), round(new_tp, digits)
-    if abs(new_sl - sl0) < 1e-9 * price and abs(new_tp - tp0) < 1e-9 * price:
-        return None
-    sig.update(sl=new_sl, tp=new_tp, default_sl=sl0, default_tp=tp0)
-    return f"SL {sl0:.6g} → {new_sl:.6g} · TP {tp0:.6g} → {new_tp:.6g} (R:R {reward / risk:.2f})"
 
 
 RULES_SYSTEM = (

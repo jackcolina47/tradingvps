@@ -14,7 +14,7 @@ const ALERTS = [
   ["ai", "Decisiones de la IA sobre cada señal"],
   ["daily", "Resumen diario (00:00 UTC) y semanal (domingos 20:00 UTC)"],
   ["plan", "Avisos del plan de crecimiento"],
-  ["review", "Revisión IA automática y revalidación walk-forward"],
+  ["review", "Revisión IA automática y poda de pares"],
   ["news", "Alertas de noticias graves y eventos macro"],
   ["system", "Conexión con el bróker (HFM, Pepperstone / MetaApi) caída o restablecida"],
 ];

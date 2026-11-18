@@ -1,8 +1,4 @@
 from datetime import datetime, timezone, timedelta
-import numpy as np
-from backtest import run_backtest
-from risk import trade_rules
-from indicators import build_df
 
 WITHDRAW_PCT = 80
 GROWTH_CAP = 5000.0
@@ -66,80 +62,8 @@ def project(initial: float, rate_pct: float, target_monthly: float, deposit: flo
             "total_deposited": round(deposited, 2), "series": series, "timeline": timeline}
 
 
-def monte_carlo(r_multiples: list, trades_per_month: float, risk_pct: float, sims: int = 3000, months: int = 12):
-    R = np.array(r_multiples, dtype=float)
-    if len(R) < 10 or trades_per_month <= 0:
-        return None
-    rng = np.random.default_rng(42)
-    counts = rng.poisson(trades_per_month, (sims, months))
-    kmax = int(counts.max())
-    samples = rng.choice(R, size=(sims, months, kmax))
-    mask = np.arange(kmax)[None, None, :] < counts[..., None]
-    logret = np.log1p(np.clip(risk_pct / 100 * samples, -0.95, None)) * mask
-    monthly = np.expm1(logret.sum(-1))
-    eq = np.cumprod(1 + monthly, axis=1)
-    peak = np.maximum.accumulate(np.concatenate([np.ones((sims, 1)), eq], axis=1), axis=1)[:, 1:]
-    dd = ((peak - eq) / peak).max(axis=1)
-    m = monthly.ravel()
-    p = lambda a, q: round(float(np.percentile(a, q)) * 100, 2)  # noqa: E731
-    return {
-        "sims": sims, "monthly_p10": p(m, 10), "monthly_p25": p(m, 25), "monthly_median": p(m, 50),
-        "monthly_p75": p(m, 75), "monthly_p90": p(m, 90), "prob_positive_month": round(float((m > 0).mean()) * 100, 1),
-        "annual_median": p(eq[:, -1] - 1, 50), "annual_p10": p(eq[:, -1] - 1, 10), "annual_p90": p(eq[:, -1] - 1, 90),
-        "prob_loss_year": round(float((eq[:, -1] < 1).mean()) * 100, 1),
-        "prob_dd_over_15": round(float((dd > 0.15).mean()) * 100, 1),
-        "prob_dd_over_25": round(float((dd > 0.25).mean()) * 100, 1),
-        "median_max_dd": round(float(np.median(dd)) * 100, 2),
-    }
-
-
-async def backtest_stats(fetch_klines, settings, initial: float) -> dict:
-    results = []
-    for sym in settings.symbols:
-        params = settings.symbol_params.get(sym) or {}
-        df = build_df(await fetch_klines(sym, settings.timeframe, 1000, cache_sec=300), int(params.get("atr_period", 14)))
-        results.append((sym, run_backtest(df, settings.strategy, settings.risk_per_trade, settings.leverage, trade_rules(settings), initial, sym, params,
-                                          settings.signal_mode, settings.disabled_strategies)))
-    return summarize(results, settings)
-
-
-def summarize(results: list, settings, extra_keys: tuple = ()) -> dict:
-    """[(symbol, backtest result)] → per-symbol / per-strategy tables, trades per month and Monte Carlo (shared by crypto and FX)."""
-    per_symbol, agg, R, days = [], {}, [], 0.0
-    for sym, res in results:
-        R += res["r_multiples"]
-        per_symbol.append({"symbol": sym, "return_pct": res["return_pct"], "trades": res["total_trades"],
-                           "win_rate": res["win_rate"], "profit_factor": res["profit_factor"],
-                           "expectancy_r": res["expectancy_r"], "max_drawdown": res["max_drawdown"],
-                           "rejected_lot": res["rejected_lot"], **{k: res[k] for k in extra_keys}})
-        for k, s in res["strategy_stats"].items():
-            a = agg.setdefault(k, {"trades": 0, "wins": 0, "pnl": 0.0, "r_sum": 0.0, "gw": 0.0, "gl": 0.0})
-            for f in a:
-                a[f] += s[f]
-        if res["period_start"]:
-            days = (datetime.fromisoformat(res["period_end"]) - datetime.fromisoformat(res["period_start"])).total_seconds() / 86400
-    months = max(days / 30.44, 0.1)
-    concurrency = min(1.0, settings.max_positions / max(len(settings.symbols), 1))
-    trades_per_month = len(R) / months * concurrency
-    by_strategy = [{"strategy": k, "trades": a["trades"], "win_rate": round(a["wins"] / a["trades"] * 100, 1),
-                    "pnl": round(a["pnl"], 2), "expectancy_r": round(a["r_sum"] / a["trades"], 3),
-                    "profit_factor": round(a["gw"] / a["gl"], 2) if a["gl"] else None}
-                   for k, a in agg.items() if a["trades"]]
-    return {
-        "days": round(days, 1), "timeframe": settings.timeframe, "strategy": settings.strategy,
-        "total_trades": len(R), "trades_per_month": round(trades_per_month, 1), "concurrency_factor": round(concurrency, 2),
-        "expectancy_r": round(float(np.mean(R)), 3) if R else 0,
-        "win_rate": round(float(np.mean(np.array(R) > 0)) * 100, 1) if R else 0,
-        "per_symbol": sorted(per_symbol, key=lambda x: -x["return_pct"]),
-        "by_strategy": sorted(by_strategy, key=lambda x: -x["pnl"]),
-        "monte_carlo": monte_carlo(R, trades_per_month, settings.risk_per_trade),
-    }
-
-
-def build_plan(req: dict, bt: dict, scenarios: dict = SCENARIOS) -> dict:
-    mc = bt.get("monte_carlo")
+def build_plan(req: dict, scenarios: dict = SCENARIOS) -> dict:
     rates = {k: v["rate"] for k, v in scenarios.items()}
-    rates["backtest"] = round(mc["monthly_median"], 2) if mc else None
     out = []
     for key, rate in rates.items():
         info = scenarios.get(key, {"name": "Según backtest", "desc": "Mediana Monte Carlo de tus propias estrategias sobre los últimos datos reales"})
@@ -150,7 +74,7 @@ def build_plan(req: dict, bt: dict, scenarios: dict = SCENARIOS) -> dict:
     sel = req["scenario"] if rates.get(req["scenario"]) is not None else "base"
     return {"inputs": req, "scenarios": out, "selected": sel,
             "projection": project(req["initial_capital"], rates[sel], req["target_monthly"], req["monthly_deposit"]),
-            "backtest": bt, "phase_info": PHASE_INFO, "withdraw_pct": WITHDRAW_PCT}
+            "phase_info": PHASE_INFO, "withdraw_pct": WITHDRAW_PCT}
 
 
 PHASE_ORDER = ["validacion", "semilla", "crecimiento", "consolidacion", "ingreso"]

@@ -1,6 +1,6 @@
 """Shadow trades for HotForex: every signal that was NOT executed (AI rejection, low confidence, risk/session/news blocks, broker/AI errors)
 is simulated like a paper position (lots, HFM spread, trailing, weekend flat, 72 h cap) so the value of each filter can be measured."""
-from datetime import datetime, timezone
+from datetime import datetime
 from models import now_iso
 from fx import risk
 from fx.risk import MIN_LOT

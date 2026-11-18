@@ -1,6 +1,5 @@
 """Endpoints shared by both bots (session, password, Telegram/AI connection tests, trade detail/notes/candles). Registered on each protected router."""
 import time
-from datetime import datetime
 from typing import Optional, List
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
@@ -9,7 +8,6 @@ from bson import ObjectId
 import notify
 import cashflow
 import chart
-import price_action
 import ai_advisor
 import position_review
 import ai_rules

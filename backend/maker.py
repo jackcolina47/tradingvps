@@ -107,9 +107,9 @@ async def _monitor_live(engine, d: dict, now):
             await _finish(engine, d, None, "market_fallback")
 
 
-async def cancel_all(engine, reason: str = "bot detenido"):
+async def cancel_all(engine, reason: str = "bot detenido", symbols: list = None):
     n = 0
-    async for d in engine.db.pending_entries.find():
+    async for d in engine.db.pending_entries.find({"symbol": {"$in": symbols}} if symbols is not None else {}):
         if d.get("live") and engine.broker and d.get("order_id"):
             try:
                 await engine.broker.cancel(d["symbol"], d["order_id"])

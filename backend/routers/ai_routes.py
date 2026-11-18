@@ -1,11 +1,10 @@
-"""AI routes for the crypto bot: manual auto-review, global optimization job and scoped advice (optimizer | plan)."""
+"""AI routes for the crypto bot: manual auto-review and the growth-plan advisor."""
 import logging
 from fastapi import HTTPException
 
 from models import AdviseRequest
 from ai_advisor import advise, label as ai_label, friendly_error
-from review import build_context, apply_ai_changes, run_auto_review, start_global_optimization, job_state
-from profiles import ai_policy
+from review import build_context, apply_ai_changes, run_auto_review, ai_policy
 from deps import db, engine, store, protected_router
 
 logger = logging.getLogger(__name__)
@@ -21,31 +20,17 @@ async def ai_auto_review_now():
         raise HTTPException(424, f"Error IA: {friendly_error(e)}")
 
 
-@router.post("/ai/optimize-all")
-async def ai_optimize_all():
-    if not await start_global_optimization(engine, db):
-        raise HTTPException(409, "Ya hay una optimización global en curso")
-    return job_state()
-
-
-@router.get("/ai/optimize-all")
-async def ai_optimize_all_status():
-    return job_state()
-
-
 @router.post("/ai/advise")
 async def ai_advise(req: AdviseRequest):
-    if req.scope not in ("optimizer", "plan"):
+    if req.scope != "plan":
         raise HTTPException(400, "Ámbito inválido")
     settings = await engine.get_settings()
     before = settings.model_dump(exclude={"bot_running"})
     acc = await engine.account_summary()
-    ctx = await build_context(engine, db, settings, acc, req.scope == "plan")
-    if req.scope == "optimizer":
-        ctx["optimizador"] = [{k: r.get(k) for k in ("symbol", "best", "baseline", "timeframe")} for r in (req.optimizer_results or [])]
-    await engine.log("AI_EVAL", f"{ai_label()} analizando {'optimizador' if req.scope == 'optimizer' else 'plan'} y rendimiento real...")
+    ctx = await build_context(engine, db, settings, acc, True)
+    await engine.log("AI_EVAL", f"{ai_label()} analizando plan y rendimiento real...")
     try:
-        res = await advise(req.scope, ctx, ai_policy(settings.risk_profile))
+        res = await advise(req.scope, ctx, ai_policy())
     except Exception as e:
         logger.exception("advise")
         raise HTTPException(424, f"Error IA: {friendly_error(e)}")

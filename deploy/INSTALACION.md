@@ -2,7 +2,7 @@
 
 Esta guía instala los tres bots (Bybit AI Trader, HotForex AI Trading y Pepperstone AI trading) con su panel web en un servidor
 Linux propio usando Docker. Todo queda funcionando 24/7, con HTTPS automático si usas un dominio,
-copias de seguridad nocturnas y las tareas programadas (revisión IA, walk-forward semanal, resumen semanal).
+copias de seguridad nocturnas y las tareas programadas (revisión IA y resumen semanal).
 
 La misma guía, con botones para copiar cada comando, está en el panel: botón **«Instalar en tu VPS»**.
 
@@ -80,7 +80,7 @@ Qué hace el instalador (6 pasos, 5–10 minutos la primera vez):
 - `[2/6]` crea 2 GB de swap si el servidor tiene menos de 3,5 GB de RAM.
 - `[3/6]` genera `deploy/.env` (dominio, imagen de Mongo según la CPU) y `deploy/backend.env` con secretos aleatorios (`JWT_SECRET`, `WEBHOOK_CRON_SECRET`, `CREDENTIAL_ENCRYPTION_KEY`) y tu contraseña.
 - `[4/6]` construye y arranca 3 contenedores: `mongo` (base de datos), `backend` (motores de trading + API) y `web` (panel + proxy HTTPS con Caddy).
-- `[5/6]` programa en el cron del sistema: revisión IA 08:00 UTC, walk-forward lunes 07:00 UTC, resumen semanal domingos 20:00 UTC y copia de seguridad 03:00 UTC.
+- `[5/6]` programa en el cron del sistema: revisión IA 08:00 UTC, resumen semanal domingos 20:00 UTC y copia de seguridad 03:00 UTC.
 - `[6/6]` abre 80/443 en el firewall `ufw` si está activo.
 
 Al final imprime la dirección del panel y la contraseña.
@@ -156,3 +156,12 @@ Para cambiar de IP a dominio después: edita `SITE_ADDRESS=` en `deploy/.env` y 
 ---
 
 **Aviso**: el trading con apalancamiento implica alto riesgo. Prueba siempre en paper antes de pasar a REAL y nunca operes con dinero que no puedas perder.
+
+
+## Novedades de esta versión (Embudo IA)
+
+- Las entradas las decide un embudo de IA (filtro técnico → modelo rápido → modelo potente). Ya no hay estrategias fijas, backtest, optimizador ni walk-forward.
+- El bot solo busca entradas en el horario operativo de Nueva York y bloquea ±15 min los eventos rojos del calendario económico. No necesita ninguna tarea programada para ello.
+- El cron `cron-walk-forward.sh` ya no existe. `install.sh` y `update-zip.sh` lo quitan del crontab al ejecutarse; si actualizas a mano, bórralo con `crontab -e`.
+- El servidor necesita salida a Internet hacia el proveedor de IA, el calendario económico (ForexFactory) y, según el bot, Bybit/Bitget, Yahoo Finance y MetaApi.
+- Mantén la hora del servidor sincronizada (NTP): el horario operativo se calcula con la hora real de Nueva York.

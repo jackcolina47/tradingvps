@@ -8,8 +8,6 @@ import evolution
 import notify
 
 logger = logging.getLogger("weekly")
-STRATEGY_NAMES = {"trend_ema": "Tendencia EMA", "mean_reversion": "Reversión media", "breakout_turtle": "Turtle",
-                  "supertrend_momentum": "Supertrend", "ema_pullback": "Pullback EMA21", "ema_cross": "Cruce EMA 10/20", "multi_horizon": "Multi-Horizonte", "double_divergence": "Divergencia doble"}
 KIND_NAMES = {"BLOQUEADA": "riesgo", "NOTICIAS": "noticias", "FUNDING": "funding", "REGIMEN": "régimen BTC", "ROTACION": "rotación", "SESION": "sesiones",
               "ERROR": "error IA", "NO_EJECUTADA": "no ejecutadas"}
 
@@ -62,28 +60,9 @@ async def build_weekly(engine, db) -> dict:
         "plan": {"phase_name": checkin["phase_name"], "message": checkin["message"], "warnings": checkin["warnings"],
                  "ready_to_advance": checkin["ready_to_advance"], "days_running": checkin["days_running"], "last_30d": checkin["last_30d"],
                  "contributions": checkin.get("contributions")},
-        "news": engine.news.summary() if engine.news else None,
-        "risk_profile": settings.risk_profile,
         "evolution": await evolution.week_summary(engine, since),
-        "market": await _market_block(engine, db, settings),
         "excursion": await excursion_stats(db, since) if hasattr(settings, "partial_tp_enabled") else None,
     }
-
-
-async def _market_block(engine, db, settings):
-    """Crypto only: BTC regime, weekly rotation leaders and pending maker entries (FX settings lack these fields)."""
-    if not hasattr(settings, "btc_regime_filter"):
-        return None
-    import regime
-    try:
-        rg = await regime.btc_regime(engine.market, settings.btc_regime_sma)
-        rot = await regime.current_rotation(engine, settings)
-    except Exception:
-        return None
-    return {"regime": {**rg, "enabled": settings.btc_regime_filter},
-            "rotation": {"enabled": settings.rotation_enabled, "lookback_days": rot["lookback_days"], "computed_at": rot["computed_at"],
-                         "leaders": [r["symbol"] for r in rot["ranking"] if r["bias"] == "long"], "laggards": [r["symbol"] for r in rot["ranking"] if r["bias"] == "short"]},
-            "entry_order_type": settings.entry_order_type, "pending_entries": await db.pending_entries.count_documents({}), "max_long_positions": settings.max_long_positions}
 
 
 def _sym(k: str) -> str:
@@ -140,16 +119,6 @@ def format_weekly(w: dict, currency: str = "USDT", extra: str = None) -> str:
         lines.append("\n<b>Mejores pares</b>\n" + "\n".join(f"🟢 {_sym(r['key'])} {r['pnl']:+.2f} {currency} · {r['trades']} ops · {r['win_rate']}%" for r in w["best"]))
     if w["worst"]:
         lines.append("\n<b>Peores pares</b>\n" + "\n".join(f"🔴 {_sym(r['key'])} {r['pnl']:+.2f} {currency} · {r['trades']} ops · {r['win_rate']}%" for r in w["worst"]))
-    if w["by_strategy"]:
-        top, bottom = w["by_strategy"][0], w["by_strategy"][-1]
-        strat = f"\n<b>Estrategias</b>: mejor {STRATEGY_NAMES.get(top['key'], top['key'])} {top['pnl']:+.2f}"
-        if bottom is not top:
-            strat += f" · peor {STRATEGY_NAMES.get(bottom['key'], bottom['key'])} {bottom['pnl']:+.2f}"
-        lines.append(strat)
-    lp = next((r for r in w.get("by_horizon") or [] if r["key"] == "long"), None)
-    if lp:
-        lines.append(f"Largo plazo (Multi-Horizonte/Divergencia): {lp['trades']} ops · {lp['pnl']:+.2f} {currency} · acierto {lp['win_rate']}%")
-    mkt = w.get("market")
     exc = w.get("excursion")
     if exc and exc.get("tracked"):
         tr = next((r for r in exc["by_reason"] if r["key"] == "TRAILING"), None)
@@ -157,12 +126,6 @@ def format_weekly(w: dict, currency: str = "USDT", extra: str = None) -> str:
                      f"{exc['near_miss']} rozaron el TP (≥70 %) sin tocarlo ({exc['near_miss_pct']}%)"
                      + (f" · salidas por trailing: {tr['trades']} con MFE {tr['avg_mfe_r']:.2f} R" if tr else "")
                      + (f" · cierres parciales: {exc['partial']['trades']} ({exc['partial']['pnl']:+.2f} {currency})" if exc["partial"]["trades"] else ""))
-    if mkt:
-        rg, rot = mkt["regime"], mkt["rotation"]
-        dist = f" ({rg['distance_pct']:+.1f} %)" if rg.get("distance_pct") is not None else ""
-        lines.append(f"\n<b>Mercado</b>: BTC {rg['state']} vs SMA{rg['sma']} diaria{dist}{'' if rg['enabled'] else ' · filtro apagado'}"
-                     f" · rotación {rot['lookback_days']} d{'' if rot['enabled'] else ' (apagada)'}: líderes {', '.join(_sym(x) for x in rot['leaders']) or '—'} · rezagados {', '.join(_sym(x) for x in rot['laggards']) or '—'}"
-                     f" · entradas {'límite maker' if mkt['entry_order_type'] == 'maker' else 'a mercado'}" + (f" · {mkt['pending_entries']} en espera" if mkt["pending_entries"] else ""))
     mk = {r["key"]: r for r in w.get("by_entry_type") or []}
     if mk.get("maker") or mk.get("market_fallback"):
         m, f = mk.get("maker", {"trades": 0}), mk.get("market_fallback", {"trades": 0})
@@ -192,8 +155,6 @@ def format_weekly(w: dict, currency: str = "USDT", extra: str = None) -> str:
         lines.append(f"💰 Aportes: {ct['message']}" + (f" · capital {vs:+.2f} {currency} vs plan" if vs is not None and ct["target"] > 0 else ""))
     for wn in pl["warnings"]:
         lines.append(f"⚠️ {wn}")
-    if w["news"] and w["news"].get("ready"):
-        lines.append(f"\n📰 Noticias: riesgo {w['news']['risk']} · sentimiento {w['news']['sentiment']:+d}")
     return "\n".join(lines)
 
 

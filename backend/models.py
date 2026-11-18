@@ -59,29 +59,18 @@ class Settings(BaseModel):
     daily_loss_limit: float = 5.0
     ai_enabled: bool = True
     ai_min_confidence: int = 60
-    ai_funnel_enabled: bool = True
     min_rr: float = 1.5
-    ema_test_enabled: bool = False
-    ema_test_symbols: List[str] = ["ENAUSDT", "ONDOUSDT", "ARBUSDT", "UNIUSDT"]
-    ema_test_adx_filter: bool = False
-    ema_test_adx_min: float = 20.0
     atr_levels_enabled: bool = False
     atr_sl_mult: float = 2.0
     atr_tp_mult: float = 4.0
     ema_test_partial_enabled: bool = False
     ema_test_partial_atr: float = 1.5
-    ema_test_confirm_enabled: bool = False
-    ema_test_confirm_adx: float = 24.0
-    ema_test_confirm_dist_atr: float = 0.5
-    ema_test_confirm_bars: int = 20
     rules_auto_learn: bool = True
     ai_position_review_enabled: bool = False
     ai_position_review_minutes: int = 30
     ai_position_review_mode: str = "auto"
     ai_position_review_min_confidence: int = 75
     btc_shock_pct: float = 1.5
-    reopt_enabled: bool = True
-    reopt_symbols: List[str] = ["ZECUSDT", "HYPEUSDT"]
     auto_prune_enabled: bool = True
     auto_prune_pf: float = 0.8
     auto_prune_min_trades: int = 10
@@ -219,16 +208,6 @@ class Settings(BaseModel):
             raise ValueError("Selecciona al menos un símbolo")
         return v
 
-    @field_validator("reopt_symbols")
-    @classmethod
-    def _reopt_symbols(cls, v):
-        return [s for s in dict.fromkeys(v or []) if s in AVAILABLE_SYMBOLS][:6]
-
-    @field_validator("ema_test_symbols")
-    @classmethod
-    def _ema_test_symbols(cls, v):
-        return [s for s in dict.fromkeys(v or []) if s in AVAILABLE_SYMBOLS]
-
 
 class SettingsUpdate(BaseModel):
     strategy: Optional[str] = None
@@ -240,29 +219,18 @@ class SettingsUpdate(BaseModel):
     daily_loss_limit: Optional[float] = Field(default=None, ge=1, le=20)
     ai_enabled: Optional[bool] = None
     ai_min_confidence: Optional[int] = Field(default=None, ge=0, le=100)
-    ai_funnel_enabled: Optional[bool] = None
     min_rr: Optional[float] = Field(default=None, ge=0, le=5)
-    ema_test_enabled: Optional[bool] = None
-    ema_test_symbols: Optional[List[str]] = None
-    ema_test_adx_filter: Optional[bool] = None
-    ema_test_adx_min: Optional[float] = Field(default=None, ge=5, le=60)
     atr_levels_enabled: Optional[bool] = None
     atr_sl_mult: Optional[float] = Field(default=None, ge=0.5, le=10)
     atr_tp_mult: Optional[float] = Field(default=None, ge=0.5, le=20)
     ema_test_partial_enabled: Optional[bool] = None
     ema_test_partial_atr: Optional[float] = Field(default=None, ge=0.5, le=3.0)
-    ema_test_confirm_enabled: Optional[bool] = None
-    ema_test_confirm_adx: Optional[float] = Field(default=None, ge=5, le=60)
-    ema_test_confirm_dist_atr: Optional[float] = Field(default=None, ge=0.1, le=3.0)
-    ema_test_confirm_bars: Optional[int] = Field(default=None, ge=1, le=100)
     rules_auto_learn: Optional[bool] = None
     ai_position_review_enabled: Optional[bool] = None
     ai_position_review_minutes: Optional[int] = Field(default=None, ge=5, le=240)
     ai_position_review_mode: Optional[str] = Field(default=None, pattern="^(notify|auto)$")
     ai_position_review_min_confidence: Optional[int] = Field(default=None, ge=50, le=100)
     btc_shock_pct: Optional[float] = Field(default=None, ge=0, le=10)
-    reopt_enabled: Optional[bool] = None
-    reopt_symbols: Optional[List[str]] = None
     auto_prune_enabled: Optional[bool] = None
     auto_prune_pf: Optional[float] = Field(default=None, ge=0.3, le=1.5)
     auto_prune_min_trades: Optional[int] = Field(default=None, ge=3, le=100)

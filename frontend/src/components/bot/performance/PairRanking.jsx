@@ -92,7 +92,7 @@ export default function PairRanking({ settings, onSave, tradeCount, refresh }) {
           </tbody>
         </table>
       </div>
-      {"reopt_enabled" in settings && <MaintenanceStatus settings={settings} refresh={refresh} />}
+      {"auto_prune_enabled" in settings && <MaintenanceStatus settings={settings} refresh={refresh} />}
     </div>
   );
 }

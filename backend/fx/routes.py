@@ -1,7 +1,7 @@
 """/api/fx/* and /api/pepper/* — FX bots (HotForex, Pepperstone): forex & metals, paper trading, MetaApi/MetaTrader account link. One router per engine (build_router).
 
-This module keeps the bot/dashboard/account/positions/news/config endpoints; the rest is split by concern:
-  routes_analysis.py  backtest, optimizer, walk-forward, AI advisor, growth plan, weekly summary, FX gates context
+This module keeps the bot/dashboard/account/positions/config endpoints; the rest is split by concern:
+  routes_analysis.py  AI advisor, growth plan, weekly summary
   routes_hfm.py       MetaApi/HFM account link & checks, paper ↔ REAL mode
 """
 import time
@@ -9,8 +9,8 @@ import logging
 from fastapi import HTTPException, Request, Query
 from bson import ObjectId
 
-from models import Position, Trade, Signal, LogEntry, ResetRequest, SIGNAL_MODES
-from strategies import MODE_INFO, EMA_TEST
+from models import Position, Trade, Signal, LogEntry, ResetRequest
+import funnel
 import chart
 from performance import performance
 from fx.shadow import shadow_stats as fx_shadow_stats
@@ -20,19 +20,17 @@ from ai_advisor import current as ai_current
 import notify
 from deps import store as gstore, protected_router, ai_usage
 from routers.shared_routes import add_shared_routes
-from fx.models import FxSettingsUpdate, FxProfileRequest, FX_TIMEFRAMES, FX_STRATEGY_KEYS, FX_SLOW_KEYS
+from fx.models import FxSettingsUpdate, FX_TIMEFRAMES
 from fx.config import FxConfigUpdate
 from fx.symbols import SPECS, AVAILABLE, CURRENCIES, CURRENCY_NAMES, pips
 from fx.market import TF_SECONDS, market_status, SESSIONS
 from fx.engine import FX_STRATEGY_INFO
-from fx.profiles import PROFILES, detect_profile, profile_patch
-from fx import review as fx_review
 from fx import routes_analysis, routes_hfm
 
 logger = logging.getLogger(__name__)
 
 
-def register(router, engine, store, news):
+def register(router, engine, store):
     SESSION_LIST = [{"id": s[0], "name": s[1]} for s in SESSIONS]
 
     def _status() -> dict:
@@ -51,25 +49,8 @@ def register(router, engine, store, news):
     @router.get("/meta")
     async def meta():
         return {"symbols": AVAILABLE, "symbol_info": {s: {k: v for k, v in SPECS[s].items() if k in ("name", "group", "digits", "pip")} for s in AVAILABLE},
-                "timeframes": FX_TIMEFRAMES, "strategies": FX_STRATEGY_KEYS + [EMA_TEST], "strategy_keys": FX_STRATEGY_KEYS[1:], "long_horizon_keys": list(FX_SLOW_KEYS),
-                "strategy_info": FX_STRATEGY_INFO, "signal_modes": SIGNAL_MODES, "mode_info": MODE_INFO,
-                "profiles": PROFILES, "currencies": CURRENCIES, "currency_names": CURRENCY_NAMES, "sessions": SESSION_LIST}
-
-    @router.post("/profile")
-    async def set_profile(req: FxProfileRequest):
-        settings = await engine.get_settings()
-        p = PROFILES[req.level]
-        before = PROFILES[settings.risk_profile]["name"] if detect_profile(settings) is not None else "Personalizado"
-        s = await engine.update_settings(profile_patch(req.level), "profile", f"Perfil de riesgo aplicado: {PROFILES[req.level]['name']}")
-        st = p["settings"]
-        await engine.log("INFO", f"Perfil de riesgo: {before} → {p['name']} · {len(st['symbols'])} pares · {st['timeframe']} · riesgo {st['risk_per_trade']}% · 1:{st['leverage']}")
-        await engine.tg(
-            f"🎚 <b>Perfil de riesgo cambiado</b>: {before} → <b>{p['name']}</b>\n"
-            f"• {len(st['symbols'])} pares · velas {st['timeframe']} · criterios {MODE_INFO[st['signal_mode']]['name'].lower()}\n"
-            f"• Riesgo {st['risk_per_trade']}%/op · máx {st['max_positions']} posiciones · 1:{st['leverage']} · límite diario {st['daily_loss_limit']}%\n"
-            f"• Filtro TF superior: {'sí' if st['htf_filter'] else 'no'} · IA: {'sí (≥' + str(st['ai_min_confidence']) + '%)' if st['ai_enabled'] else 'NO'}"
-            + (f"\n⚠️ {p['warning']}" if p["warning"] else ""), "review")
-        return {"settings": s.model_dump(), "profile_active": detect_profile(s)}
+                "timeframes": FX_TIMEFRAMES, "strategy_info": FX_STRATEGY_INFO, "confidence_levels": list(funnel.CONFIDENCE_LEVELS),
+                "currencies": CURRENCIES, "currency_names": CURRENCY_NAMES, "sessions": SESSION_LIST}
 
     @router.get("/dashboard")
     async def dashboard():
@@ -86,8 +67,7 @@ def register(router, engine, store, news):
                               "high": t.get("high"), "low": t.get("low"), "spread_pips": round(pips(sym, engine.costs.spread(sym)), 1), "digits": SPECS[sym]["digits"],
                               **engine.analysis.get(sym, {})})
         return {"status": _status(), "settings": settings.model_dump(), "account": await engine.account_summary(), "positions": positions, "trades": trades,
-                "signals": signals, "logs": logs, "watchlist": watchlist, "equity": await _equity_curve(), "profile_active": detect_profile(settings), "news": news.summary(),
-                "checkin": await engine.checkin(settings), "optimize_job": {k: engine.review_job[k] for k in ("status", "step")},
+                "signals": signals, "logs": logs, "watchlist": watchlist, "equity": await _equity_curve(), "checkin": await engine.checkin(settings),
                 "hfm": {"configured": store.public()["hfm_configured"], "state": store.cfg.hfm_state, "connection": store.cfg.hfm_connection,
                         "verified_at": store.cfg.hfm_verified_at, "trade_allowed": store.cfg.hfm_trade_allowed, "live": engine.live}}
 
@@ -239,23 +219,6 @@ def register(router, engine, store, news):
         await engine.db.logs.delete_many({})
         return {"ok": True}
 
-    @router.get("/news")
-    async def get_news():
-        return {"latest": news.latest, "summary": news.summary()}
-
-    @router.post("/news/refresh")
-    async def refresh_news():
-        try:
-            await news.refresh(force=True)
-        except Exception as e:
-            logger.exception("fx news refresh")
-            raise HTTPException(424, f"No se pudo actualizar las noticias: {str(e)[:160]}")
-        return {"latest": news.latest, "summary": news.summary()}
-
-    @router.get("/news/trades")
-    async def news_trades(limit: int = 20):
-        return [{k: v for k, v in d.items() if k != "_id"} async for d in engine.db.news_trades.find().sort("_id", -1).limit(min(limit, 100))]
-
     @router.get("/config")
     async def get_config():
         return {**gstore.public(), **store.public()}
@@ -284,11 +247,11 @@ def register(router, engine, store, news):
 
 
 
-def build_router(engine, store, news):
+def build_router(engine, store):
     router = protected_router()
     router.prefix = engine.profile.api_prefix
     add_shared_routes(router, engine, engine.profile.bot_name, "USD", before_unit="s")
-    register(router, engine, store, news)
-    routes_analysis.register(router, engine, store, news)
+    register(router, engine, store)
+    routes_analysis.register(router, engine, store)
     routes_hfm.register(router, engine, store)
     return router

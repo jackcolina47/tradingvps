@@ -22,7 +22,6 @@ class FxSettings(BaseModel):
     daily_loss_limit: float = 5.0
     ai_enabled: bool = True
     ai_min_confidence: int = 60
-    ai_funnel_enabled: bool = True
     min_rr: float = 1.5
     max_spread_sl_pct: float = 25.0
     ai_news_weight: str = "normal"
@@ -31,9 +30,6 @@ class FxSettings(BaseModel):
     ai_position_review_minutes: int = 30
     ai_position_review_mode: str = "auto"
     ai_position_review_min_confidence: int = 75
-    price_action_block: bool = True
-    price_action_max_candles: int = 3
-    price_action_swing_atr: float = 1.0
     scan_interval_sec: int = 60
     trailing_enabled: bool = True
     breakeven_enabled: bool = True
@@ -67,19 +63,11 @@ class FxSettings(BaseModel):
     partial_tp_enabled: bool = True
     partial_tp_r: float = 1.5
     partial_tp_pct: int = 50
-    ema_test_enabled: bool = False
-    ema_test_symbols: List[str] = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD"]
-    ema_test_adx_filter: bool = False
-    ema_test_adx_min: float = 20.0
     atr_levels_enabled: bool = False
     atr_sl_mult: float = 2.0
     atr_tp_mult: float = 4.0
     ema_test_partial_enabled: bool = False
     ema_test_partial_atr: float = 1.5
-    ema_test_confirm_enabled: bool = False
-    ema_test_confirm_adx: float = 24.0
-    ema_test_confirm_dist_atr: float = 0.5
-    ema_test_confirm_bars: int = 20
     bot_running: bool = False
 
     @field_validator("ai_min_confidence", mode="before")
@@ -90,11 +78,6 @@ class FxSettings(BaseModel):
             return min(90, max(10, int(round(float(v) / 10) * 10)))
         except (TypeError, ValueError):
             return 60
-
-    @field_validator("ema_test_symbols")
-    @classmethod
-    def _ema_test_symbols(cls, v):
-        return [s for s in dict.fromkeys(v or []) if s in AVAILABLE]
 
     @field_validator("seasonality_block_pairs")
     @classmethod
@@ -221,7 +204,6 @@ class FxSettingsUpdate(BaseModel):
     daily_loss_limit: Optional[float] = Field(default=None, ge=1, le=20)
     ai_enabled: Optional[bool] = None
     ai_min_confidence: Optional[int] = Field(default=None, ge=0, le=100)
-    ai_funnel_enabled: Optional[bool] = None
     min_rr: Optional[float] = Field(default=None, ge=0, le=5)
     max_spread_sl_pct: Optional[float] = Field(default=None, ge=0, le=100)
     ai_news_weight: Optional[str] = Field(default=None, pattern="^(normal|bajo)$")
@@ -230,9 +212,6 @@ class FxSettingsUpdate(BaseModel):
     ai_position_review_minutes: Optional[int] = Field(default=None, ge=5, le=240)
     ai_position_review_mode: Optional[str] = Field(default=None, pattern="^(notify|auto)$")
     ai_position_review_min_confidence: Optional[int] = Field(default=None, ge=50, le=100)
-    price_action_block: Optional[bool] = None
-    price_action_max_candles: Optional[int] = Field(default=None, ge=2, le=5)
-    price_action_swing_atr: Optional[float] = Field(default=None, ge=0.25, le=3)
     scan_interval_sec: Optional[int] = Field(default=None, ge=30, le=900)
     trailing_enabled: Optional[bool] = None
     breakeven_enabled: Optional[bool] = None
@@ -265,19 +244,11 @@ class FxSettingsUpdate(BaseModel):
     partial_tp_enabled: Optional[bool] = None
     partial_tp_r: Optional[float] = Field(default=None, ge=0.5, le=3.0)
     partial_tp_pct: Optional[int] = Field(default=None, ge=25, le=75)
-    ema_test_enabled: Optional[bool] = None
-    ema_test_symbols: Optional[List[str]] = None
-    ema_test_adx_filter: Optional[bool] = None
-    ema_test_adx_min: Optional[float] = Field(default=None, ge=5, le=60)
     atr_levels_enabled: Optional[bool] = None
     atr_sl_mult: Optional[float] = Field(default=None, ge=0.5, le=10)
     atr_tp_mult: Optional[float] = Field(default=None, ge=0.5, le=20)
     ema_test_partial_enabled: Optional[bool] = None
     ema_test_partial_atr: Optional[float] = Field(default=None, ge=0.5, le=3.0)
-    ema_test_confirm_enabled: Optional[bool] = None
-    ema_test_confirm_adx: Optional[float] = Field(default=None, ge=5, le=60)
-    ema_test_confirm_dist_atr: Optional[float] = Field(default=None, ge=0.1, le=3.0)
-    ema_test_confirm_bars: Optional[int] = Field(default=None, ge=1, le=100)
 
 
 class HfmTestRequest(BaseModel):

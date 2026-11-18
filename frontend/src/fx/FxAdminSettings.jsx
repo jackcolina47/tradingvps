@@ -7,7 +7,6 @@ import AiSection from "@/components/bot/admin/AiSection";
 import TelegramSection from "@/components/bot/admin/TelegramSection";
 import AccountSection from "@/components/bot/admin/AccountSection";
 import HfmSection from "./HfmSection";
-import FxNewsSection from "./FxNewsSection";
 import LiveModeSection from "@/components/bot/admin/LiveModeSection";
 import AutoReviewSection from "@/components/bot/admin/AutoReviewSection";
 import LearnedRulesSection from "@/components/bot/admin/LearnedRulesSection";
@@ -56,7 +55,6 @@ export default function FxAdminSettings({ account, refresh }) {
       <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
         <HfmSection config={config} onSave={save} onRefresh={() => { load(); refresh?.(); }} account={account} />
         <LiveModeSection config={config} refresh={() => { load(); refresh?.(); }} labels={liveLabels(brand.broker)} />
-        <FxNewsSection config={config} onSave={save} />
         <AutoReviewSection config={config} onSave={save} onRan={load} desc={AUTO_REVIEW_DESC} />
         <SecuritySection />
         <AiSection config={config} onSave={save} />

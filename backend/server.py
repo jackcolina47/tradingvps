@@ -1,6 +1,5 @@
 import os
 import time
-import asyncio
 import logging
 from dotenv import load_dotenv
 from pathlib import Path
@@ -12,27 +11,23 @@ from starlette.middleware.cors import CORSMiddleware  # noqa: E402
 from bson import ObjectId  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 from models import (  # noqa: E402
-    Position, Trade, Signal, LogEntry, SettingsUpdate, ResetRequest, ProfileRequest, AVAILABLE_SYMBOLS, TIMEFRAMES, SIGNAL_MODES,
+    Position, Trade, Signal, LogEntry, SettingsUpdate, ResetRequest, AVAILABLE_SYMBOLS, TIMEFRAMES,
 )
 from market import TF_SECONDS  # noqa: E402
 import chart  # noqa: E402
-from strategies import STRATEGY_INFO as FAST_INFO, MODE_INFO, EMA_TEST  # noqa: E402
-from strategies_slow import SLOW_INFO, SLOW_KEYS  # noqa: E402
-from models import CRYPTO_STRATEGY_KEYS  # noqa: E402
-STRATEGY_INFO = {**FAST_INFO, **SLOW_INFO}
+from legacy import INFO as LEGACY_INFO  # noqa: E402
+import funnel  # noqa: E402
 from performance import performance  # noqa: E402
 import evolution  # noqa: E402
 from ai_advisor import current as ai_current  # noqa: E402
 from auth import verify_password, create_token, client_ip, check_locked, register_failure, clear_failures  # noqa: E402
 from config import ConfigUpdate  # noqa: E402
 import notify  # noqa: E402
-from review import job_state  # noqa: E402
-from profiles import PROFILES, detect_profile, profile_patch  # noqa: E402
 import migrations  # noqa: E402
 import funding  # noqa: E402
 import trade_guard  # noqa: E402
-from deps import client, db, engine, store, news, protected_router, fx_engine, fx_store, fx_news, pep_engine, pep_store, pep_news, FX_BOTS, ai_usage, require_auth  # noqa: E402
-from routers import cron_routes, weekly_routes, walk_forward_routes, bybit_routes, ai_routes, analysis_routes, backup_routes, deploy_routes, market_routes, chat_routes  # noqa: E402
+from deps import client, db, engine, store, protected_router, FX_BOTS, ai_usage  # noqa: E402
+from routers import cron_routes, weekly_routes, bybit_routes, ai_routes, analysis_routes, backup_routes, deploy_routes, market_routes, chat_routes  # noqa: E402
 from routers.shared_routes import add_shared_routes  # noqa: E402
 from fx import routes as fx_routes  # noqa: E402
 
@@ -105,33 +100,13 @@ async def put_config(body: ConfigUpdate):
 
 @api.get("/meta")
 async def meta():
-    return {"symbols": AVAILABLE_SYMBOLS, "timeframes": TIMEFRAMES, "strategies": CRYPTO_STRATEGY_KEYS + [EMA_TEST], "strategy_keys": CRYPTO_STRATEGY_KEYS[1:], "strategy_info": STRATEGY_INFO,
-            "long_horizon_keys": list(SLOW_KEYS), "signal_modes": SIGNAL_MODES, "mode_info": MODE_INFO, "profiles": PROFILES}
+    return {"symbols": AVAILABLE_SYMBOLS, "timeframes": TIMEFRAMES, "strategy_info": {**LEGACY_INFO, **funnel.INFO}, "confidence_levels": list(funnel.CONFIDENCE_LEVELS)}
 
 
 @api.get("/overview")
 async def overview():
     acc = await engine.account_summary()
     return {"running": engine.running, "mode": engine.mode_label, "equity": acc["equity"], "total_return_pct": acc["total_return_pct"], "open_positions": acc["open_positions"]}
-
-
-@api.post("/profile")
-async def set_profile(req: ProfileRequest):
-    settings = await engine.get_settings()
-    if engine.live and req.level >= 3 and engine.running:
-        raise HTTPException(409, "Detén el bot antes de pasar a un perfil agresivo en modo REAL")
-    p = PROFILES[req.level]
-    before = PROFILES[settings.risk_profile]["name"] if detect_profile(settings) is not None else "Personalizado"
-    s = await engine.update_settings(profile_patch(req.level), "profile", f"Perfil de riesgo aplicado: {PROFILES[req.level]['name']}")
-    st = p["settings"]
-    await engine.log("INFO", f"Perfil de riesgo: {before} → {p['name']} · {len(st['symbols'])} pares · {st['timeframe']} · riesgo {st['risk_per_trade']}% · {st['leverage']}x")
-    await notify.notify(
-        f"🎚 <b>Perfil de riesgo cambiado</b>: {before} → <b>{p['name']}</b>\n"
-        f"• {len(st['symbols'])} pares · velas {st['timeframe']} · criterios {MODE_INFO[st['signal_mode']]['name'].lower()}\n"
-        f"• Riesgo {st['risk_per_trade']}%/op · máx {st['max_positions']} posiciones · {st['leverage']}x · límite diario {st['daily_loss_limit']}%\n"
-        f"• Filtro 4h: {'sí' if st['htf_filter'] else 'no'} · filtro de entrada: reglas aprendidas"
-        + (f"\n⚠️ {p['warning']}" if p["warning"] else ""), "review", bot="bybit")
-    return {"settings": s.model_dump(), "profile_active": detect_profile(s)}
 
 
 @api.get("/dashboard")
@@ -153,7 +128,6 @@ async def dashboard():
         "status": _status(), "settings": settings.model_dump(), "account": await engine.account_summary(),
         "positions": positions, "trades": trades, "signals": signals, "logs": logs,
         "watchlist": watchlist, "equity": await _equity_curve(), "checkin": await engine.checkin(settings),
-        "profile_active": detect_profile(settings), "optimize_job": job_state()["status"], "news": news.summary(),
     }
 
 
@@ -276,21 +250,6 @@ async def revert_evolution(event_id: str):
     return out
 
 
-@api.get("/news")
-async def get_news():
-    return {"latest": news.latest, "summary": news.summary()}
-
-
-@api.post("/news/refresh")
-async def refresh_news():
-    try:
-        await news.refresh(force=True)
-    except Exception as e:
-        logger.exception("news refresh")
-        raise HTTPException(424, f"No se pudo actualizar las noticias: {str(e)[:160]}")
-    return {"latest": news.latest, "summary": news.summary()}
-
-
 @api.delete("/logs")
 async def clear_logs():
     await db.logs.delete_many({})
@@ -304,13 +263,12 @@ app.include_router(ai_routes.router)
 app.include_router(analysis_routes.router)
 app.include_router(cron_routes.router)
 app.include_router(weekly_routes.router)
-app.include_router(walk_forward_routes.router)
 app.include_router(backup_routes.router)
 app.include_router(deploy_routes.router)
 app.include_router(market_routes.router)
 app.include_router(chat_routes.router)
-for _eng, _st, _nw in FX_BOTS:
-    app.include_router(fx_routes.build_router(_eng, _st, _nw))
+for _eng, _st in FX_BOTS:
+    app.include_router(fx_routes.build_router(_eng, _st))
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -324,32 +282,26 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     store.listeners.append(engine.apply_config)
-    store.listeners.append(news.configure)
     await store.load()
     await ai_usage.load()
     await trade_guard.calendar.start(db)
     await engine.init()
-    await news.init()
     await migrations.run(engine, db)
     for name in await db.list_collection_names():
         if name.startswith("lab_"):   # Bybit Lab was removed: drop its paper data
             await db.drop_collection(name)
     await cron_routes.init()
     await backup_routes.init()
-    for eng, st, nw in FX_BOTS:
+    for eng, st in FX_BOTS:
         st.listeners.append(eng.apply_config)
-        st.listeners.append(nw.configure)
         await st.load()
         await eng.init()
-        await nw.init()
 
 
 @app.on_event("shutdown")
 async def shutdown():
-    for eng, st, nw in reversed(FX_BOTS):
-        await nw.aclose()
+    for eng, _st in reversed(FX_BOTS):
         await eng.shutdown()
-    await news.aclose()
     await trade_guard.calendar.aclose()
     await engine.shutdown()
     client.close()

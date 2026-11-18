@@ -63,15 +63,6 @@ class AppConfig(BaseModel):
     bybit_verified_at: Optional[str] = None
     bybit_verified_equity: Optional[float] = None
     live_since: Optional[str] = None
-    news_enabled: bool = True
-    news_interval_min: int = 20
-    news_block_events: bool = True
-    news_event_before_min: int = 45
-    news_event_after_min: int = 30
-    news_block_critical: bool = True
-    news_reduce_on_high_risk: bool = True
-    news_size_factor: float = 0.5
-    wf_auto_remove: bool = True
     funding_enabled: bool = True
     funding_block_pct: float = 0.10
     funding_reduce_pct: float = 0.05
@@ -82,7 +73,6 @@ class AppConfig(BaseModel):
 
 
 class ConfigUpdate(BaseModel):
-    wf_auto_remove: Optional[bool] = None
     chat_summary_every: Optional[int] = Field(default=None, ge=10, le=200)
     chat_keep_last: Optional[int] = Field(default=None, ge=2, le=50)
     funding_enabled: Optional[bool] = None
@@ -90,14 +80,6 @@ class ConfigUpdate(BaseModel):
     funding_reduce_pct: Optional[float] = Field(default=None, ge=0.0, le=2.0)
     funding_reduce: Optional[bool] = None
     funding_size_factor: Optional[float] = Field(default=None, ge=0.1, le=1.0)
-    news_enabled: Optional[bool] = None
-    news_interval_min: Optional[int] = Field(default=None, ge=5, le=240)
-    news_block_events: Optional[bool] = None
-    news_event_before_min: Optional[int] = Field(default=None, ge=0, le=240)
-    news_event_after_min: Optional[int] = Field(default=None, ge=0, le=240)
-    news_block_critical: Optional[bool] = None
-    news_reduce_on_high_risk: Optional[bool] = None
-    news_size_factor: Optional[float] = Field(default=None, ge=0.1, le=1.0)
     ai_source: Optional[str] = None
     ai_provider: Optional[str] = None
     ai_model: Optional[str] = Field(default=None, min_length=2, max_length=80)

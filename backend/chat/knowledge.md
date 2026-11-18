@@ -1,44 +1,51 @@
 # AI Trading · guía de la aplicación (conocimiento del asistente)
 
 ## Qué es
-Panel web (español) con tres bots de trading automático 24/7 que comparten clave de acceso, IA, Telegram y copias de seguridad:
-- **Bybit AI Trader** (`/bybit`, API `/api/*`): futuros perpetuos USDT (largo/corto). Datos: Bybit v5; si la región está bloqueada usa Bitget como espejo (el badge "Datos: Bitget (espejo)" lo indica). Modo REAL vía API de Bybit (mainnet/testnet/demo).
-- **HotForex AI Trading** (`/hotforex`, API `/api/fx/*`, clave de bot `fx`): forex y metales (12 pares: XAUUSD, XAGUSD, EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, EURJPY, GBPJPY, EURCHF). Datos paper: Yahoo Finance. Modo REAL vía MetaApi.cloud conectado a la cuenta MT4/MT5 de HFM. Costes: spread medio HFM, sin comisión.
-- **Pepperstone AI trading** (`/pepperstone`, API `/api/pepper/*`, clave de bot `pepper`): el MISMO motor forex/metales que HotForex pero como instancia independiente (sus propios ajustes, cuenta paper, posiciones, señales, plan, revisión IA, Telegram y colecciones `pep_*`). Bróker Pepperstone vía MetaApi (MT4 o MT5; servidores Pepperstone-Demo, Pepperstone-MT5-Live01…; símbolos sin sufijo). Tipo de cuenta seleccionable en Ajustes (`account_type`): **razor** (spread crudo ≈ 20 % del de HFM + comisión 7 USD por lote ida y vuelta, por defecto) o **standard** (solo spread ≈ 90 % del de HFM, sin comisión). El bot descuenta la comisión en paper, backtest, sombras y plan. Las cifras de un bot NO aplican al otro aunque compartan estrategias.
-Cada bot tiene cuenta paper propia (capital inicial $500 por defecto), ajustes, posiciones, historial, señales, logs, plan y evolución independientes.
+Panel web (español) con tres bots de trading automático que comparten clave de acceso, IA, Telegram y copias de seguridad:
+- **Bybit AI Trader** (`/bybit`, API `/api/*`, clave de bot `crypto`): futuros perpetuos USDT. Datos Bybit v5; si la región está bloqueada usa Bitget como espejo.
+- **HotForex AI Trading** (`/hotforex`, API `/api/fx/*`, clave `fx`): forex y metales (12 pares) vía MetaApi/MetaTrader.
+- **Pepperstone AI trading** (`/pepperstone`, API `/api/pepper/*`, clave `pepper`): el mismo motor FX como instancia independiente.
+Cada bot tiene cuenta paper propia (capital inicial $500), ajustes, posiciones, historial, señales, logs, plan y evolución independientes.
 
-## Flujo de una operación (los tres bots)
-Escaneo cada `scan_interval_sec` → estrategias sobre velas cerradas (`timeframe`) → puertas de riesgo (máx. posiciones, par ya abierto, límite de pérdida diaria, mercado/sesión, filtros) → puerta de noticias → **validación IA** (si `ai_enabled`: aprueba/rechaza con confianza ≥ `ai_min_confidence`) → ejecución (paper o REAL) con SL/TP por ATR, breakeven, trailing y cierre parcial → la posición se gestiona cada 5 s. Toda señal no ejecutada (RECHAZADA, BAJA_CONFIANZA, BLOQUEADA, NOTICIAS, FUNDING, SESION, REGIMEN…, NO_EJECUTADA) se simula como **operación sombra** para medir si el filtro acierta (`filter_value` > 0 = evitó pérdidas).
+## Arquitectura actual: Embudo IA (`funnel.py`)
+Ya NO existen estrategias estáticas, backtest, optimizador, walk-forward, perfiles de riesgo, modos test, laboratorio ni agente de noticias con titulares/sentimiento.
+Ciclo cada 60 s, solo dentro del horario operativo y con huecos libres:
+- **Paso 0** (sin IA): EMA 20/50/200, RSI, MACD, ADX, ATR, actividad (volumen o rango) y zonas de oferta/demanda. Descarta pares planos lejos de zonas.
+- **Paso 1** (modelo rápido): elige 0–3 candidatos en una llamada. No se repite si ningún par se movió 0,15 ATR en la misma vela.
+- **Paso 2** (modelo potente + reglas aprendidas): BUY / SELL / PASS con confianza 0–100.
+- Un candidato del Paso 1 vuelve al Paso 2 cada 5 minutos (`DEEP_COOLDOWN_SEC`) hasta que haya operación ejecutable o se llene `max_positions`. Los pares descartados en el Paso 1 no llegan al Paso 2.
+- `ai_min_confidence` (10..90 en pasos de 10): confianza > umbral → se ejecuta; ≤ umbral → sombra `BAJA_CONFIANZA` (una por vela).
+- SL/TP: `atr_levels_enabled` → `atr_sl_mult`×ATR / `atr_tp_mult`×ATR (2 / 4 por defecto); apagado → niveles de la IA si son válidos (stop 0,5–4 ATR, R:R ≥ 1).
+- Tamaño: siempre (capital × `risk_per_trade` %) ÷ distancia al stop.
+- FX: con la cuenta MetaApi desplegada usa velas y volumen de ticks del bróker; con Yahoo usa el rango de la vela.
 
-## Estrategias
-Corto plazo (combinables con `strategy = all`; se apagan con `disabled_strategies`): trend_ema (Tendencia multi-confirmación EMA9/21/200 + RSI + MACD/ADX), mean_reversion (Bandas de Bollinger), breakout_turtle (Donchian 20), supertrend_momentum, ema_pullback (pullback a EMA21), ema_cross (Cruce EMA 10/20: cruce al cierre + EMA200 + ADX>20, SL 2×ATR, TP lejano 6×ATR y salida en cuanto las EMAs se cruzan al revés → motivo de cierre CRUCE; apagada por defecto en los 3 bots y en todos los perfiles, el usuario la enciende en Plan de trading o Rendimiento → Por estrategia). Pepperstone tiene además «Modo laboratorio» (tarjeta en su panel; `GET/POST /api/pepper/lab/start|stop`): activa SOLO ema_cross en 15 m con criterios relajados y 12 pares, mantiene el filtro IA y las protecciones de capital, y apaga filtro TF superior, trailing/breakeven/parcial, régimen USD, volatilidad, estacionalidad, FOMC, rollover, bloqueos/trading por noticias y la revisión IA automática; guarda los ajustes previos y los restaura al desactivarlo (aplicar un perfil lo termina: el perfil define sus claves y el resto vuelve al valor previo al laboratorio; no se puede pasar a REAL ni deshacer eventos de Evolución con el laboratorio activo). Mientras está activo, no propongas cambios de estrategia/filtros al bot Pepperstone salvo que el usuario lo pida: contaminarían la data. `signal_mode` strict/relaxed/minimal fija la exigencia de confirmaciones.
-Largo plazo cripto (no cuentan en `max_positions`, tope `max_long_positions`): multi_horizon (giro de tendencia en 1d) y double_divergence (divergencia RSI+MACD en 4h).
-Largo plazo FX: fix_reversion (reversión del fix de Londres el último día hábil del mes, entrada 16:00–16:30 Londres, cierre por tiempo al día siguiente; no metales).
-FX además opera noticias macro (`news_trading_enabled`): sorpresa en dato de alto impacto → la IA decide dirección y confianza.
+## Horario y eventos rojos (`trade_guard.py`)
+Hora de Nueva York, todos los días. FX: 03:00–04:00, 08:00–12:00, 19:00–00:00 (y mercado forex abierto). Cripto: 03:00–05:00, 08:30–12:00, 19:00–23:00.
+Calendario de eventos rojos descargado 1 vez al día. Bloqueo de entradas ±15 min en los pares afectados (FX: pares con la divisa; cripto: eventos USD).
+15 min antes: posiciones afectadas en ganancia → breakeven; en pérdida → cierre con motivo `NOTICIA`. En Bybit se cancelan las órdenes límite pendientes de los pares afectados.
+Herramienta `get_guard` y campo `horario_y_eventos_rojos` del snapshot.
 
-## Ajustes de estrategia y riesgo (Settings de cada bot)
-symbols (pares activos), timeframe, strategy, disabled_strategies, signal_mode, htf_filter (filtro de tendencia en TF superior), risk_per_trade (% de la equidad arriesgado por operación), max_positions, leverage (cripto 1–20x; FX 1:1–1:500), daily_loss_limit (% → pausa nuevas entradas hasta el día siguiente UTC), ai_enabled, ai_min_confidence, scan_interval_sec, trailing_enabled, symbol_params (SL/TP por par: sl_atr, tp_atr, atr_period; vienen del Optimizador), risk_profile (0 Conservador · 1 Moderado · 2 Activo · 3 Agresivo · 4 Máximo: presets que fijan varios campos; "Personalizado" si no coincide), plan_scenario/plan_target_monthly/plan_monthly_deposit/plan_phase (plan de crecimiento).
-Puerta IA (idéntica en los tres bots, `engine.py` / `fx/engine_signals.py`): se ejecuta solo si `ai_decision == APROBADA` **y** `ai_confidence >= ai_min_confidence`; `ai_risk` (BAJO/MEDIO/ALTO) es informativo y NO interviene en la decisión ni en el tamaño. Cada señal guarda `ai_min_confidence` (el mínimo vigente al evaluarla); la tarjeta muestra «Confianza IA 58 % (mín. 60 %)», «Riesgo MEDIO» aparte y la insignia «Aprobada · bajo mínimo» cuando aprobó sin llegar al mínimo (sombra BAJA_CONFIANZA).
-Herramientas de código (list_code/read_code/search_code): rutas virtuales /app/backend, /app/frontend/src, /app/deploy; funcionan en el preview y en el VPS (código montado en APP_SOURCE_DIR=/src). Si fallan por «código no montado», dilo y razona con los datos.
-Gestión de salidas (ambos): be_start_r (breakeven a +R), trail_start_r, trail_atr_mult, partial_tp_enabled, partial_tp_r, partial_tp_pct.
-Solo cripto: btc_regime_filter + btc_regime_sma (con BTC bajo su SMA diaria solo cortos), rotation_enabled + rotation_lookback_days (rotación semanal por momentum: tercio ganador solo largos, perdedor solo cortos), entry_order_type market|maker (+ maker_wait_bars), max_long_positions.
-Solo FX: close_before_weekend, min_lot_max_risk (% máx. de riesgo aceptado cuando el lote mínimo 0.01 supera el riesgo objetivo; clave con poco capital en metales), sessions_allowed (sydney/tokyo/london/newyork; vacío = todas), ai_news_weight (normal|bajo), currency_exposure_limit (exposición neta por divisa), rollover_guard (16:50–17:15 NY, spread ×4), vol_filter_enabled + vol_min_pct/vol_high_pct (percentil ATR: bajo mínimo no abre, alto opera a la mitad), seasonality_bias + seasonality_block_pairs + seasonality_size_factor (una divisa tiende a caer en su horario local), usd_regime_filter + usd_regime_sma (índice USD sintético: USD fuerte → xxxUSD solo cortos, USDxxx solo largos), fomc_rule, max_long_positions.
+## Ajustes de cada bot (Settings)
+symbols, timeframe, risk_per_trade, max_positions, leverage, daily_loss_limit, ai_min_confidence, atr_levels_enabled, atr_sl_mult, atr_tp_mult, breakeven_enabled, be_start_r, trailing_enabled, trail_start_r, trail_atr_mult, partial_tp_enabled, partial_tp_r, partial_tp_pct, rules_auto_learn, plan_*.
+Solo cripto: entry_order_type (market | maker), maker_wait_bars, auto_prune_enabled, auto_prune_pf, auto_prune_min_trades.
+Solo FX: close_before_weekend, rollover_guard, currency_exposure_limit, min_lot_max_risk, sessions_allowed.
+Otros campos antiguos que aparezcan en el snapshot (strategy, signal_mode, filtros de régimen, estacionalidad…) no tienen efecto: no propongas cambiarlos.
 
-## Ajustes generales (Config, compartidos salvo que se indique)
-IA: ai_source emergent|gemini, ai_provider/ai_model (clave universal Emergent) o gemini_api_key/gemini_model (clave propia). Telegram: telegram_enabled, token, chat_id, telegram_alerts {orders, ai, daily, plan, review, news, system}. Revisión IA automática (`auto_review_*`, cron 08:00 UTC; FX tiene la suya). Agente de noticias (`news_*`: intervalo, bloqueo por evento de alto impacto antes/después, bloqueo por alerta crítica, reducción de tamaño con riesgo alto). Cripto: funding_* (bloquea/reduce con funding extremo/alto en contra), bybit_* (cuenta real), bybit_alert_after_sec. FX (HotForex y Pepperstone, cada uno con su propia configuración): hfm_alert_after_sec, account_type (solo Pepperstone: razor/standard), news_trade_* (trading de noticias), metaapi_*/mt_* (cuenta MetaTrader del bróker). wf_auto_remove: la revalidación semanal (lunes 07:00 UTC) quita los SL/TP sobreajustados. Chat: chat_summary_every, chat_keep_last.
+## Ajustes generales (Config)
+IA (proveedor, modelo potente, modelo rápido del embudo), Telegram (token, chats, alertas por tipo y por bot), revisión IA automática (auto_review_*), alertas de desconexión, chat.
+
+## Se mantiene
+Paper / REAL, Telegram, reglas aprendidas (`ai_rules`, aprendizaje tras cada cierre), Buy/Sell manual desde el gráfico (estrategia `manual`), breakeven, trailing, cierre parcial, operaciones sombra, plan de crecimiento simplificado, revisión IA automática y asesor IA simplificados (solo con operaciones reales y sombras), evolución con deshacer, copias de seguridad, resumen semanal, poda automática de pares (Bybit).
 
 ## Pestañas del panel
-Posiciones (abiertas, recorrido MFE/MAE, cierre manual, "Cerrar todas"), Historial (operaciones cerradas con motivo TP/SL/TRAILING/TIEMPO/MANUAL/FIN_SEMANA), Backtest (1000 velas reales; FX muestra pips netos y sesiones), Rendimiento (por estrategia con interruptor, por par, por motivo, decisiones IA, sombras, recorrido), Optimizador (grid 54 combinaciones SL/TP por par con SQN robusto; Validar walk-forward: ROBUSTO/DUDOSO/SOBREAJUSTADO/NO_RENTABLE/INSUFICIENTE; Aplicar/Quitar symbol_params; "Optimizar todo con IA"; revalidación semanal), Noticias y agenda, Plan de crecimiento (fases semilla→crecimiento→consolidación→ingreso, escenarios Prudente/Realista/Ambicioso/Según backtest, Monte Carlo, chequeo de fase), Evolución (línea de tiempo de cada cambio de ajustes con fuente, antes→después y veredicto MEJOR/PEOR/PENDIENTE; "Deshacer" con un clic), Régimen (cripto: BTC y rotación) / Filtros (FX: régimen USD, exposición, volatilidad, estacionalidad, rollover, FOMC, fix). Cabecera: Escanear, Reiniciar (cuenta paper), Iniciar/Detener bot, Ajustes, Documentación, Instalar en tu VPS, Cambiar bot, Chatea con IA expert.
-Ajustes: cuenta real (Bybit / HFM-MetaApi con vinculación, prueba de conexión, sufijo de símbolos, tipo de cuenta MetaApi), Modo de operación (checklist y paso a REAL escribiendo "REAL"; en FX la cuenta demo de HFM cuenta como REAL con dinero ficticio), Seguridad (clave), IA, Telegram (resumen semanal domingo 20:00 UTC), Revisión IA automática, Noticias, Funding, Cuenta paper (reiniciar, depositar/retirar sin distorsionar estadísticas), Copias de seguridad (crear/descargar/restaurar; cron 03:00 UTC).
+Posiciones, Historial, Rendimiento (por par, lado, motivo, día, sombras, recorrido), Pares 30d (solo Bybit), Eventos rojos, Plan de crecimiento, Evolución. Abajo: Configuración y registro.
 
-## Indicadores y conceptos
-1 R = distancia al stop inicial. MFE/MAE = máximo recorrido a favor/en contra. PF = beneficio bruto / pérdida bruta. DD = drawdown desde el pico (sin contar aportes). SQN = calidad del sistema (Van Tharp). WFE = eficiencia walk-forward (OOS/IS). Equidad = balance + PnL no realizado. Las estadísticas tratan depósitos/retiros como aportes (net_deposits), no como PnL.
+## Conceptos
+1 R = distancia al stop inicial. MFE/MAE = recorrido máximo a favor/en contra. PF = beneficio bruto / pérdida bruta. DD = drawdown desde el pico.
 
-## Límites y hechos prácticos
-- Paper cripto: comisión 0,055 % (maker 0,02 %) + slippage; lotes mínimos de Bybit (MIN_NOTIONAL 5 USDT). Paper FX: HotForex → spread medio de HFM como único coste; Pepperstone → spread según tipo de cuenta (+ comisión 7 USD/lote en Razor); lote mínimo 0,01 → con $500 el oro/plata requieren `min_lot_max_risk` alto o más capital.
-- Mercado forex cerrado el fin de semana (viernes 21:00 → domingo 21:00 UTC); el bot no escanea y puede cerrar antes (`close_before_weekend`).
-- La IA se consulta solo cuando una señal pasa las puertas previas (ahorro de llamadas); el contador "IA hoy" muestra llamadas y ahorradas.
-- La revisión IA automática y "Optimizar todo" solo cambian pares/estrategia/riesgo con evidencia (≥ 20–30 operaciones) y respetan topes prudentes; este chat no tiene esos topes pero avisa cuando se superan.
-- Cambiar a REAL: bot detenido, sin posiciones, credenciales verificadas (cripto) o cuenta MetaTrader del bróker (HFM o Pepperstone) vinculada+verificada+símbolos operables (FX). Este asistente no puede cambiar el modo, ni tocar claves, contraseñas o código.
-- Yahoo Finance devuelve 429 esporádicos (se reintenta); Bybit bloquea EE. UU. (CloudFront 403) → precios de Bitget.
-- Zonas horarias: logs y crons en UTC; las sesiones FX se muestran en hora local del usuario en la UI.
+## Hechos prácticos
+- Fuera de horario no hay llamadas a la IA. Si el bot «no opera», revisa: horario, eventos rojos, máximo de posiciones, límite diario, umbral de confianza.
+- Operaciones anteriores al embudo conservan el nombre de su estrategia antigua solo como historial.
+- Cambiar a REAL: bot detenido, sin posiciones, credenciales verificadas. Este asistente no puede hacerlo.
+- Crons del VPS: revisión IA 08:00 UTC, resumen semanal domingo 20:00 UTC, copia 03:00 UTC.
+- Logs y crons en UTC; horario operativo en hora de Nueva York.

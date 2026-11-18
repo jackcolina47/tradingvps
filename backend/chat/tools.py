@@ -2,19 +2,18 @@
 import json
 import logging
 from fastapi import HTTPException
-from models import BacktestRequest, OptimizeRequest, AVAILABLE_SYMBOLS, TIMEFRAMES, CRYPTO_STRATEGY_KEYS, SIGNAL_MODES, ENTRY_ORDER_TYPES, REGIME_SMAS, SettingsUpdate, Trade, Signal
-from fx.models import FxBacktestRequest, FX_TIMEFRAMES, FX_STRATEGY_KEYS, FxSettingsUpdate
+from models import AVAILABLE_SYMBOLS, TIMEFRAMES, ENTRY_ORDER_TYPES, SettingsUpdate, Trade, Signal
+from fx.models import FX_TIMEFRAMES, FxSettingsUpdate
+import funnel
+import trade_guard
 from fx.symbols import AVAILABLE as FX_AVAILABLE
 from fx.market import SESSIONS
-from profiles import PROFILES
-from fx.profiles import PROFILES as FX_PROFILES
 from performance import performance
 from fx.shadow import shadow_stats as fx_shadow_stats
 import evolution
-import wfcheck
-from deps import db, engine, news, FX_BOTS
+from deps import db, engine, FX_BOTS
 
-FXB = {e.profile.panel: (e, s, n) for e, s, n in FX_BOTS}
+FXB = {e.profile.panel: (e, s) for e, s in FX_BOTS}
 from chat import code_reader, proposals
 
 logger = logging.getLogger("chat.tools")
@@ -27,29 +26,23 @@ def _t(name, desc, props=None, required=None):
 
 
 TOOLS = [
-    _t("get_performance", "Rendimiento real completo del bot: por estrategia, par, lado, motivo de salida, horizonte, tipo de entrada, decisiones IA, operaciones sombra (valor del filtro) y recorrido MFE/MAE.", {"bot": BOT_PARAM}, ["bot"]),
+    _t("get_performance", "Rendimiento real completo del bot: por par, lado, motivo de salida, horizonte, tipo de entrada, decisiones IA, operaciones sombra (valor del filtro) y recorrido MFE/MAE.", {"bot": BOT_PARAM}, ["bot"]),
     _t("get_trades", "Últimas operaciones cerradas del bot (historial).", {"bot": BOT_PARAM, "limit": {"type": "integer", "description": "1-50, por defecto 20"}}, ["bot"]),
     _t("get_signals", "Últimas señales detectadas (ejecutadas, rechazadas por la IA o bloqueadas) con su razonamiento y contexto.", {"bot": BOT_PARAM, "limit": {"type": "integer"}}, ["bot"]),
     _t("get_logs", "Últimas líneas del registro del bot (opcionalmente filtradas por nivel: INFO, SCAN, SIGNAL, AI_EVAL, ORDER, RISK, PLAN, NEWS, ERROR).", {"bot": BOT_PARAM, "limit": {"type": "integer"}, "level": {"type": "string"}}, ["bot"]),
-    _t("get_options", "Valores válidos y rangos de cada ajuste del bot (pares disponibles, estrategias, temporalidades, perfiles, sesiones, claves de configuración general permitidas). Úsalo antes de proponer cambios.", {"bot": BOT_PARAM}, ["bot"]),
-    _t("get_market_context", "Contexto de mercado y filtros: cripto → régimen de BTC, rotación semanal y entradas maker pendientes; fx → régimen USD, exposición por divisa, volatilidad, estacionalidad, rollover, FOMC y próximo fix de fin de mes.", {"bot": BOT_PARAM}, ["bot"]),
-    _t("get_news", "Último análisis del agente de noticias: sentimiento, riesgo, resumen, alertas y próximos eventos macro de alto impacto.", {"bot": BOT_PARAM}, ["bot"]),
+    _t("get_options", "Valores válidos y rangos de cada ajuste del bot (pares disponibles, temporalidades, niveles de confianza IA, sesiones, claves de configuración general permitidas). Úsalo antes de proponer cambios.", {"bot": BOT_PARAM}, ["bot"]),
+    _t("get_guard", "Horario operativo (Nueva York), ventana activa o próxima, y calendario de eventos rojos con los pares que bloquea cada uno (±15 min).", {"bot": BOT_PARAM}, ["bot"]),
     _t("get_evolution", "Línea de tiempo de cambios de ajustes (fuente, antes→después, rendimiento antes/después y veredicto MEJOR/PEOR/PENDIENTE, ids para deshacer).", {"bot": BOT_PARAM, "limit": {"type": "integer"}}, ["bot"]),
     _t("get_plan_checkin", "Chequeo del plan de crecimiento: fase actual, criterios cumplidos, avisos y si toca avanzar.", {"bot": BOT_PARAM}, ["bot"]),
-    _t("get_walk_forward_status", "Resultado de la última revalidación walk-forward semanal de los pares con SL/TP aplicados.", {"bot": BOT_PARAM}, ["bot"]),
-    _t("run_backtest", "Ejecuta un backtest (≈1000 velas reales) de un par con los ajustes actuales del bot. Tarda unos segundos.",
-       {"bot": BOT_PARAM, "symbol": {"type": "string"}, "timeframe": {"type": "string", "description": "por defecto la del bot"}, "strategy": {"type": "string", "description": "'all' o una estrategia; por defecto la del bot"}}, ["bot", "symbol"]),
-    _t("run_optimizer", "Optimizador SL/TP (grid de 54 combinaciones, SQN robusto) de un par. Tarda 10-40 s.", {"bot": BOT_PARAM, "symbol": {"type": "string"}}, ["bot", "symbol"]),
-    _t("run_walk_forward", "Validación walk-forward (2000 velas, optimización in-sample y prueba a ciegas) de un par; devuelve veredicto ROBUSTO/DUDOSO/SOBREAJUSTADO/NO_RENTABLE. Tarda 20-60 s.", {"bot": BOT_PARAM, "symbol": {"type": "string"}}, ["bot", "symbol"]),
     _t("list_code", "Lista archivos y carpetas del proyecto (solo lectura). Raíces: /app/backend, /app/frontend/src, /app/deploy.", {"path": {"type": "string"}}),
     _t("read_code", "Lee un archivo de código del proyecto con números de línea (máx. 300 líneas por llamada; usa start/end para paginar). Nunca modifica nada.",
        {"path": {"type": "string"}, "start": {"type": "integer"}, "end": {"type": "integer"}}, ["path"]),
     _t("search_code", "Busca un texto o expresión regular en el código del proyecto y devuelve archivo:línea.", {"query": {"type": "string"}, "path": {"type": "string"}, "regex": {"type": "boolean"}}, ["query"]),
-    _t("propose_settings_change", "Propone cambiar ajustes de estrategia/riesgo de un bot. NO se aplica: crea una tarjeta que el usuario debe confirmar. Devuelve el diff validado (antes→después) y avisos.",
+    _t("propose_settings_change", "Propone cambiar ajustes de riesgo/embudo IA de un bot. NO se aplica: crea una tarjeta que el usuario debe confirmar. Devuelve el diff validado (antes→después) y avisos.",
        {"bot": BOT_PARAM, "changes": {"type": "object", "description": "{clave: valor} con claves de ajustes del bot"}, "reason": {"type": "string", "description": "motivo breve para el usuario"}}, ["bot", "changes", "reason"]),
-    _t("propose_config_change", "Propone cambiar ajustes generales (Telegram on/off y tipos de alerta, agente de noticias, trading de noticias FX, revisión IA automática, funding, revalidación automática, alertas de desconexión, chat). Nunca credenciales ni modo REAL. Requiere confirmación del usuario.",
+    _t("propose_config_change", "Propone cambiar ajustes generales (Telegram on/off y tipos de alerta, revisión IA automática, alertas de desconexión, chat). Nunca credenciales ni modo REAL. Requiere confirmación del usuario.",
        {"bot": BOT_PARAM, "changes": {"type": "object"}, "reason": {"type": "string"}}, ["bot", "changes", "reason"]),
-    _t("propose_action", "Propone una acción operativa que el usuario debe confirmar: start_bot, stop_bot, scan, close_position (args.position_id), close_all_positions, refresh_news, set_profile (args.level 0-4).",
+    _t("propose_action", "Propone una acción operativa que el usuario debe confirmar: start_bot, stop_bot, scan, close_position (args.position_id), close_all_positions.",
        {"bot": BOT_PARAM, "action": {"type": "string", "enum": list(proposals.ACTIONS)}, "args": {"type": "object"}, "reason": {"type": "string"}}, ["bot", "action", "reason"]),
     _t("remember", "Guarda una nota en la memoria duradera del asistente (preferencias, objetivos, decisiones del usuario). Úsalo cuando el usuario pida recordar algo o exprese una preferencia estable.",
        {"note": {"type": "string", "description": "frase breve (máx. 160 caracteres)"}}, ["note"]),
@@ -84,52 +77,10 @@ async def _options(bot: str) -> dict:
                     meta[attr] = getattr(m, attr)
         ranges[k] = meta
     if bot in FXB:
-        return {"settings_keys": ranges, "symbols": FX_AVAILABLE, "timeframes": FX_TIMEFRAMES, "strategies": FX_STRATEGY_KEYS, "signal_modes": SIGNAL_MODES,
-                "sessions": [s[0] for s in SESSIONS], "usd_regime_sma": REGIME_SMAS, "ai_news_weight": ["normal", "bajo"],
-                "profiles": [{"level": p["level"], "name": p["name"], "settings": p["settings"]} for p in FX_PROFILES],
+        return {"settings_keys": ranges, "symbols": FX_AVAILABLE, "timeframes": FX_TIMEFRAMES, "ai_min_confidence": list(funnel.CONFIDENCE_LEVELS), "sessions": [s[0] for s in SESSIONS],
                 "config_keys": sorted(proposals.FX_CONFIG_KEYS | proposals.GLOBAL_CONFIG_KEYS), "actions": proposals.ACTIONS}
-    return {"settings_keys": ranges, "symbols": AVAILABLE_SYMBOLS, "timeframes": TIMEFRAMES, "strategies": CRYPTO_STRATEGY_KEYS, "signal_modes": SIGNAL_MODES,
-            "entry_order_type": ENTRY_ORDER_TYPES, "btc_regime_sma": REGIME_SMAS,
-            "profiles": [{"level": p["level"], "name": p["name"], "settings": p["settings"]} for p in PROFILES],
+    return {"settings_keys": ranges, "symbols": AVAILABLE_SYMBOLS, "timeframes": TIMEFRAMES, "ai_min_confidence": list(funnel.CONFIDENCE_LEVELS), "entry_order_type": ENTRY_ORDER_TYPES,
             "config_keys": sorted(proposals.GLOBAL_CONFIG_KEYS), "actions": proposals.ACTIONS}
-
-
-async def _backtest(bot: str, symbol: str, timeframe: str, strategy: str) -> dict:
-    eng = _eng(bot)
-    s = await eng.get_settings()
-    if bot in FXB:
-        from fx.routes_analysis import backtest
-        req = FxBacktestRequest(symbol=symbol, timeframe=timeframe or s.timeframe, strategy=strategy or s.strategy, risk_per_trade=s.risk_per_trade, leverage=s.leverage)
-    else:
-        from routers.analysis_routes import backtest
-        req = BacktestRequest(symbol=symbol, timeframe=timeframe or s.timeframe, strategy=strategy or s.strategy, risk_per_trade=s.risk_per_trade, leverage=s.leverage)
-    return await backtest(req)
-
-
-async def _optimize(bot: str, symbol: str) -> dict:
-    if bot in FXB:
-        from fx.routes_analysis import optimize_symbol
-    else:
-        from routers.analysis_routes import optimize_symbol
-    return await optimize_symbol(OptimizeRequest(symbol=symbol))
-
-
-async def _walk_forward(bot: str, symbol: str) -> dict:
-    if bot in FXB:
-        from fx.routes_analysis import optimize_walk_forward
-    else:
-        from routers.walk_forward_routes import optimize_walk_forward
-    res = await optimize_walk_forward(OptimizeRequest(symbol=symbol))
-    res["folds"] = len(res.get("folds") or [])
-    return res
-
-
-async def _market_context(bot: str) -> dict:
-    if bot in FXB:
-        from fx.routes_analysis import market_context
-    else:
-        from routers.market_routes import market_context
-    return await market_context()
 
 
 async def run_tool(name: str, args: dict, session_id: str) -> dict:
@@ -154,27 +105,15 @@ async def run_tool(name: str, args: dict, session_id: str) -> dict:
             return {"logs": [f"{d.get('ts', '')[:19]} [{d['level']}] {d['message']}" async for d in eng.db.logs.find(q).sort("_id", -1).limit(n)]}
         if name == "get_options":
             return await _options(bot)
-        if name == "get_market_context":
-            return _compact(await _market_context(bot))
-        if name == "get_news":
-            agent = FXB[bot][2] if bot in FXB else news
-            latest = agent.latest or {}
-            return _compact({"summary": agent.summary(), "market": latest.get("market"), "pairs": latest.get("pairs"), "alerts": (latest.get("alerts") or [])[:8],
-                             "events": [e for e in (latest.get("events") or []) if e.get("impact") == "ALTO"][:12], "headlines": [h.get("title") for h in (latest.get("headlines") or [])[:10]]})
+        if name == "get_guard":
+            eng = _eng(bot)
+            return _compact(trade_guard.status(eng.guard_kind, (await eng.get_settings()).symbols))
         if name == "get_evolution":
             eng = _eng(bot)
             tl = await evolution.timeline(eng, max(1, min(int(args.get("limit") or 15), 40)))
             return _compact(tl)
         if name == "get_plan_checkin":
             return await _eng(bot).checkin()
-        if name == "get_walk_forward_status":
-            return _compact(await wfcheck.latest(_eng(bot).db) or {"info": "sin revalidaciones todavía"})
-        if name == "run_backtest":
-            return _compact(await _backtest(bot, str(args.get("symbol", "")).upper(), args.get("timeframe"), args.get("strategy")))
-        if name == "run_optimizer":
-            return _compact(await _optimize(bot, str(args.get("symbol", "")).upper()))
-        if name == "run_walk_forward":
-            return _compact(await _walk_forward(bot, str(args.get("symbol", "")).upper()))
         if name == "list_code":
             return code_reader.list_dir(args.get("path"))
         if name == "read_code":

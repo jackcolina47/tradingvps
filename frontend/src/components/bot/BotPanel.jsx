@@ -13,7 +13,7 @@ const Stat = ({ label, value, testId }) => (
 const STAGES = [
   ["Etapa 0 · Filtro técnico (sin IA)", "EMAs 20/50/200, RSI, MACD, ADX, ATR, volumen y zonas de oferta/demanda de cada par. Descarta mercados planos, pares con posición abierta y pares bloqueados por evento rojo."],
   ["Etapa 1 · Modelo rápido", "Una sola llamada con la tabla de todos los pares: elige como máximo 3 candidatos."],
-  ["Etapa 2 · Modelo potente", "Analiza cada candidato como un trader profesional, aplica las reglas aprendidas y responde BUY / SELL / PASS con un % de confianza. No repite el par hasta que cierra la vela."],
+  ["Etapa 2 · Modelo potente", "Analiza cada candidato como un trader profesional, aplica las reglas aprendidas y responde BUY / SELL / PASS con un % de confianza. Vuelve a analizar cada candidato cada 5 minutos hasta abrir operación o llenar las posiciones máximas."],
 ];
 
 export default function BotPanel({ settings: s, account, equity, fmtLeverage = (v) => `${v}x` }) {

@@ -1,15 +1,15 @@
-import time
-import asyncio
 import logging
 from models import SettingsUpdate, AVAILABLE_SYMBOLS, STRATEGY_KEYS, CRYPTO_STRATEGY_KEYS, ENTRY_ORDER_TYPES, REGIME_SMAS, now_iso
 from performance import maker_stats, excursion_stats
 from risk import trade_rules
-import regime
 from performance import performance
-from plan import backtest_stats
-from ai_advisor import advise, label as ai_label
-from optimizer import optimize, walk_forward, WF_CANDLES
-from profiles import ai_policy, PROFILES
+from ai_advisor import advise
+from ai_advisor import DEFAULT_POLICY
+
+
+def ai_policy(_level=None) -> dict:
+    """Single set of AI caps now that the risk profiles are gone."""
+    return DEFAULT_POLICY
 from shadow import recent_rejections
 import evolution
 from fx.market import SESSION_NAMES
@@ -38,20 +38,13 @@ LABELS = {"symbols": "Pares", "strategy": "Estrategia", "disabled_strategies": "
 STRATEGY_NAMES = {"trend_ema": "Tendencia EMA", "mean_reversion": "Reversión media", "breakout_turtle": "Turtle",
                   "supertrend_momentum": "Supertrend", "ema_pullback": "Pullback EMA21", "ema_cross": "Cruce EMA 10/20", "multi_horizon": "Multi-Horizonte", "double_divergence": "Divergencia doble"}
 VALUE_LABELS = {"market": "a mercado", "maker": "límite maker"}
-_plan_cache: dict = {}
-job: dict = {"status": "idle", "started_at": None, "finished_at": None, "result": None, "error": None, "step": ""}
 
 
-async def plan_stats(engine, settings, initial: float) -> dict:
-    key = (tuple(settings.symbols), settings.timeframe, settings.strategy, settings.risk_per_trade, settings.leverage,
-           str(trade_rules(settings)), settings.max_positions, initial, str(settings.symbol_params), settings.signal_mode,
-           tuple(settings.disabled_strategies))
-    hit = _plan_cache.get(key)
-    if not hit or time.time() - hit["ts"] > 300:
-        hit = {"ts": time.time(), "data": await backtest_stats(engine.market.fetch_klines, settings, initial)}
-        _plan_cache.clear()
-        _plan_cache[key] = hit
-    return hit["data"]
+ARCH_NOTE = ("El bot ya NO usa estrategias estáticas, backtest, optimizador ni perfiles de riesgo. Las entradas las decide un embudo de IA cada 60 s dentro del horario "
+             "operativo de Nueva York: filtro técnico → modelo rápido (≤3 candidatos) → modelo potente (BUY/SELL/PASS + confianza). Solo se ejecuta si la confianza supera "
+             "ai_min_confidence (10..90 en pasos de 10); el resto son sombras BAJA_CONFIANZA. Eventos rojos del calendario bloquean ±15 min. Basa tus recomendaciones SOLO en "
+             "operaciones reales y sombras: riesgo, pares, apalancamiento, max_positions, ai_min_confidence, SL/TP por ATR, breakeven/trailing/parcial. No propongas cambios de "
+             "strategy, signal_mode, disabled_strategies, symbol_params, filtros de régimen/rotación/estacionalidad ni perfiles.")
 
 
 async def build_context(engine, db, settings, acc: dict, with_backtest: bool) -> dict:
@@ -59,43 +52,25 @@ async def build_context(engine, db, settings, acc: dict, with_backtest: bool) ->
     ctx = {"settings_actuales": settings.model_dump(exclude={"bot_running"}), "cuenta": acc,
            "perfil_riesgo": {"nivel": pol["level"], "nombre": pol["name"], "topes_ia": pol["caps"]},
            "rendimiento_real": await performance(db), "chequeo_plan": await engine.checkin(settings, acc),
-           "motivos_rechazo_recientes_ia": await recent_rejections(db)}
+           "motivos_rechazo_recientes_ia": await recent_rejections(db),
+           "arquitectura": ARCH_NOTE}
     ctx["rendimiento_real"]["shadow"]["_explicacion"] = ("Operaciones sombra: qué habría pasado si se hubieran ejecutado las señales rechazadas por la IA "
                                                          "(RECHAZADA, BAJA_CONFIANZA), bloqueadas por riesgo (BLOQUEADA), por noticias (NOTICIAS), por funding extremo en contra (FUNDING), "
                                                          "con error de IA (ERROR) o aprobadas pero no abiertas (NO_EJECUTADA: lote mínimo, margen, bróker). "
                                                          "filter_value > 0 = el filtro evitó pérdidas netas; < 0 = el filtro dejó escapar ganancias. "
                                                          "by_confidence sirve para calibrar ai_min_confidence con evidencia.")
-    if engine.news and engine.news.latest:
-        ctx["noticias"] = {"mercado": engine.news.latest["market"], "alertas": engine.news.latest.get("alerts", [])[:5]}
     ctx["evolucion"] = await evolution.ai_context(engine)
     if hasattr(settings, "btc_regime_filter"):
         try:
-            ctx["regimen_btc"] = {**await regime.btc_regime(engine.market, settings.btc_regime_sma), "filtro_activo": settings.btc_regime_filter,
-                                  "_explicacion": "Filtro de régimen: con BTC bajo su SMA diaria solo se permiten cortos (y viceversa). Las señales bloqueadas van a Sombra con kind REGIMEN: "
-                                                  "si con ≥ 30 sombras REGIMEN el pnl sombra es claramente positivo el filtro está dejando escapar ganancias; si es negativo, protege."}
-            rot = await regime.current_rotation(engine, settings)
-            ctx["rotacion_semanal"] = {"activa": settings.rotation_enabled, "calculada": rot["computed_at"], "dias": rot["lookback_days"], "ranking": rot["ranking"],
-                                       "_explicacion": "Rotación por momentum (ponderado por volumen): tercio ganador solo largos, tercio perdedor solo cortos, mitad menos líquida al 75 % de tamaño. "
-                                                       "Las señales en contra van a Sombra con kind ROTACION."}
             ctx["entradas_maker"] = {**await maker_stats(db), "tipo_actual": settings.entry_order_type, "velas_espera": settings.maker_wait_bars,
                                      "_explicacion": "Entradas con orden límite post-only (0,02 %) frente a mercado (0,055 %): fill_rate = % de señales llenadas como maker; "
                                                      "market_fallbacks = pasaron a mercado tras esperar. by_entry_type en rendimiento_real compara el PnL de cada tipo."}
-            ctx["largo_plazo"] = {"max_long_positions": settings.max_long_positions, "by_horizon": ctx["rendimiento_real"].get("by_horizon"),
-                                  "_explicacion": "Las estrategias Multi-Horizonte (1d) y Divergencia doble (4h) abren operaciones de largo plazo con su propio tope de posiciones; no cuentan en max_positions."}
             ctx["gestion_salidas"] = {"reglas_actuales": trade_rules(settings), "excursion": await excursion_stats(db),
                                       "_explicacion": "Recorrido de cada operación cerrada: mfe_r = máximo a favor en R (1 R = distancia al stop inicial), mae_r = máximo en contra, "
                                                       "mfe_tp_pct = % del camino al TP que llegó a recorrer. near_miss = cerradas sin tocar el TP tras alcanzar ≥ 70 % de él (rebotes). "
                                                       "partial = operaciones con cierre parcial ejecutado (partial_tp_pct % cerrado a +partial_tp_r R; el resto sigue con trailing)."}
         except Exception as e:
             logger.warning(f"contexto régimen/rotación: {e}")
-    wf_latest = await db.wf_checks.find_one({"_id": "latest"}, {"_id": 0, "ran_at": 1, "results": 1})
-    if wf_latest and wf_latest.get("results"):
-        ctx["walk_forward_pares_aplicados"] = {"revisado": wf_latest["ran_at"], "pares": {s: {k: r[k] for k in ("verdict", "wfe", "oos", "previous_verdict")}
-                                                                                       for s, r in wf_latest["results"].items()},
-                                               "_explicacion": "Revalidación walk-forward de los pares con symbol_params aplicados; SOBREAJUSTADO/NO_RENTABLE = quitar sus symbol_params."}
-    if with_backtest:
-        bt = await plan_stats(engine, settings, acc["initial_balance"])
-        ctx["backtest"] = {k: bt[k] for k in ("per_symbol", "by_strategy", "monte_carlo", "trades_per_month", "days")}
     return ctx
 
 
@@ -222,74 +197,3 @@ async def run_auto_review(engine, db, store) -> dict:
            + _footer(acc))
     await notify.notify(msg, "review", bot="bybit")
     return {**res, "applied": applied, "previous": previous, "ran_at": store.cfg.auto_review_last_at}
-
-
-async def _safe_walk_forward(engine, settings, initial: float, sym: str):
-    """Compact walk-forward verdict for the AI context; never breaks the global job."""
-    try:
-        klines = await engine.market.fetch_history(sym, settings.timeframe, WF_CANDLES)
-        wf = await asyncio.to_thread(walk_forward, klines, settings.strategy, settings.risk_per_trade, settings.leverage,
-                                     trade_rules(settings), initial, sym, settings.signal_mode, settings.disabled_strategies, settings.symbol_params.get(sym))
-        out = {k: wf[k] for k in ("verdict", "verdict_text", "wfe", "oos", "baseline_oos", "is_expectancy_r", "beats_baseline", "params_stable", "params_unique")} | {"folds": len(wf["folds"])}
-        if wf["applied"]:
-            out["symbol_params_aplicados"] = {k: wf["applied"][k] for k in ("params", "verdict", "verdict_text", "wfe", "oos")}
-        return out
-    except Exception as e:
-        logger.warning(f"walk-forward {sym}: {e}")
-        return None
-
-
-async def run_global_optimization(engine, db) -> dict:
-    settings = await engine.get_settings()
-    acc = await engine.account_summary()
-    before = settings.model_dump(exclude={"bot_running"})
-    initial = acc["initial_balance"]
-    await engine.log("AI_EVAL", f"Optimización global IA iniciada · {len(settings.symbols)} pares · perfil {PROFILES[settings.risk_profile]['name']}")
-    results = []
-    for sym in settings.symbols:
-        job["step"] = f"Optimizando {sym}"
-        klines = await engine.market.fetch_klines(sym, settings.timeframe, 1000, cache_sec=300)
-        res = await asyncio.to_thread(optimize, klines, settings.strategy, settings.risk_per_trade, settings.leverage,
-                                      trade_rules(settings), initial, sym, settings.signal_mode, settings.disabled_strategies)
-        job["step"] = f"Validando {sym} (walk-forward)"
-        wf = await _safe_walk_forward(engine, settings, initial, sym)
-        results.append({**res, "timeframe": settings.timeframe, "applied": settings.symbol_params.get(sym), "walk_forward": wf})
-    job["step"] = f"{ai_label()} analizando todos los datos"
-    ctx = await build_context(engine, db, settings, acc, True)
-    ctx["optimizador"] = [{k: r.get(k) for k in ("symbol", "best", "baseline", "timeframe", "applied", "walk_forward")} for r in results]
-    res = await advise("optimizacion_global_boton_usuario", ctx, ai_policy(settings.risk_profile))
-    applied, previous = await apply_ai_changes(engine, res, before, settings, allowed=CRYPTO_AI_KEYS, strategy_keys=CRYPTO_STRATEGY_KEYS)
-    await engine.log("AI_EVAL", f"Optimización global: {res['summary'][:160]}" + (f" · cambios: {', '.join(applied)}" if applied else " · sin cambios"))
-    msg = (f"🎯 <b>Optimización global con IA</b> (perfil {PROFILES[settings.risk_profile]['name']})\n{res['summary']}\n\n"
-           + (f"<b>Cambios aplicados</b>\n{changes_text(applied)}" if applied else "<b>Sin cambios</b> en la configuración")
-           + (("\n\n" + "\n".join(f"– {n}" for n in res["notes"])) if res["notes"] else "")
-           + _footer(acc))
-    await notify.notify(msg, "review", bot="bybit")
-    return {**res, "applied": applied, "previous": previous, "optimizer": results, "ran_at": now_iso()}
-
-
-async def start_global_optimization(engine, db, runner=None, state: dict = None) -> bool:
-    state = job if state is None else state
-    runner = runner or run_global_optimization
-    if state["status"] == "running":
-        return False
-    state.update(status="running", started_at=now_iso(), finished_at=None, result=None, error=None, step="Preparando")
-
-    async def _run():
-        try:
-            state["result"] = await runner(engine, db)
-            state["status"] = "done"
-        except Exception as e:
-            logger.exception("global optimization")
-            state.update(status="error", error=str(e)[:300])
-            await engine.log("ERROR", f"Optimización global IA falló: {str(e)[:160]}")
-        finally:
-            state["finished_at"] = now_iso()
-            state["step"] = ""
-
-    asyncio.create_task(_run())
-    return True
-
-
-def job_state(state: dict = None) -> dict:
-    return dict(job if state is None else state)

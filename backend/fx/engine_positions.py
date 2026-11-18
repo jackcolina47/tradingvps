@@ -12,7 +12,7 @@ from fx.symbols import SPECS, fmt_price, pips
 from fx import risk
 from risk import be_allowed, ema_partial_due, EMA_PARTIAL_PCT
 from fx.metaapi import MetaApiError, TRADE_DISABLED_CODES
-from strategies import EMA_TEST_TAG
+from legacy import EMA_TEST_TAG
 from fx.engine_core import logger, LIVE_GRACE_SEC, TRANSIENT_TG_SEC, PENDING_TTL_SEC, HORIZON_LABEL, FX_STRATEGY_INFO
 
 

@@ -3,34 +3,28 @@ import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
-from models import Settings, Position, Trade, Signal, LogEntry, now_iso
+from models import Settings, Position, Trade, LogEntry, now_iso
 from market import MarketData, HTF
-from indicators import build_df, trend_label, htf_trend
-from strategies import evaluate, exit_signal, ema_test, ema_test_params, atr_params, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST, EMA_TEST_TAG, STRATEGY_INFO as FAST_INFO
-from strategies_slow import SLOW_INFO, SLOW_KEYS, evaluate_slow
+from indicators import build_df
+from legacy import exit_signal, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST, EMA_TEST_TAG, INFO as LEGACY_INFO
 from risk import FEE_RATE, MAKER_FEE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules, move_in_r, tp_in_r, partial_qty, be_allowed, ema_partial_due, EMA_PARTIAL_PCT
-import price_action
-import ai_funnel
 import housekeeping
 import position_review
-import ai_rules
 import trade_learning
 from plan import SCENARIOS, build_checkin, contributions as plan_contributions
 import notify as _notify
-from bybit import BybitClient, BybitError
+from bybit import BybitClient
 from live import LiveBroker
 from shadow import open_shadow, monitor_shadows
 import evolution
-import funding
 import cashflow
-import regime
 import maker
 import broker_health
 import trade_guard
 import funnel
 from broker_health import fmt_duration
 
-STRATEGY_INFO = {**FAST_INFO, **SLOW_INFO, **funnel.INFO}
+STRATEGY_INFO = {**LEGACY_INFO, **funnel.INFO}
 BLOCK_BY = {"NOTICIAS": "noticias", "FUNDING": "funding", "BLOQUEADA": "riesgo", "REGIMEN": "régimen de BTC", "ROTACION": "rotación semanal",
             "RR_BAJO": "R:R insuficiente", "SPREAD": "spread", "HORARIO": "horario operativo"}
 HORIZON_LABEL = {"long": "largo plazo", "short": "corto plazo"}
@@ -279,6 +273,9 @@ class TradingEngine:
                 self._external_warned.add(sym)
                 await self.log("RISK", f"{sym}: posición externa detectada en Bybit (no gestionada por el bot) · tamaño {ex[sym]['size']}")
         await trade_guard.protect_positions(self)
+        hit = [d["symbol"] for d in await self.db.pending_entries.find({}, {"symbol": 1}).to_list(50) if trade_guard.calendar.blocking(self.guard_kind, d["symbol"])]
+        if hit:
+            await maker.cancel_all(self, f"evento rojo · bloqueo ±{trade_guard.BEFORE_MIN} min", hit)
         await monitor_shadows(self, tickers, rules)
         await maker.monitor_pending(self, tickers)
         await self._update_account_metrics(settings)
@@ -785,57 +782,6 @@ class TradingEngine:
                                + (" (test cruce EMA: se invierte si el test sigue activo)" if d["strategy"] == EMA_TEST else ""))
                 await self.close_position(str(d["_id"]), None, EXIT_REASON)
 
-    async def _handle_test_signal(self, symbol: str, sig: dict, settings: Settings, df):
-        """«Test cruce EMA 10/20»: stop-and-reverse on the raw cross. Immune to AI approval, funnel, market gates and «Máx. posiciones»;
-        only the daily-loss limit and one position per pair apply. The opposite position was already closed by _exit_on_cross."""
-        key = f"{symbol}:{EMA_TEST}:{sig['side']}:{sig['key_ts']}"
-        if key in self.signal_keys or await self.db.signals.find_one({"key": key}, {"_id": 1}):
-            return
-        self.signal_keys.add(key)
-        signal = Signal(symbol=symbol, side=sig["side"], strategy=EMA_TEST, timeframe=settings.timeframe, price=sig["price"], sl=sig["sl"], tp=sig["tp"],
-                        score=sig["score"], reasons=sig["reasons"], indicators=sig["indicators"], key=key, ai_decision="SIN_IA",
-                        ai_reasoning="Test cruce EMA 10/20: entrada directa por cruce, inmune a la aprobación de la IA", context={"exit_mode": "cross"})
-        acc = await self.account_summary()
-        open_syms = [p["symbol"] for p in await self._open_and_pending()]
-        block = ("límite de pérdida diaria alcanzado" if acc["daily_paused"] else "ya existe una posición abierta en el par" if symbol in open_syms
-                 else "Bybit sin respuesta · sin conexión con el exchange" if self.live and self.bybit["down_since"] else None)
-        if block:
-            signal.ai_decision, signal.note = "BLOQUEADA", f"Bloqueada por riesgo: {block}"
-            await self.db.signals.insert_one(signal.to_mongo())
-            await self.log("RISK", f"{symbol}: cruce EMA (test) no operado · {block}")
-            return
-        res = await self.db.signals.insert_one(signal.to_mongo())
-        await self.log("SIGNAL", f"{symbol} {sig['side'].upper()} · Test cruce EMA 10/20 · {sig['reasons'][0]}")
-        await self.open_position(symbol, sig, settings, str(res.inserted_id), exit_mode="cross")
-
-    def slow_active(self, settings: Settings) -> list:
-        if settings.strategy != "all":
-            return [settings.strategy] if settings.strategy in SLOW_KEYS else []
-        return [k for k in SLOW_KEYS if k not in settings.disabled_strategies]
-
-    async def _scan_slow(self, settings: Settings) -> int:
-        """Long-horizon strategies run on their own timeframe (1d / 4h) with candles cached 10 min; one signal per closed candle."""
-        found = 0
-        for key in self.slow_active(settings):
-            info = SLOW_INFO[key]
-            for symbol in settings.symbols:
-                try:
-                    params = settings.symbol_params.get(symbol) or {}
-                    rows = await self.market.fetch_history(symbol, info["tf"], info["bars"], cache_sec=600)
-                    if len(rows) < 215:
-                        continue
-                    df = build_df(rows, int(params.get("atr_period", 14)))
-                    sig = evaluate_slow(df, len(df) - 2, key, params)
-                    if sig:
-                        self.analysis.setdefault(symbol, {})["slow_signal"] = f"{key}:{sig['side']}"
-                        if self.running:
-                            found += 1
-                            await self._handle_signal(symbol, sig, settings, df, None, info["tf"], horizon="long", tf=info["tf"])
-                except Exception as e:
-                    logger.exception(f"slow scan {symbol} {key}")
-                    await self.log("ERROR", f"{symbol} ({info['name']}): {e}")
-        return found
-
     def _slot_block(self, open_docs: list, settings: Settings, horizon: str):
         """Long-horizon positions have their own cap and do not count towards «Máx. posiciones». `open_docs` includes pending maker entries."""
         same = [p for p in open_docs if (p.get("horizon") or "short") == horizon and p.get("exit_mode") != "cross"]  # test positions use no slot
@@ -849,83 +795,3 @@ class TradingEngine:
         q = {"symbol": {"$ne": exclude_symbol}} if exclude_symbol else {}
         docs += [{**d, "pending": True} for d in await self.db.pending_entries.find(q, {"symbol": 1, "horizon": 1}).to_list(100)]
         return docs
-
-    async def _handle_signal(self, symbol, sig, settings: Settings, df, htf, htf_tf, horizon: str = "short", tf: str = None):
-        """Every detected signal is opened. Only gates: risk limits (one position per pair, slots, daily loss, exchange down) and the learned rules."""
-        key = f"{symbol}:{sig['strategy']}:{sig['side']}:{sig['key_ts']}"
-        if key in self.signal_keys:
-            return
-        self.signal_keys.add(key)
-        tf = tf or settings.timeframe
-        name = STRATEGY_INFO[sig["strategy"]]["name"]
-        await self.log("SIGNAL", f"{symbol} {sig['side'].upper()} · {name} · {sig['score']} confirmaciones" + (" · largo plazo" if horizon == "long" else ""))
-        acc = await self.account_summary()
-        open_docs = await self._open_and_pending()
-        open_syms = [p["symbol"] for p in open_docs]
-        block = None
-        if symbol in open_syms:
-            block = "ya existe una posición abierta (o una orden límite en espera) en el par"
-        elif self._slot_block(open_docs, settings, horizon):
-            block = self._slot_block(open_docs, settings, horizon)
-        elif acc["daily_paused"]:
-            block = "límite de pérdida diaria alcanzado"
-        elif self.live and self.bybit["down_since"]:
-            block = "Bybit sin respuesta · sin conexión con el exchange"
-        block = block or trade_guard.entry_block(self.guard_kind, symbol)[0]
-        t0 = self.market.tickers.get(symbol, {})
-        closes = df["close"].iloc[-22:-1]
-        context = {"mode": "REAL" if self.live else "PAPER", "htf_tf": htf_tf, "htf_trend": {1: "ALCISTA", -1: "BAJISTA", 0: "NEUTRAL"}.get(htf, "N/D"),
-                   "horizon": horizon, "signal_tf": tf, "entry_order_type": settings.entry_order_type,
-                   "price_now": t0.get("price"), "change_24h": t0.get("change_pct"), "funding_rate": t0.get("funding_rate"), "funding_interval_h": t0.get("funding_interval_h", 8),
-                   "open_positions": len(open_syms), "max_positions": settings.max_positions, "daily_pnl_pct": acc["daily_pnl_pct"], "equity": acc["equity"],
-                   "recent_changes": [round(x, 3) for x in (closes.pct_change().dropna() * 100).tolist()],
-                   "price_action": price_action.from_df(df, sig["side"], sig["price"], sig["indicators"].get("atr", 0), sig["sl"], sig["tp"], upto=len(df) - 1)}
-        signal = Signal(symbol=symbol, side=sig["side"], strategy=sig["strategy"], timeframe=tf,
-                        price=sig["price"], sl=sig["sl"], tp=sig["tp"], score=sig["score"], reasons=sig["reasons"],
-                        indicators=sig["indicators"], ai_decision="SIN_IA", key=key, context=context)
-        if block:
-            await self.log("RISK", f"{symbol}: señal descartada · {block}")
-            signal.ai_decision, signal.note = "BLOQUEADA", f"Bloqueada por riesgo: {block}"
-            res = await self.db.signals.insert_one(signal.to_mongo())
-            await open_shadow(self, str(res.inserted_id), symbol, sig, settings, "BLOQUEADA", acc["equity"], horizon=horizon)
-            return
-
-        approve, rule = True, None
-        rules = await ai_rules.active(self.db, symbol)
-        if not rules:
-            signal.ai_reasoning = "Sin reglas aprendidas activas: entrada directa"
-        else:
-            try:
-                res = await ai_funnel.rules_check(symbol, tf, sig, context, rules)
-                signal.ai_stage, signal.ai_model, signal.ai_ms = 1, res["model"], res["ms"]
-                if res["violates"]:
-                    rule, approve = res["rule"], False
-                    signal.ai_decision, signal.ai_reasoning = "RECHAZADA", f"Regla incumplida: «{rule['text']}» · {res['reason']}"
-                    await ai_rules.hit(self.db, rule["id"])
-                else:
-                    signal.ai_decision, signal.ai_reasoning = "APROBADA", f"No incumple ninguna de las {len(rules)} reglas aprendidas"
-                    signal.ai_adjusted_sl, signal.ai_adjusted_tp = res["sl"], res["tp"]
-                    change = ai_funnel.apply_levels(sig, res["sl"], res["tp"])
-                    if change:
-                        signal.sl, signal.tp, signal.default_sl, signal.default_tp, signal.ai_levels_applied = sig["sl"], sig["tp"], sig["default_sl"], sig["default_tp"], True
-                        signal.ai_reasoning += f" · niveles ajustados por lo aprendido: {change}" + (f" · {res['reason']}" if res["reason"] else "")
-            except Exception as e:
-                logger.exception("rules check")
-                signal.note = f"Reglas no comprobadas (IA sin respuesta: {str(e)[:120]}) · se abre sin filtro"
-            await self.log("AI_EVAL", f"{symbol}: {signal.ai_reasoning or signal.note}" + (f" · {signal.ai_model} · {signal.ai_ms} ms" if signal.ai_model else ""))
-            if rule:
-                await self.tg(f"📚 <b>{symbol} {sig['side'].upper()} bloqueada por regla</b>\n{signal.ai_reasoning[:300]}", "ai")
-        res = await self.db.signals.insert_one(signal.to_mongo())
-        sid = str(res.inserted_id)
-        if approve:
-            self._open_fail = None
-            if settings.entry_order_type == "maker":
-                pos = await maker.queue_entry(self, symbol, sig, settings, sid, 1.0, "", horizon, tf)
-            else:
-                pos = await self.open_position(symbol, sig, settings, sid, horizon=horizon)
-            if not pos:
-                reason = self._open_fail or "apertura cancelada"
-                await self.db.signals.update_one({"_id": res.inserted_id}, {"$set": {"note": f"No ejecutada: {reason}"}})
-                await open_shadow(self, sid, symbol, sig, settings, "NO_EJECUTADA", acc["equity"], horizon=horizon)
-        else:
-            await open_shadow(self, sid, symbol, sig, settings, "REGLA", acc["equity"], horizon=horizon, rule_id=rule["id"])

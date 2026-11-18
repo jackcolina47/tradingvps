@@ -9,14 +9,14 @@ const BOTS = [
     key: "crypto", path: "/bybit", icon: Zap, accent: "amber",
     title: <>Bybit <span className="text-amber-400">AI</span> Trader</>,
     subtitle: "Criptomonedas · Futuros perpetuos USDT",
-    desc: "Bot cripto 24/7 con 8 estrategias: abre todas las señales y aprende reglas de cada operación cerrada para filtrar las siguientes. Optimizador walk-forward y modo REAL en Bybit.",
+    desc: "Bot cripto con Embudo IA: filtro técnico, modelo rápido y modelo potente dentro del horario de Nueva York, con bloqueo por eventos rojos y reglas aprendidas. Modo REAL en Bybit.",
     tags: ["BTC · ETH · SOL · XRP…", "Paper / REAL Bybit", "Bitget espejo"],
   },
   {
     key: "fx", path: "/hotforex", icon: Landmark, accent: "sky",
     title: <>HotForex <span className="text-sky-400">AI</span> Trading</>,
     subtitle: "Forex y metales · Oro, plata, EUR, GBP, CHF, CAD, NZD, JPY",
-    desc: "Mismo motor adaptado a divisas: horario forex, lotes y pips, agenda macro de 8 economías, trading por noticias con IA y cuenta real HFM vía MetaApi.",
+    desc: "Mismo Embudo IA adaptado a divisas: lotes y pips, volumen de ticks del bróker, bloqueo por eventos rojos de cada divisa y cuenta real HFM vía MetaApi.",
     tags: ["XAUUSD · XAGUSD · EURUSD…", "Paper trading · 1:100", "Yahoo Finance · HFM"],
   },
   {

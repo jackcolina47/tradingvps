@@ -2,8 +2,8 @@
   stage 0 · metrics per pair (EMAs 20/50/200, RSI, MACD, ADX, ATR, volume, supply/demand zones) + deterministic filter, no AI
   stage 1 · cheap model picks 0–3 candidates from the whole table (one call)
   stage 2 · strong model analyses each candidate like a professional trader (+ learned rules) → BUY / SELL / PASS and a success confidence.
-Confidence above the configured threshold → real entry; below → shadow trade. A pair analysed by stage 2 is not analysed again until the
-candle of the working timeframe closes. Position size always comes from the fixed-fractional risk sizing of each engine."""
+Confidence above the configured threshold → real entry; below → shadow trade (one per candle). A stage-1 candidate is sent again to stage 2 after the
+5-minute cool-down passes (while the cheap model keeps picking it and slots remain). Position size always comes from the fixed-fractional risk sizing of each engine."""
 import time
 import json
 import asyncio
@@ -27,6 +27,7 @@ CONFIDENCE_LEVELS = (10, 20, 30, 40, 50, 60, 70, 80, 90)
 FAST_TIMEOUT_SEC, DEEP_TIMEOUT_SEC = 25, 75
 SL_ATR_BAND = (0.5, 4.0)   # an AI stop must sit between 0.5 and 4 ATR from the entry
 MIN_RR = 1.0
+DEEP_COOLDOWN_SEC = 300    # a stage-1 candidate goes back to the strong model every 5 min until it trades or the slots fill up
 REPEAT_MOVE_ATR = 0.15     # stage 1 is not repeated while no eligible pair moved this much (in ATR) since the last call on the same candle
 MARKET = {"crypto": "criptomonedas (futuros perpetuos USDT)", "fx": "forex y metales (CFD)"}
 
@@ -256,8 +257,6 @@ async def run(engine, settings) -> int:
             _note(engine, symbol, 0, "NOTICIAS", f"Bloqueado por evento rojo: {trade_guard.event_label(ev)}")
             await _say(engine, f"news:{symbol}", "RISK", f"{symbol}: sin entradas por evento rojo ({trade_guard.event_label(ev)}) · ±{trade_guard.BEFORE_MIN} min")
             continue
-        if _key(symbol, m["candle_ts"]) in engine.signal_keys:
-            continue   # stage 2 already analysed this pair on the current candle
         why = stage0(m)
         if why:
             _note(engine, symbol, 0, "DESCARTADO", why)
@@ -267,24 +266,28 @@ async def run(engine, settings) -> int:
         return 0
     fp = {s: (m["candle_ts"], m["price"]) for s, m in eligible.items()}
     last = engine.funnel_last
-    if set(fp) == set(last) and all(fp[s][0] == last[s][0] and abs(fp[s][1] - last[s][1]) < REPEAT_MOVE_ATR * eligible[s]["atr"] for s in fp):
-        return 0   # nothing moved since the last stage-1 call: no tokens spent
-    engine.funnel_last = fp
     limit = min(MAX_CANDIDATES, state["free"])
-    try:
-        s1 = await stage1(kind, tf, eligible, limit, engine.usage_kind)
-    except Exception as e:
-        logger.exception("funnel stage 1")
-        await engine.log("ERROR", f"Embudo · filtro rápido sin respuesta: {str(e)[:140]}")
-        return 0
-    picked = {c["symbol"] for c in s1["candidates"]}
-    for symbol in eligible:
-        if symbol not in picked:
-            _note(engine, symbol, 1, "DESCARTADO", f"El filtro rápido no ve entrada ({s1['model']})")
-    await engine.log("SCAN", f"Embudo {tf} · {len(rows)} pares → {len(eligible)} tras filtro técnico → {len(picked)} candidato(s) del modelo rápido"
-                             + (f": {', '.join(c['symbol'] + ' ' + c['side'].upper() for c in s1['candidates'])}" if picked else "") + f" · {s1['model']} · {s1['ms']} ms")
+    s1 = getattr(engine, "funnel_s1", None)
+    if not (s1 and set(fp) == set(last) and all(fp[s][0] == last[s][0] and abs(fp[s][1] - last[s][1]) < REPEAT_MOVE_ATR * eligible[s]["atr"] for s in fp)):
+        engine.funnel_last = fp   # something moved since the last stage-1 call (otherwise its candidates are reused: no tokens spent)
+        try:
+            s1 = engine.funnel_s1 = await stage1(kind, tf, eligible, limit, engine.usage_kind)
+        except Exception as e:
+            logger.exception("funnel stage 1")
+            await engine.log("ERROR", f"Embudo · filtro rápido sin respuesta: {str(e)[:140]}")
+            return 0
+        picked = {c["symbol"] for c in s1["candidates"]}
+        for symbol in eligible:
+            if symbol not in picked:
+                _note(engine, symbol, 1, "DESCARTADO", f"El filtro rápido no ve entrada ({s1['model']})")
+        await engine.log("SCAN", f"Embudo {tf} · {len(rows)} pares → {len(eligible)} tras filtro técnico → {len(picked)} candidato(s) del modelo rápido"
+                                 + (f": {', '.join(c['symbol'] + ' ' + c['side'].upper() for c in s1['candidates'])}" if picked else "") + f" · {s1['model']} · {s1['ms']} ms")
     found = 0
-    for cand in s1["candidates"]:
+    deep_at = engine.__dict__.setdefault("funnel_deep_at", {})
+    for cand in s1["candidates"][:limit]:
+        if cand["symbol"] not in eligible or time.time() - deep_at.get(cand["symbol"], 0) < DEEP_COOLDOWN_SEC:
+            continue   # the strong model looks at a candidate again every 5 minutes, not every cycle
+        deep_at[cand["symbol"]] = time.time()
         try:
             found += await _deep(engine, settings, cand, eligible[cand["symbol"]], frames[cand["symbol"]], s1)
         except Exception as e:
@@ -299,8 +302,8 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
     state = await engine.funnel_state(settings)
     if state["block"] or state["free"] <= 0 or symbol in state["open"]:
         return 0
-    key = _key(symbol, m["candle_ts"])
-    engine.signal_keys.add(key)   # locked until the candle of the working timeframe closes, whatever the verdict
+    candle_key = _key(symbol, m["candle_ts"])
+    key = f"{candle_key}:{int(time.time())}"
     htf_tf = engine.funnel_htf(tf)
     htf_df, _ = await engine.funnel_frame(symbol, htf_tf, 250)
     rules = await ai_rules.active(engine.db, symbol)
@@ -319,6 +322,10 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
     sl, tp, source = levels(side, price, m["atr"], settings, res["sl"], res["tp"], engine.funnel_digits(symbol))
     threshold = settings.ai_min_confidence
     approved = res["confidence"] > threshold
+    if not approved and candle_key in engine.signal_keys:   # this candle already has its shadow trade: just report the new verdict
+        _note(engine, symbol, 2, "SOMBRA", f"Confianza {res['confidence']}% ≤ {threshold}% · {res['reasoning']}", res["confidence"])
+        await engine.log("AI_EVAL", f"{symbol} {res['decision']} · confianza {res['confidence']}% (umbral {threshold}%) → sigue sin ejecutarse · nuevo análisis en 5 min · {res['reasoning'][:160]}{tail}")
+        return 0
     sig = {"side": side, "price": price, "sl": sl, "tp": tp, "strategy": STRATEGY, "atr": m["atr"], "score": 2, "key_ts": m["candle_ts"],
            "reasons": [f"Filtro rápido: {cand['reason']}", f"Modelo potente ({res['confidence']}%): {res['reasoning']}"],
            "indicators": {k: m[k] for k in ("close", "ema20", "ema50", "ema200", "rsi", "macd_hist", "adx", "atr", "activity")}}
@@ -335,6 +342,7 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
     if not approved:
         _note(engine, symbol, 2, "SOMBRA", f"Confianza {res['confidence']}% ≤ {threshold}% → operación sombra · {res['reasoning']}", res["confidence"])
         await engine.log("AI_EVAL", f"{head} → RECHAZADA, se sigue como sombra · {res['reasoning'][:200]}{tail}")
+        engine.signal_keys.add(candle_key)
         await engine.funnel_shadow(sid, symbol, sig, settings, "BAJA_CONFIANZA", state["acc"], res["confidence"])
         return 1
     await engine.log("AI_EVAL", f"{head} → APROBADA · SL/TP {'fijos por ATR' if source == 'atr' else 'de la IA'} · {res['reasoning'][:200]}{tail}")

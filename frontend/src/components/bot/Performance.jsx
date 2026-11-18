@@ -3,7 +3,7 @@ import { Loader2, Power } from "lucide-react";
 import { toast } from "sonner";
 import { Empty } from "./Panel";
 import { TH, TD } from "./PositionsTable";
-import { http, fmtSignedUsd, fmtUsd, pnlClass, STRATEGY_LABELS, STRATEGY_KEYS, REASON_LABELS, HORIZON_LABELS, ENTRY_LABELS, activeStrategies } from "@/lib/api";
+import { http, fmtSignedUsd, fmtUsd, pnlClass, STRATEGY_LABELS, REASON_LABELS, HORIZON_LABELS, ENTRY_LABELS } from "@/lib/api";
 import ShadowStats from "./performance/ShadowStats";
 import ExcursionStats from "./performance/ExcursionStats";
 import DailyPnl from "./performance/DailyPnl";
@@ -44,7 +44,7 @@ const Group = ({ title, label, rows, render = (k) => k, testId, isOn, onToggle, 
   </div>
 );
 
-export default function Performance({ tradeCount, settings, onSave, strategyKeys = STRATEGY_KEYS }) {
+export default function Performance({ tradeCount, settings, onSave }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(false);
   useEffect(() => {
@@ -54,18 +54,9 @@ export default function Performance({ tradeCount, settings, onSave, strategyKeys
   if (error && !data) return <Empty testId="performance-error" text="No se pudo cargar el rendimiento. Reintentando en el próximo refresco." />;
   if (!data) return <div className="flex min-h-[120px] items-center justify-center text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /></div>;
   const sig = data.signals;
-  const active = activeStrategies(settings, strategyKeys);
   const mk = data.maker;
   const hasTrades = data.by_strategy.length > 0;
-  // every strategy of this bot, with or without closed trades, so each one can be switched on/off from here
-  const stratRows = [...strategyKeys.map((k) => data.by_strategy.find((r) => r.key === k) || { key: k, trades: 0, win_rate: 0, profit_factor: null, avg_pnl: 0, pnl: 0 }),
-    ...data.by_strategy.filter((r) => !strategyKeys.includes(r.key))];
 
-  const toggleStrategy = (k, on) => {
-    const next = on ? [...active, k] : active.filter((x) => x !== k);
-    if (!next.length) return toast.error("Debe quedar al menos una estrategia activa");
-    return onSave({ strategy: "all", disabled_strategies: strategyKeys.filter((x) => !next.includes(x)) });
-  };
   const toggleSymbol = (s, on) => {
     const next = on ? [...settings.symbols, s] : settings.symbols.filter((x) => x !== s);
     if (!next.length) return toast.error("Debe quedar al menos un par activo");
@@ -75,7 +66,7 @@ export default function Performance({ tradeCount, settings, onSave, strategyKeys
   return (
     <div data-testid="performance-panel" className="space-y-4 p-4">
       <p className="text-[12px] leading-relaxed text-slate-400">
-        Rendimiento real del paper trading por estrategia y par. Apaga lo que pierde con el botón de cada fila (mínimo 30 operaciones antes de decidir); el bot deja de operarlo al instante y puedes reactivarlo cuando quieras.
+        Rendimiento real por par, lado y motivo de salida. Apaga los pares que pierden con el botón de cada fila (mínimo 30 operaciones antes de decidir); el bot deja de operarlo al instante y puedes reactivarlo cuando quieras.
       </p>
       <div data-testid="perf-signals" className="flex flex-wrap gap-2">
         {[["Señales", sig.total], ["Ejecutadas", sig.executed], ...Object.entries(sig.by_decision).map(([k, v]) => [DECISION[k] || k, v])].map(([l, v]) => (
@@ -85,11 +76,10 @@ export default function Performance({ tradeCount, settings, onSave, strategyKeys
           </div>
         ))}
       </div>
-      {!hasTrades && <Empty testId="performance-empty" text="Aún no hay operaciones cerradas. Las estadísticas aparecerán con las primeras operaciones del bot; mientras tanto puedes activar o apagar cada estrategia desde la tabla." />}
+      {!hasTrades && <Empty testId="performance-empty" text="Aún no hay operaciones cerradas. Las estadísticas aparecerán con las primeras operaciones del bot." />}
       <DailyPnl data={data.daily} />
       <div className={`grid grid-cols-1 gap-4 ${hasTrades ? "xl:grid-cols-2" : ""}`}>
-        <Group title="Por estrategia" label="Estrategia" rows={stratRows} render={(k) => STRATEGY_LABELS[k] || k} testId="perf-by-strategy"
-          hint={`${active.length} de ${strategyKeys.length} activas`} isOn={(k) => active.includes(k)} onToggle={toggleStrategy} />
+        {hasTrades && <Group title="Por origen" label="Origen" rows={data.by_strategy} render={(k) => STRATEGY_LABELS[k] || k} testId="perf-by-strategy" />}
         {hasTrades && (
           <>
             <Group title="Por par" label="Par" rows={data.by_symbol} testId="perf-by-symbol" isOn={(k) => settings.symbols.includes(k)} onToggle={toggleSymbol} />

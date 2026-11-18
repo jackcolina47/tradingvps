@@ -6,13 +6,6 @@ crons:
     method: POST
     # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
     enabled: true
-  - name: walk-forward-weekly
-    description: "Revalida cada lunes 07:00 UTC con walk-forward los pares con SL/TP optimizados de ambos bots (Bybit y HotForex) y avisa por Telegram si alguno se sobreajusta"
-    cron: "0 7 * * 1"
-    endpoint: "{{BASE_URL}}/api/cron/walk-forward"
-    method: POST
-    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
-    enabled: true
   - name: weekly-summary
     description: "Envía cada domingo 20:00 UTC el resumen semanal por Telegram de ambos bots (Bybit y HotForex): PnL, pips, mejores y peores pares, filtro IA y plan"
     cron: "0 20 * * 0"

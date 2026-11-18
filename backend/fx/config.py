@@ -1,8 +1,7 @@
-"""FX bot configuration (MetaApi/MT credentials, broker account type, forex news agent, news trading); one document per broker (db.fx_config / db.pep_config)."""
+"""FX bot configuration (MetaApi/MT credentials, broker account type, auto review); one document per broker (db.fx_config / db.pep_config)."""
 from typing import Optional, List, Dict
 from pydantic import BaseModel, ConfigDict, Field
 from config import _enc, _dec, mask, _fernet
-from fx.symbols import CURRENCIES
 from fx.metaapi import PLANS, PLAN_COMMON, plan_key
 from fx.broker import HFM, BrokerProfile
 
@@ -42,25 +41,6 @@ class FxConfig(BaseModel):
     hfm_symbols_checked: Optional[List[str]] = None
     hfm_symbols_checked_at: Optional[str] = None
     hfm_alert_after_sec: int = 180
-    news_enabled: bool = True
-    news_interval_min: int = 15
-    news_countries: List[str] = list(CURRENCIES)
-    news_block_events: bool = True
-    news_event_before_min: int = 30
-    news_event_after_min: int = 15
-    news_block_critical: bool = True
-    news_reduce_on_high_risk: bool = True
-    news_size_factor: float = 0.5
-    news_trading_enabled: bool = True
-    news_trade_min_confidence: int = 75
-    news_trade_confirm_price: bool = True
-    news_trade_window_min: int = 12
-    news_trade_max_hours: int = 4
-    news_trade_risk_factor: float = 1.0
-    news_trade_sl_atr: float = 1.5
-    news_trade_tp_atr: float = 3.0
-    news_trade_max_per_event: int = 2
-    wf_auto_remove: bool = True
     auto_review_enabled: bool = True
     auto_review_frequency: str = "weekly"
     auto_review_day: int = 0
@@ -82,25 +62,6 @@ class FxConfigUpdate(BaseModel):
     metaapi_base_url: Optional[str] = Field(default=None, max_length=200)
     metaapi_plan: Optional[str] = None
     hfm_alert_after_sec: Optional[int] = Field(default=None, ge=10, le=3600)
-    news_enabled: Optional[bool] = None
-    news_interval_min: Optional[int] = Field(default=None, ge=5, le=240)
-    news_countries: Optional[List[str]] = None
-    news_block_events: Optional[bool] = None
-    news_event_before_min: Optional[int] = Field(default=None, ge=0, le=240)
-    news_event_after_min: Optional[int] = Field(default=None, ge=0, le=240)
-    news_block_critical: Optional[bool] = None
-    news_reduce_on_high_risk: Optional[bool] = None
-    news_size_factor: Optional[float] = Field(default=None, ge=0.1, le=1.0)
-    news_trading_enabled: Optional[bool] = None
-    news_trade_min_confidence: Optional[int] = Field(default=None, ge=50, le=100)
-    news_trade_confirm_price: Optional[bool] = None
-    news_trade_window_min: Optional[int] = Field(default=None, ge=3, le=60)
-    news_trade_max_hours: Optional[int] = Field(default=None, ge=1, le=48)
-    news_trade_risk_factor: Optional[float] = Field(default=None, ge=0.1, le=1.5)
-    news_trade_sl_atr: Optional[float] = Field(default=None, ge=0.5, le=5)
-    news_trade_tp_atr: Optional[float] = Field(default=None, ge=1, le=10)
-    news_trade_max_per_event: Optional[int] = Field(default=None, ge=1, le=4)
-    wf_auto_remove: Optional[bool] = None
     auto_review_enabled: Optional[bool] = None
     auto_review_frequency: Optional[str] = None
     auto_review_day: Optional[int] = Field(default=None, ge=0, le=6)
@@ -149,7 +110,6 @@ class FxConfigStore:
         d["broker"] = self.profile.public(self.cfg.account_type)
         d["hfm_current_plan"] = plan_key(self.cfg.hfm_account_type, self.cfg.hfm_reliability) if self.cfg.metaapi_account_id and self.cfg.hfm_account_type else ""
         d["hfm_plan_mismatch"] = bool(d["hfm_current_plan"] and d["hfm_current_plan"] != self.cfg.metaapi_plan)
-        d["news_currencies"] = CURRENCIES
         d["secrets_encrypted"] = _fernet is not None
         return d
 
@@ -178,8 +138,6 @@ class FxConfigStore:
             raise ValueError("El endpoint de MetaApi debe empezar por http:// o https://")
         if "mt_login" in patch and patch["mt_login"] and not patch["mt_login"].isdigit():
             raise ValueError("El login de MetaTrader debe ser numérico")
-        if "news_countries" in patch:
-            patch["news_countries"] = [c for c in dict.fromkeys(patch["news_countries"]) if c in CURRENCIES] or list(CURRENCIES)
         hfm_keys = ("metaapi_token", "mt_login", "mt_password", "mt_server", "mt_platform", "metaapi_region", "metaapi_base_url")
         changed = {k for k in hfm_keys if k in patch and patch[k] != getattr(self.cfg, k)}
         if changed and not body.clear_hfm:

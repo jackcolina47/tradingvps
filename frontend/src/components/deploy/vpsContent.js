@@ -42,7 +42,7 @@ export const STEPS = [
       "Clave IA (EMERGENT_LLM_KEY) → pega tu clave universal de Emergent o déjalo vacío y configura Google Gemini después en Ajustes → IA.",
     ],
     code: [{ where: "VPS", cmd: "sudo bash install.sh" }],
-    after: "Qué hace: [1/6] instala Docker · [2/6] crea swap si hay poca RAM · [3/6] genera deploy/.env y deploy/backend.env con secretos aleatorios (JWT_SECRET, WEBHOOK_CRON_SECRET, CREDENTIAL_ENCRYPTION_KEY) · [4/6] construye y arranca 3 contenedores: mongo (base de datos), backend (motores + API) y web (panel + proxy HTTPS con Caddy) · [5/6] programa los crons: revisión IA 08:00 UTC, walk-forward lunes 07:00, resumen semanal domingos 20:00, copia de seguridad 03:00 · [6/6] abre 80/443 en ufw si está activo. Al final imprime la dirección del panel y la contraseña.",
+    after: "Qué hace: [1/6] instala Docker · [2/6] crea swap si hay poca RAM · [3/6] genera deploy/.env y deploy/backend.env con secretos aleatorios (JWT_SECRET, WEBHOOK_CRON_SECRET, CREDENTIAL_ENCRYPTION_KEY) · [4/6] construye y arranca 3 contenedores: mongo (base de datos), backend (motores + API) y web (panel + proxy HTTPS con Caddy) · [5/6] programa los crons: revisión IA 08:00 UTC, resumen semanal domingos 20:00, copia de seguridad 03:00 · [6/6] abre 80/443 en ufw si está activo. Al final imprime la dirección del panel y la contraseña.",
   },
   {
     id: "domain", icon: "Globe", title: "Dominio y HTTPS (opcional)",
@@ -67,7 +67,7 @@ export const STEPS = [
   },
   {
     id: "update", icon: "RefreshCw", title: "Actualizar a una versión nueva",
-    text: "Descarga el zip nuevo aquí mismo, súbelo al VPS y ejecuta update-zip.sh: sustituye el código, conserva .env, backend.env, backups/ y la base de datos, y reconstruye los contenedores (2–10 min). Al arrancar, el backend aplica solo las migraciones necesarias (p. ej. deja apagada la nueva estrategia Cruce EMA 10/20 en tus ajustes). Las posiciones abiertas no se tocan.",
+    text: "Descarga el zip nuevo aquí mismo, súbelo al VPS y ejecuta update-zip.sh: sustituye el código, conserva .env, backend.env, backups/ y la base de datos, y reconstruye los contenedores (2–10 min). Al arrancar, el backend aplica solo las migraciones necesarias. Las posiciones abiertas no se tocan.",
     code: [
       { where: "Tu ordenador", cmd: "scp ai-trader-*.zip root@IP_DEL_VPS:/root/" },
       { where: "VPS", cmd: "cd /root/ai-trader/deploy && bash update-zip.sh /root/ai-trader-NUEVO.zip" },

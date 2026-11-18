@@ -12,7 +12,7 @@ from pydantic import BaseModel
 import backup
 import notify
 import migrations
-from deps import engine, db, store, fx_engine, pep_engine, news, FX_BOTS, ALL_ENGINES, ai_usage, protected_router
+from deps import engine, db, store, fx_engine, pep_engine, FX_BOTS, ALL_ENGINES, ai_usage, protected_router
 from routers import cron_routes
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ async def _log_both(level: str, text: str):
 async def reload_state():
     """Re-reads everything the processes keep in memory after the collections were replaced."""
     await store.load()
-    for _e, st, _n in FX_BOTS:
+    for _e, st in FX_BOTS:
         await st.load()
     await ai_usage.load()
     await cron_routes.init()
@@ -51,9 +51,6 @@ async def reload_state():
             if s.get("key"):
                 eng.signal_keys.add(s["key"])
         eng._external_warned = set()
-    await news.reload()
-    for _e, _s, nw in FX_BOTS:
-        await nw.reload()
     await migrations.run(engine, db)
 
 

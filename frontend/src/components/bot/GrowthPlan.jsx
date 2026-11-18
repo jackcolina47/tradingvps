@@ -7,7 +7,6 @@ import { http, errMsg } from "@/lib/api";
 import PlanScenarios from "./plan/PlanScenarios";
 import PlanProjection from "./plan/PlanProjection";
 import PlanPhases from "./plan/PlanPhases";
-import PlanMonteCarlo from "./plan/PlanMonteCarlo";
 import PlanCheckin from "./plan/PlanCheckin";
 
 const FIELDS = (cur) => [
@@ -15,7 +14,7 @@ const FIELDS = (cur) => [
   { k: "monthly_deposit", label: `Aporte mensual (${cur})`, min: 0, step: 25 },
   { k: "target_monthly", label: `Meta mensual (${cur})`, min: 50, step: 100 },
 ];
-const DEFAULT_INTRO = "Plan de crecimiento compuesto: cuándo reinvertir, cuándo subir el riesgo y cuándo empezar a retirar. Los escenarios Prudente / Realista / Ambicioso son rentabilidades mensuales supuestas para la proyección (no tienen relación con el perfil de riesgo del bot); el escenario «Según backtest» usa Monte Carlo sobre tus propias estrategias con datos reales (sin filtro IA). Tu meta, aporte y escenario quedan guardados en la configuración del bot.";
+const DEFAULT_INTRO = "Plan de crecimiento compuesto: cuándo reinvertir, cuándo subir el riesgo y cuándo empezar a retirar. Los escenarios Prudente / Realista / Ambicioso son rentabilidades mensuales supuestas para la proyección para la proyección.";
 
 export default function GrowthPlan({ account, settings, checkin, onSave, refresh, currency = "USDT", intro = DEFAULT_INTRO }) {
   const [form, setForm] = useState({
@@ -73,15 +72,14 @@ export default function GrowthPlan({ account, settings, checkin, onSave, refresh
           {loading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <TrendingUp className="mr-1.5 h-3.5 w-3.5" />} Calcular
         </Button>
       </div>
-      {!res && loading && <p className="font-mono text-[11px] text-slate-500">Ejecutando backtests y simulación Monte Carlo...</p>}
+      {!res && loading && <p className="font-mono text-[11px] text-slate-500">Calculando la proyección...</p>}
       {res && (
         <>
           <PlanScenarios scenarios={res.scenarios} selected={res.selected} onSelect={selectScenario} target={res.inputs.target_monthly} />
           <PlanProjection projection={res.projection} />
           <PlanPhases projection={res.projection} />
-          <PlanMonteCarlo backtest={res.backtest} />
           <p className="font-mono text-[10px] uppercase tracking-wider text-slate-600">
-            Proyección matemática con rendimientos promedio · los meses reales varían (ver Monte Carlo) · no es asesoría financiera
+            Proyección matemática con rendimientos promedio · los meses reales varían · no es asesoría financiera
           </p>
         </>
       )}

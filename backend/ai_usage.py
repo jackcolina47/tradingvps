@@ -2,9 +2,9 @@
 from datetime import datetime, timezone
 
 BOT_KINDS = {
-    "crypto": {"signals": ("signal", "signal-fast"), "news": ("news",), "news_trades": (), "reviews": ("advisor",)},
-    "fx": {"signals": ("fx-signal", "fx-signal-fast"), "news": ("fx-news",), "news_trades": ("fx-news-trade",), "reviews": ("fx-advisor",)},
-    "pepper": {"signals": ("pep-signal", "pep-signal-fast"), "news": ("pep-news",), "news_trades": ("pep-news-trade",), "reviews": ("pep-advisor",)},
+    "crypto": {"signals": ("signal", "signal-fast"), "reviews": ("advisor",)},
+    "fx": {"signals": ("fx-signal", "fx-signal-fast"), "reviews": ("fx-advisor",)},
+    "pepper": {"signals": ("pep-signal", "pep-signal-fast"), "reviews": ("pep-advisor",)},
 }
 
 
@@ -38,7 +38,6 @@ class AiUsage:
         self._roll()
         groups = BOT_KINDS[bot]
         out = {g: sum(self.calls.get(k, 0) for k in kinds) for g, kinds in groups.items()}
-        out["skipped_news"] = sum(self.skipped.get(k, 0) for k in groups["news"])
         out["total"] = sum(out[g] for g in groups)
         out["chat"] = self.calls.get("chat", 0) + self.calls.get("chat-summary", 0)
         out["total_all"] = sum(self.calls.values())

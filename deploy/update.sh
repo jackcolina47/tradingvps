@@ -3,6 +3,7 @@
 # - Instalación con git clone: trae los cambios del repositorio.
 # - Instalación desde zip (botón «Instalar en tu VPS»): usa update-zip.sh con el paquete nuevo.
 set -euo pipefail
+( crontab -l 2>/dev/null | grep -v 'cron-walk-forward.sh' || true ) | crontab - 2>/dev/null || true
 cd "$(dirname "$0")"
 if [ -d ../.git ]; then
   git pull --ff-only

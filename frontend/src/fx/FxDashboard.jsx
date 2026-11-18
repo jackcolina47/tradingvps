@@ -23,7 +23,6 @@ import { Panel } from "@/components/bot/Panel";
 import GuardStrip, { useGuard } from "@/components/bot/GuardStrip";
 import RedCalendar from "@/components/bot/RedCalendar";
 import SessionsStrip from "./SessionsStrip";
-import FxNewsPanel from "./FxNewsPanel";
 import FxAdminSettings from "./FxAdminSettings";
 import Documentation from "@/components/docs/Documentation";
 import VpsInstall from "@/components/deploy/VpsInstall";
@@ -32,30 +31,16 @@ import { BRANDS, BrandContext } from "./brand";
 const TAB_CLS = "rounded-sm px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider data-[state=active]:bg-amber-500 data-[state=active]:text-[#07090E]";
 const FX_TFS = ["5m", "15m", "1h", "4h", "1d"];
 export const FX_BRAND = BRANDS.fx.header;
-export const NEWS_WEIGHT_LABELS = { normal: "Normal · las alertas generales pueden rechazar", bajo: "Bajo · solo restan confianza" };
 const EXTRA_TOGGLES = [
   { k: "close_before_weekend", label: "Cerrar antes del fin de semana", hint: "Cierra todo 30 min antes del cierre del viernes (evita gaps del domingo)" },
   { k: "rollover_guard", label: "Guardia de rollover (17:00 NY)", hint: "Sin entradas 16:50–17:15 Nueva York; en paper los stops no se evalúan durante el pico de spread" },
-  { k: "vol_filter_enabled", label: "Filtro de volatilidad (ATR)", hint: "Sin entradas con ATR bajo el percentil mínimo; riesgo a la mitad por encima del percentil alto" },
-  { k: "seasonality_bias", label: "Estacionalidad intradía", hint: "Una divisa tiende a depreciarse en su horario local: señales contra el sesgo bloqueadas en los pares marcados y reducidas en el resto" },
-  { k: "usd_regime_filter", label: "Filtro de régimen USD", hint: "Índice USD sintético vs SMA diaria: pares con USD solo a favor del régimen (cruces y metales no)" },
-  { k: "fomc_rule", label: "Regla FOMC sin continuación", hint: "24 h tras la decisión de la Fed no se opera la continuación del movimiento en pares con USD" },
-  { k: "price_action_block", label: "Bloqueo por precio extendido", hint: "Regla dura: sin entradas tras N velas grandes seguidas en la dirección de la señal ni pegadas a un swing contrario (resistencia en LONG / soporte en SHORT). La señal queda en sombra PRECIO_EXTENDIDO" },
   { k: "partial_tp_enabled", label: "Cierre parcial de beneficios", hint: "Cierra una parte al alcanzar el nivel en R y deja correr el resto con trailing" },
 ];
-const KEEP = ["close_before_weekend", "rollover_guard", "partial_tp_enabled", "min_lot_max_risk", "currency_exposure_limit", "be_start_r", "trail_start_r", "trail_atr_mult", "partial_tp_r", "partial_tp_pct"];
 const LEARN_TOGGLE = { k: "rules_auto_learn", label: "Aprendizaje automático", hint: "La IA analiza cada operación cerrada: de las pérdidas evitables guarda una regla nueva y apaga las reglas que habrían bloqueado 3 operaciones ganadoras. Gasta saldo de IA por operación cerrada" };
 const EXTRA_NUMS = [
   { k: "min_lot_max_risk", label: "Riesgo máx. lote mínimo (%)", step: 0.5, min: 0, max: 10,
     hint: "Si el tamaño ideal queda por debajo de 0.01 lotes (típico en oro/plata con poco capital), se abre el lote mínimo siempre que su riesgo no supere este % de la equidad. 0 = nunca." },
   { k: "currency_exposure_limit", label: "Tope exposición por divisa", step: 1, min: 1, max: 6, hint: "Máximo de posiciones en la misma dirección sobre una misma divisa (long EURUSD + long GBPUSD = 2 cortos de USD)" },
-  { k: "max_long_positions", label: "Máx. posiciones largo plazo", step: 1, min: 1, max: 6, hint: "Tope propio de la reversión de fin de mes; no consume «Máx. posiciones»" },
-  { k: "vol_min_pct", label: "Volatilidad: percentil mínimo", step: 5, min: 0, max: 50 },
-  { k: "vol_high_pct", label: "Volatilidad: percentil alto", step: 5, min: 60, max: 100 },
-  { k: "seasonality_size_factor", label: "Tamaño contra sesgo estacional", step: 0.05, min: 0.25, max: 1 },
-  { k: "price_action_max_candles", label: "Precio extendido: velas seguidas", step: 1, min: 2, max: 5, hint: "Nº de velas grandes consecutivas (≥ 2 ATR en total) a partir del cual la entrada se considera «perseguir el precio»" },
-  { k: "price_action_swing_atr", label: "Precio extendido: swing a (ATR)", step: 0.25, min: 0.25, max: 3, hint: "Si el swing contrario más cercano está a menos de esta distancia en ATR, la entrada se bloquea" },
-  { k: "max_spread_sl_pct", label: "Spread máx. (% del stop)", step: 5, min: 0, max: 100, hint: "Etapa 0 gratis: si el spread del par supera este % de la distancia al stop, la señal se descarta antes de llamar a la IA (0 = apagado)" },
   { k: "be_start_r", label: "Breakeven a (R)", min: 0.5, max: 3, step: 0.25 }, { k: "trail_start_r", label: "Trailing desde (R)", min: 0.5, max: 3, step: 0.25 },
   { k: "trail_atr_mult", label: "Distancia trailing (ATR)", min: 0.5, max: 3, step: 0.25 }, { k: "partial_tp_r", label: "Cierre parcial a (R)", min: 0.5, max: 3, step: 0.25 },
   { k: "partial_tp_pct", label: "Cierre parcial (%)", min: 25, max: 75, step: 5 },
@@ -110,7 +95,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
     await act(() => http.post(running ? "/bot/stop" : "/bot/start"), running ? "Bot detenido" : data.status.mode === "REAL" ? `Bot iniciado · MODO REAL en ${brand.broker}` : "Bot iniciado · operando en horario forex");
     setBusy(false);
   };
-  const newsAlert = Object.keys(guard?.blocked || {}).length > 0 || data.news?.critical?.length > 0;
+  const newsAlert = Object.keys(guard?.blocked || {}).length > 0;
 
   return (
     <BrandContext.Provider value={brand}>
@@ -149,7 +134,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
           <Watchlist items={data.watchlist} selected={symbol} onSelect={setSymbol} />
           <PriceChart symbol={symbol} defaultTf={data.settings.timeframe} kind={meta?.symbol_info?.[symbol]?.name || "Forex"} tfs={FX_TFS}
             trade={{ riskPct: data.settings.risk_per_trade, equity: data.account.equity, live: data.status.mode === "REAL", currency: "USD", onDone: refresh }} />
-          <BotPanel settings={data.settings} meta={meta} account={data.account} equity={data.equity} profileActive={data.profile_active} fmtLeverage={fmtLev} />
+          <BotPanel settings={data.settings} meta={meta} account={data.account} equity={data.equity} fmtLeverage={fmtLev} />
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
           <Panel testId="fx-operations-panel" className="lg:col-span-8" delay={220}>
@@ -161,7 +146,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
                   <TabsTrigger data-testid="fx-tab-history" value="history" className={TAB_CLS}>Historial</TabsTrigger>
                   <TabsTrigger data-testid="fx-tab-performance" value="performance" className={TAB_CLS}>Rendimiento</TabsTrigger>
                   <TabsTrigger data-testid="fx-tab-news" value="news" className={`${TAB_CLS} relative`}>
-                    Noticias y agenda
+                    Eventos rojos
                     {newsAlert && <span data-testid="fx-tab-news-alert" className="pulse-dot absolute -right-1 -top-1 bg-rose-400" />}
                   </TabsTrigger>
                   <TabsTrigger data-testid="fx-tab-plan" value="plan" className={`${TAB_CLS} relative`}>
@@ -180,9 +165,9 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
               </TabsContent>
               <TabsContent value="history" className="mt-0"><TradeHistory trades={data.trades} /></TabsContent>
               <TabsContent value="performance" className="mt-0">
-                <Performance tradeCount={data.account.total_trades} settings={data.settings} strategyKeys={meta?.strategy_keys} onSave={(body) => act(() => http.put("/settings", body), "Configuración actualizada")} />
+                <Performance tradeCount={data.account.total_trades} settings={data.settings} onSave={(body) => act(() => http.put("/settings", body), "Configuración actualizada")} />
               </TabsContent>
-              <TabsContent value="news" className="mt-0"><RedCalendar guard={guard} onRefresh={refreshGuard} /><FxNewsPanel summary={data.news} symbols={data.settings.symbols} currencyNames={meta?.currency_names} /></TabsContent>
+              <TabsContent value="news" className="mt-0"><RedCalendar guard={guard} onRefresh={refreshGuard} /></TabsContent>
               <TabsContent value="plan" className="mt-0">
                 <GrowthPlan account={data.account} settings={data.settings} checkin={data.checkin} refresh={refresh} currency="USD" intro={PLAN_INTRO(brand)}
                   onSave={(body) => act(() => http.put("/settings", body), "Plan actualizado")} />
@@ -194,7 +179,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <SettingsPanel settings={data.settings} meta={meta} leverageMax={500} maxPositions={12}
-            extraToggles={[LEARN_TOGGLE, ...EXTRA_TOGGLES.filter((t) => KEEP.includes(t.k))]} extraNums={EXTRA_NUMS.filter((n) => KEEP.includes(n.k))}
+            extraToggles={[LEARN_TOGGLE, ...EXTRA_TOGGLES]} extraNums={EXTRA_NUMS}
             onSave={(body) => act(() => http.put("/settings", body), "Configuración guardada")} />
           <Terminal logs={data.logs} onClear={() => act(() => http.delete("/logs"))} />
         </div>

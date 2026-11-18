@@ -20,7 +20,7 @@ sudo bash install.sh
 
 El instalador: instala Docker, crea `backend.env` con secretos aleatorios, construye los
 contenedores (Mongo + backend FastAPI + Caddy sirviendo el frontend y proxy `/api`),
-programa los crons de revisión IA (08:00 UTC), walk-forward semanal (lunes 07:00 UTC), resumen semanal por Telegram (domingo 20:00 UTC)
+programa los crons de revisión IA (08:00 UTC), resumen semanal por Telegram (domingo 20:00 UTC)
 y copia de seguridad nocturna de MongoDB (03:00 UTC, los domingos también por Telegram) y abre los puertos 80/443.
 
 | Comando | Para qué |
@@ -33,7 +33,6 @@ y copia de seguridad nocturna de MongoDB (03:00 UTC, los domingos también por T
 | `bash reset-password.sh` | poner una contraseña nueva al panel si la olvidaste |
 | `bash clean-disk.sh` | liberar espacio: caché de compilación de Docker, imágenes huérfanas, journald (`--all` = toda la caché) |
 | `bash cron-ai-review.sh` | disparar la revisión IA manualmente (Bybit, HotForex y Pepperstone) |
-| `bash cron-walk-forward.sh` | revalidar ahora con walk-forward los pares con SL/TP optimizados (Bybit, HotForex y Pepperstone) |
 | `bash cron-weekly-summary.sh` | enviar ahora el resumen semanal por Telegram (Bybit, HotForex y Pepperstone) |
 | `bash backup.sh` | copia de seguridad ahora en `backups/` (añade `--telegram` para enviarla también por Telegram) |
 | `bash restore.sh backups/<archivo>` | restaurar una copia (.json.gz) · reemplaza la base de datos y deja los tres bots detenidos |

@@ -3,6 +3,7 @@
 # Conserva deploy/.env, deploy/backend.env y deploy/backups/ (no vienen en el zip) y reconstruye los contenedores.
 # Uso: bash update-zip.sh /root/ai-trader-XXXX.zip
 set -euo pipefail
+( crontab -l 2>/dev/null | grep -v 'cron-walk-forward.sh' || true ) | crontab - 2>/dev/null || true
 
 main() {
   cd "$(dirname "$0")"
