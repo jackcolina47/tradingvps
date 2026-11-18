@@ -150,6 +150,7 @@ def register(router, engine, store, news):
 
     @router.post("/bot/scan")
     async def bot_scan():
+        engine.scan_full = True
         engine.scan_event.set()
         return {"ok": True, "message": "Escaneo solicitado"}
 

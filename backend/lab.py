@@ -95,7 +95,9 @@ class LabEngine(TradingEngine):
             self._last_snapshot = time.time()
             await self.db.equity.insert_one({"ts": now_iso(), "equity": s["equity"], "balance": s["balance"], "net_deposits": 0.0})
 
-    async def scan_once(self, settings: Settings):
+    candle_sync = False  # only the test cruce EMA: fixed-interval scan
+
+    async def scan_once(self, settings: Settings, normal: bool = True):
         self.scanning = True
         found = 0
         test_syms = set(settings.ema_test_symbols) if settings.ema_test_enabled else set()

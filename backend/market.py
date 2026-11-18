@@ -12,6 +12,51 @@ TF_SECONDS = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86
 HTF = {"1m": "15m", "5m": "1h", "15m": "1h", "1h": "4h", "4h": "1d"}
 
 
+CANDLE_DELAY_SEC = 8   # entries are scanned this long after each candle close, so the exchange has consolidated the closed candle
+TEST_SCAN_SEC = 60     # cadence of the «Test cruce EMA» scan, which is not tied to the candle clock
+
+
+def next_candle_scan(tf: str, now: float) -> float:
+    """Next UTC-aligned candle close of `tf` + CANDLE_DELAY_SEC (15m → hh:00:08, hh:15:08…; 4h → 00:00:08, 04:00:08… UTC)."""
+    sec = TF_SECONDS[tf]
+    due = now - now % sec + CANDLE_DELAY_SEC
+    return due if now < due else due + sec
+
+
+async def candle_scan_loop(engine):
+    """Entry scanner shared by every bot. Normal strategies (and their AI calls) run once per closed candle, CANDLE_DELAY_SEC after the close;
+    the «Test cruce EMA» keeps its own fixed cadence. SL/TP/trailing live in the independent monitor loop."""
+    await asyncio.sleep(2)
+    tf, due, first = None, 0.0, True
+    while True:
+        settings = await engine.get_settings()
+        now = time.time()
+        sync = engine.candle_sync
+        if settings.timeframe != tf:
+            tf, due = settings.timeframe, next_candle_scan(settings.timeframe, now)
+        normal = not sync or engine.scan_full or now >= due
+        if now >= due:
+            due = next_candle_scan(tf, now)
+        engine.scan_full = False
+        test = not sync or settings.ema_test_enabled or await engine.db.positions.count_documents({"exit_mode": "cross"}) > 0
+        if normal or test or first:
+            try:
+                await engine.scan_once(settings, normal)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.exception("scan error")
+                await engine.log("ERROR", f"Error en escaneo: {e}")
+        first = False
+        wait = settings.scan_interval_sec if not sync else max(0.5, min(due - time.time(), TEST_SCAN_SEC) if test else due - time.time())
+        engine.next_scan_ts = time.time() + wait if not sync else due
+        try:
+            await asyncio.wait_for(engine.scan_event.wait(), timeout=wait)
+        except asyncio.TimeoutError:
+            pass
+        engine.scan_event.clear()
+
+
 class MarketData:
     """Bybit public data with automatic Bitget USDT-perp mirror when Bybit is geo-blocked or fails."""
 

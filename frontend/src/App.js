@@ -173,7 +173,7 @@ function Dashboard({ onLogout }) {
               { k: "partial_tp_pct", label: "Cierre parcial (%)", min: 25, max: 75, step: 5 },
               { k: "auto_prune_pf", label: "Poda: PF mínimo (30 d)", min: 0.3, max: 1.5, step: 0.05, hint: "Un par activo con factor de beneficio por debajo de este valor en los últimos 30 días entra en poda" },
               { k: "auto_prune_min_trades", label: "Poda: más de N operaciones", min: 3, max: 100, step: 1, hint: "Solo se poda con más de N operaciones cerradas en 30 días (muestra suficiente)" }]}
-            hide={["ai_min_confidence", "min_rr", "ai_enabled", "ai_funnel_enabled"]}
+            hide={["scan_interval_sec", "ai_min_confidence", "min_rr", "ai_enabled", "ai_funnel_enabled"]}
             extraToggles={[{ k: "rules_auto_learn", label: "Aprendizaje automático", hint: "La IA analiza cada operación cerrada: de las pérdidas evitables guarda una regla nueva y apaga las reglas que habrían bloqueado 3 operaciones ganadoras. Gasta saldo de IA por operación cerrada" },
               { k: "partial_tp_enabled", label: "Cierre parcial de beneficios", hint: "Cierra una parte al alcanzar el nivel en R y deja correr el resto con trailing" },
               { k: "reopt_enabled", label: "Re-optimización semanal", hint: "Cada 7 días repite el optimizador SL/TP/ATR en los pares marcados abajo, aplica el mejor resultado robusto y avisa por Telegram si un par apagado pasa a ser rentable" },

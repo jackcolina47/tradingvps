@@ -189,6 +189,7 @@ async def bot_stop():
 
 @api.post("/bot/scan")
 async def bot_scan():
+    engine.scan_full = True
     engine.scan_event.set()
     return {"ok": True, "message": "Escaneo solicitado"}
 

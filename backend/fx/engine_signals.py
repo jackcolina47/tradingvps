@@ -1,6 +1,7 @@
 """FxEngine mixin · signals: scan loop, risk/market gates, AI validation and shadow trades, month-end fix scan and news trades."""
 import time
 import asyncio
+from market import candle_scan_loop
 from datetime import datetime, timezone, timedelta
 from models import Signal, now_iso
 from indicators import trend_label, htf_trend, snapshot
@@ -23,29 +24,16 @@ from fx.engine_core import logger, BLOCK_BY, FX_STRATEGY_INFO
 
 
 class SignalsMixin:
+    candle_sync, scan_full = True, False
+
     async def _scan_loop(self):
-        await asyncio.sleep(3)
-        while True:
-            settings = await self.get_settings()
-            try:
-                await self.scan_once(settings)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                logger.exception("scan error")
-                await self.log("ERROR", f"Error en escaneo: {e}")
-            self.next_scan_ts = time.time() + settings.scan_interval_sec
-            try:
-                await asyncio.wait_for(self.scan_event.wait(), timeout=settings.scan_interval_sec)
-            except asyncio.TimeoutError:
-                pass
-            self.scan_event.clear()
+        await candle_scan_loop(self)
 
     @staticmethod
     def _df(klines: list, atr_period: int = 14):
         return build_fx_df(klines, atr_period)
 
-    async def scan_once(self, settings: FxSettings):
+    async def scan_once(self, settings: FxSettings, normal: bool = True):
         if not market_open():
             if not self._closed_logged:
                 self._closed_logged = True
@@ -63,7 +51,7 @@ class SignalsMixin:
             for symbol in list(dict.fromkeys([*settings.symbols, *test_syms, *open_test])):
                 try:
                     params = settings.symbol_params.get(symbol) or {}
-                    df = self._df(await self.market.fetch_klines(symbol, settings.timeframe, 300, cache_sec=60), int(params.get("atr_period", 14)))
+                    df = self._df(await self.market.fetch_klines(symbol, settings.timeframe, 300, cache_sec=0 if normal else 60), int(params.get("atr_period", 14)))
                     i = len(df) - 2
                     row = df.iloc[i]
                     htf = None
@@ -86,16 +74,16 @@ class SignalsMixin:
                         "vol_pct": vol_pct, "vol_regime": filters.vol_label(vol_pct, settings), "season_bias": filters.seasonality_bias(symbol),
                         "signal": sig["side"] if sig else None, "signal_strategy": sig["strategy"] if sig else None, "updated_at": now_iso(),
                     }
-                    if sig and self.running:
+                    if sig and self.running and normal:
                         found += 1
                         await self._handle_signal(symbol, sig, settings, df, htf, htf_tf)
                 except Exception as e:
                     logger.exception(f"scan {symbol}")
                     await self.log("ERROR", f"{symbol}: {e}")
-            if self.running and "fix_reversion" not in settings.disabled_strategies and settings.strategy in ("all", "fix_reversion"):
+            if normal and self.running and "fix_reversion" not in settings.disabled_strategies and settings.strategy in ("all", "fix_reversion"):
                 found += await self._scan_slow(settings)
             self.last_scan = now_iso()
-            if self.running:
+            if self.running and normal:
                 await self.log("SCAN", f"Escaneo {settings.timeframe} completado · {len(settings.symbols)} pares · {found} señales")
         finally:
             self.scanning = False

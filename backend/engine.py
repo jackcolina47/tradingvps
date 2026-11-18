@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 from models import Settings, Position, Trade, Signal, LogEntry, now_iso
-from market import MarketData, HTF
+from market import MarketData, HTF, candle_scan_loop
 from indicators import build_df, trend_label, htf_trend
 from strategies import evaluate, exit_signal, ema_test, ema_test_params, atr_params, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST, EMA_TEST_TAG, STRATEGY_INFO as FAST_INFO
 from strategies_slow import SLOW_INFO, SLOW_KEYS, evaluate_slow
@@ -43,6 +43,7 @@ def today() -> str:
 
 class TradingEngine:
     bot_key, tg_prefix = "bybit", ""
+    candle_sync, scan_full = True, False
 
     async def tg(self, text: str, kind: str):
         return await _notify.notify(self.tg_prefix + text, kind, bot=self.bot_key)
@@ -681,24 +682,10 @@ class TradingEngine:
         return trade
 
     async def _scan_loop(self):
-        await asyncio.sleep(2)
-        while True:
-            settings = await self.get_settings()
-            try:
-                await self.scan_once(settings)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                logger.exception("scan error")
-                await self.log("ERROR", f"Error en escaneo: {e}")
-            self.next_scan_ts = time.time() + settings.scan_interval_sec
-            try:
-                await asyncio.wait_for(self.scan_event.wait(), timeout=settings.scan_interval_sec)
-            except asyncio.TimeoutError:
-                pass
-            self.scan_event.clear()
+        await candle_scan_loop(self)
 
-    async def scan_once(self, settings: Settings):
+    async def scan_once(self, settings: Settings, normal: bool = True):
+        """`normal` = candle-close scan (strategies + rules/AI). False = in-between tick: only the «Test cruce EMA» acts."""
         self.scanning = True
         found = 0
         htf_tf = HTF[settings.timeframe]
@@ -709,7 +696,7 @@ class TradingEngine:
             for symbol in list(dict.fromkeys([*settings.symbols, *test_syms, *open_test])):
                 try:
                     params = settings.symbol_params.get(symbol) or {}
-                    df = build_df(await self.market.fetch_klines(symbol, settings.timeframe, 300), int(params.get("atr_period", 14)))
+                    df = build_df(await self.market.fetch_klines(symbol, settings.timeframe, 300, cache_sec=0 if normal else 8), int(params.get("atr_period", 14)))
                     i = len(df) - 2
                     row = df.iloc[i]
                     htf = None
@@ -731,15 +718,16 @@ class TradingEngine:
                         "htf": htf, "signal": sig["side"] if sig else None,
                         "signal_strategy": sig["strategy"] if sig else None, "updated_at": now_iso(),
                     }
-                    if sig and self.running:
+                    if sig and self.running and normal:
                         found += 1
                         await self._handle_signal(symbol, sig, settings, df, htf, htf_tf)
                 except Exception as e:
                     logger.exception(f"scan {symbol}")
                     await self.log("ERROR", f"{symbol}: {e}")
-            found += await self._scan_slow(settings)
+            if normal:
+                found += await self._scan_slow(settings)
             self.last_scan = now_iso()
-            if self.running:
+            if self.running and normal:
                 await self.log("SCAN", f"Escaneo {settings.timeframe} completado · {len(settings.symbols)} pares · {found} señales")
         finally:
             self.scanning = False

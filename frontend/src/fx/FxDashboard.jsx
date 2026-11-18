@@ -218,7 +218,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <SettingsPanel settings={data.settings} meta={meta} profileActive={data.profile_active} leverageMax={500} maxPositions={12}
-            hide={rulesOnly ? RULES_ONLY_HIDE : []}
+            hide={rulesOnly ? ["scan_interval_sec", ...RULES_ONLY_HIDE] : ["scan_interval_sec"]}
             extraToggles={rulesOnly ? [LEARN_TOGGLE, ...EXTRA_TOGGLES.filter((t) => !RULES_ONLY_HIDE.includes(t.k))] : EXTRA_TOGGLES}
             extraNums={EXTRA_NUMS.filter((n) => n.k !== "min_lot_max_risk" && !(rulesOnly && RULES_ONLY_HIDE.includes(n.k)))}
             extraChips={[...SESSION_CHIPS(meta), ...(rulesOnly ? [] : SEASON_CHIPS(meta))]} extraSelects={rulesOnly ? EXTRA_SELECTS.filter((x) => x.k !== "ai_news_weight") : EXTRA_SELECTS} fmtLeverage={fmtLev} strategyKeys={meta?.strategy_keys} longKeys={meta?.long_horizon_keys}
