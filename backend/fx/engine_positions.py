@@ -368,7 +368,7 @@ class PositionsMixin:
                     lot = await self.broker.lot(symbol)
                     leverage = info["leverage"] or settings.leverage
                     lots, margin, real_risk = risk.position_size(info["equity"], info["available"], risk_pct, entry, sl, leverage, symbol, tickers,
-                                                                 settings.min_lot_max_risk, lot)
+                                                                 settings.min_lot_max_risk, lot, costs=self.costs)
                     if lots <= 0 or margin < 1:
                         need = risk.min_lot_risk_pct(info["equity"], entry, sl, symbol, tickers, lot["min"])
                         reason = (f"tamaño por debajo del lote mínimo del bróker ({lot['min']:g}): con este stop arriesga el {need}% de la equidad real "
@@ -423,7 +423,7 @@ class PositionsMixin:
                 leverage = settings.leverage
                 s = await self.account_summary()
                 lots, margin, real_risk = risk.position_size(s["equity"], s["available"], risk_pct, entry, sl, settings.leverage, symbol, tickers,
-                                                             settings.min_lot_max_risk)
+                                                             settings.min_lot_max_risk, costs=self.costs)
                 if lots <= 0 or margin < 1:
                     need = risk.min_lot_risk_pct(s["equity"], entry, sl, symbol, tickers)
                     reason = (f"tamaño por debajo del lote mínimo (0.01): con este stop el lote mínimo arriesga el {need}% de la equidad "

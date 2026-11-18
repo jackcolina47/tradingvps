@@ -7,7 +7,7 @@ from models import Settings, Position, Trade, LogEntry, now_iso
 from market import MarketData, HTF
 from indicators import build_df
 from legacy import exit_signal, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST, EMA_TEST_TAG, INFO as LEGACY_INFO
-from risk import FEE_RATE, MAKER_FEE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules, move_in_r, tp_in_r, partial_qty, be_allowed, ema_partial_due, EMA_PARTIAL_PCT
+from risk import FEE_RATE, MAKER_FEE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules, move_in_r, tp_in_r, partial_qty, be_allowed, ema_partial_due, EMA_PARTIAL_PCT, stop_cost
 import housekeeping
 import position_review
 import trade_learning
@@ -577,7 +577,10 @@ class TradingEngine:
 
     async def _log_sizing(self, symbol, sig, qty, equity, risk_pct, entry, sl, tp):
         k = sig.get("atr_levels")
-        await self.log("RISK", f"{symbol}: tamaño {qty:.6g} = {equity:.2f} × {risk_pct:g}% / distancia SL {abs(entry - sl):.6g} (riesgo {abs(entry - sl) * qty:.2f} USDT) · "
+        loss = (abs(entry - sl) + stop_cost(entry, sl)) * qty
+        real = loss / equity * 100 if equity else 0
+        capped = " · REDUCIDO por margen/apalancamiento o lote" if real < risk_pct * 0.9 else ""
+        await self.log("RISK", f"{symbol}: tamaño {qty:.6g} · pérdida en el SL {loss:.2f} USDT = {real:.2f}% de la equidad {equity:.2f} (objetivo {risk_pct:g}%, comisiones incluidas){capped} · "
                                f"ATR {sig['atr']:.6g}" + (f" · SL {k[0]:g}×ATR · TP {k[1]:g}×ATR" if k else "") + f" · entrada {entry:.6g} · SL {sl:.6g} · TP {tp:.6g}")
 
     async def open_position(self, symbol: str, sig: dict, settings: Settings, signal_id: str, risk_factor: float = 1.0, risk_reason: str = "noticias",

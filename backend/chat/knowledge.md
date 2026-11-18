@@ -17,7 +17,8 @@ Ciclo cada 60 s, solo dentro del horario operativo y con huecos libres:
 - Un candidato del Paso 1 vuelve al Paso 2 cada 5 minutos (`DEEP_COOLDOWN_SEC`) hasta que haya operación ejecutable o se llene `max_positions`. Los pares descartados en el Paso 1 no llegan al Paso 2.
 - `ai_min_confidence` (10..90 en pasos de 10): confianza > umbral → se ejecuta; ≤ umbral → sombra `BAJA_CONFIANZA` (una por vela).
 - SL/TP: `atr_levels_enabled` → `atr_sl_mult`×ATR / `atr_tp_mult`×ATR (2 / 4 por defecto); apagado → niveles de la IA si son válidos (stop 0,5–4 ATR, R:R ≥ 1).
-- Tamaño: siempre (capital × `risk_per_trade` %) ÷ distancia al stop.
+- Tamaño: (equidad actual × `risk_per_trade` %) ÷ (distancia al stop + comisiones/spread): cada stop cuesta `risk_per_trade` % (1 % por defecto) de la equidad. `atr_levels_enabled` viene encendido (SL 2×ATR, TP 4×ATR). FX: `min_lot_max_risk` 1 % por defecto (si el lote mínimo arriesga más, no se abre).
+- FX · regla del viernes (`close_before_weekend`): sin entradas desde las 12:00 NY y cierre de todo a las 15:30 NY (motivo FIN_SEMANA).
 - FX: con la cuenta MetaApi desplegada usa velas y volumen de ticks del bróker; con Yahoo usa el rango de la vela.
 
 ## Horario y eventos rojos (`trade_guard.py`)

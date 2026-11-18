@@ -8,7 +8,7 @@ export const LABELS = {
   symbols: "Pares", strategy: "Estrategia", disabled_strategies: "Estrategias apagadas", risk_per_trade: "Riesgo/op (%)", max_positions: "Máx. posiciones",
   leverage: "Apalancamiento", ai_min_confidence: "Confianza mínima IA", trailing_enabled: "Trailing", breakeven_enabled: "Stop a breakeven", htf_filter: "Filtro TF superior", symbol_params: "Parámetros SL/TP",
   sessions_allowed: "Sesiones permitidas", timeframe: "Temporalidad", signal_mode: "Criterios de entrada", daily_loss_limit: "Límite de pérdida diaria (%)",
-  ai_enabled: "Filtro IA", scan_interval_sec: "Intervalo de escaneo (s)", close_before_weekend: "Cierre antes del fin de semana", min_lot_max_risk: "Tope riesgo lote mínimo (%)",
+  ai_enabled: "Filtro IA", scan_interval_sec: "Intervalo de escaneo (s)", close_before_weekend: "Regla del viernes", min_lot_max_risk: "Tope riesgo lote mínimo (%)",
   risk_profile: "Perfil de riesgo", auto_review_enabled: "Revisión IA automática", auto_review_apply: "Aplicar cambios de la revisión",
   ai_news_weight: "Peso de las noticias en la IA", partial_tp_enabled: "Cierre parcial", vol_filter_enabled: "Filtro de volatilidad", seasonality_bias: "Sesgo estacional",
   usd_regime_filter: "Filtro régimen USD", fomc_rule: "Regla FOMC", price_action_block: "Bloqueo por precio extendido", rollover_guard: "Guarda de rollover", currency_exposure_limit: "Exposición por divisa", max_long_positions: "Máx. posiciones largo plazo",

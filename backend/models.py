@@ -60,7 +60,7 @@ class Settings(BaseModel):
     ai_enabled: bool = True
     ai_min_confidence: int = 60
     min_rr: float = 1.5
-    atr_levels_enabled: bool = False
+    atr_levels_enabled: bool = True
     atr_sl_mult: float = 2.0
     atr_tp_mult: float = 4.0
     ema_test_partial_enabled: bool = False

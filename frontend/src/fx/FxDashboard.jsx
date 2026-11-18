@@ -32,7 +32,7 @@ const TAB_CLS = "rounded-sm px-3 py-1.5 font-mono text-[11px] uppercase tracking
 const FX_TFS = ["5m", "15m", "1h", "4h", "1d"];
 export const FX_BRAND = BRANDS.fx.header;
 const EXTRA_TOGGLES = [
-  { k: "close_before_weekend", label: "Cerrar antes del fin de semana", hint: "Cierra todo 30 min antes del cierre del viernes (evita gaps del domingo)" },
+  { k: "close_before_weekend", label: "Regla del viernes", hint: "Sin entradas nuevas desde las 12:00 de Nueva York y cierre de todas las posiciones a las 15:30, en ganancia o en pérdida" },
   { k: "rollover_guard", label: "Guardia de rollover (17:00 NY)", hint: "Sin entradas 16:50–17:15 Nueva York; en paper los stops no se evalúan durante el pico de spread" },
   { k: "partial_tp_enabled", label: "Cierre parcial de beneficios", hint: "Cierra una parte al alcanzar el nivel en R y deja correr el resto con trailing" },
 ];

@@ -27,7 +27,7 @@ async def open_shadow(engine, signal_id: str, symbol: str, sig: dict, settings, 
     entry = tickers.get(symbol, {}).get("price") or sig["price"]
     sl, tp = entry - (sig["price"] - sig["sl"]), entry + (sig["tp"] - sig["price"])
     lots, margin, real_risk = risk.position_size(acc["equity"], acc["available"], settings.risk_per_trade * risk_factor, entry, sl,
-                                                 settings.leverage, symbol, tickers, settings.min_lot_max_risk)
+                                                 settings.leverage, symbol, tickers, settings.min_lot_max_risk, costs=_costs(engine))
     undersized = lots <= 0
     if undersized:  # keep the data point anyway: simulate the minimum lot and flag it
         lots = MIN_LOT

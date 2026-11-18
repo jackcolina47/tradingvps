@@ -38,7 +38,7 @@ class FxSettings(BaseModel):
     signal_mode: str = "relaxed"
     disabled_strategies: List[str] = ["supertrend_momentum", "ema_cross"]
     close_before_weekend: bool = True
-    min_lot_max_risk: float = 4.0
+    min_lot_max_risk: float = 1.0
     sessions_allowed: List[str] = []
     risk_profile: int = 2
     plan_scenario: str = "base"
@@ -63,7 +63,7 @@ class FxSettings(BaseModel):
     partial_tp_enabled: bool = True
     partial_tp_r: float = 1.5
     partial_tp_pct: int = 50
-    atr_levels_enabled: bool = False
+    atr_levels_enabled: bool = True
     atr_sl_mult: float = 2.0
     atr_tp_mult: float = 4.0
     ema_test_partial_enabled: bool = False

@@ -637,6 +637,13 @@ Decisiones del usuario: eliminar TODO backtest/optimizador/walk-forward; mantene
 - `funnel_mtf = ("4h","1h")` en `fx/engine_signals.py`: mismo Paso 1 con Gemini 3.5 Flash, bloque multitemporal en Paso 2 y bloqueo gratis contra 4H. UI/docs/knowledge actualizados (ya no «solo Bybit»).
 - Tested: pytest + `scripts/funnel_dry_run.py hfm|pepperstone` reales. Sin testing agent.
 
+## Iteración 105 (2026-11) — Stop = 1 % de la equidad + regla del viernes FX
+Decisiones del usuario: 1 % por defecto pero editable; sobre equidad actual; cierre del viernes a las 15:30 NY.
+- Tamaño incluye costes: `risk.stop_cost` (cripto: comisión taker ida y vuelta + slippage de salida) y en FX `2 × spread_cost` por lote → la pérdida en el SL = `risk_per_trade` % de la equidad (redondeo de lote siempre hacia abajo). Log RISK de Bybit muestra pérdida real y avisa si el margen/apalancamiento redujo el tamaño.
+- Defaults: `atr_levels_enabled=True` (3 bots), FX `min_lot_max_risk=1.0`. Migración `2026-11-19-one-pct-stop` fija risk 1 %, ATR on y tope lote mínimo 1 % en instalaciones existentes (todo sigue editable). Consecuencia: en cuentas pequeñas el oro puede no abrirse (lote mínimo > 1 %).
+- `trade_guard.friday()`: viernes NY ≥12:00 bloquea entradas FX; 15:30–17:00 cierra todas las posiciones (motivo FIN_SEMANA). Ligado al toggle `close_before_weekend` («Regla del viernes»). Sustituye al cierre 30 min antes del cierre.
+- Tested: cálculos unitarios (cripto/FX, horas del viernes), pytest 173. Sin testing agent. Cierre del viernes no probado en vivo.
+
 ### Pendiente
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.

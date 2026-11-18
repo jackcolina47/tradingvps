@@ -18,12 +18,17 @@ def lot_qty(symbol: str, qty: float, lot: tuple = None) -> float:
     return round(qty, 8) if qty >= min_qty else 0.0
 
 
+def stop_cost(entry: float, sl: float) -> float:
+    """Per-unit cost of a losing trade besides the price move: taker fee on entry and exit + exit slippage."""
+    return (entry + sl) * FEE_RATE + sl * SLIPPAGE
+
+
 def position_size(equity: float, available: float, risk_pct: float, entry: float, sl: float, leverage: int,
                   symbol: str = None, lot: tuple = None, min_notional: float = MIN_NOTIONAL):
     dist = abs(entry - sl)
     if dist <= 0 or entry <= 0:
         return 0.0, 0.0
-    qty = (equity * risk_pct / 100) / dist
+    qty = (equity * risk_pct / 100) / (dist + stop_cost(entry, sl))   # a stop-out costs exactly risk% of equity, fees and slippage included
     max_notional = available * leverage * 0.95
     qty = min(qty, max_notional / entry)
     if symbol or lot:

@@ -65,11 +65,11 @@ export function buildFeatures(bot) {
       icon: "ShieldCheck", title: "Gestión de riesgo fija",
       text: "La IA decide la dirección y los niveles; el tamaño lo decide siempre el riesgo.",
       bullets: [
-        "Tamaño = (capital × riesgo %) ÷ distancia al stop. Pierdes lo mismo en cada stop, sea cual sea el par.",
+        "Tamaño = (equidad actual × riesgo %) ÷ (distancia al stop + comisiones). Con el 1 % por defecto, cada stop cuesta el 1 % de la cuenta, sea cual sea el par. El redondeo al lote puede dejarlo algo por debajo, nunca por encima.",
         "«SL/TP dinámico por ATR» encendido: stop a 2×ATR y objetivo a 4×ATR (configurables) → relación 1:2. Apagado: se usan los niveles que propone la IA si son sensatos (stop entre 0,5 y 4 ATR, R:R ≥ 1).",
         "Máximo de posiciones simultáneas, una posición por par y límite de pérdida diaria que pausa las entradas hasta el día siguiente.",
         "Stop a breakeven, trailing stop y cierre parcial de beneficios, cada uno con su interruptor y su nivel en R.",
-        fx ? "Tope de exposición por divisa, guardia de rollover (17:00 NY), cierre opcional antes del fin de semana y tope de riesgo para el lote mínimo." : "Órdenes de entrada a mercado o límite maker (comisión menor) con espera configurable.",
+        fx ? "Regla del viernes: sin entradas nuevas desde las 12:00 de Nueva York y cierre de todas las posiciones a las 15:30, ganen o pierdan. Además, tope de exposición por divisa, guardia de rollover (17:00 NY) y tope de riesgo para el lote mínimo (1 % por defecto: si el lote mínimo arriesga más, la operación no se abre)." : "Órdenes de entrada a mercado o límite maker (comisión menor) con espera configurable.",
       ],
     },
     {

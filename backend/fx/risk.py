@@ -46,7 +46,7 @@ def round_lots(lots: float, lot: dict = None) -> float:
 
 
 def position_size(equity: float, available: float, risk_pct: float, entry: float, sl: float, leverage: int, symbol: str, tickers: dict,
-                  min_lot_max_risk: float = 0.0, lot: dict = None):
+                  min_lot_max_risk: float = 0.0, lot: dict = None, costs=None):
     """Returns (lots, margin_usd, real_risk_pct). Risk = equity × risk% lost if SL is hit; margin = notional / leverage.
     If the ideal size is below the minimum lot, the minimum is used when its risk stays ≤ min_lot_max_risk % of equity.
     `lot` = {min, step, max, contract?} from the broker (REAL mode); defaults to HFM 0.01 lots."""
@@ -55,7 +55,7 @@ def position_size(equity: float, available: float, risk_pct: float, entry: float
         return 0.0, 0.0, 0.0
     min_lot = lot["min"] if lot else MIN_LOT
     contract = lot.get("contract") if lot and lot.get("contract") else SPECS[symbol]["contract"]
-    per_lot_loss = dist * contract * quote_usd(symbol, tickers)
+    per_lot_loss = dist * contract * quote_usd(symbol, tickers) + 2 * spread_cost(symbol, 1.0, tickers, costs)   # stop-out incl. spread/commission
     lots = (equity * risk_pct / 100) / per_lot_loss
     notional_per_lot = contract * base_usd(symbol, tickers, entry)
     max_affordable = available * leverage * 0.95 / notional_per_lot

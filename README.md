@@ -12,7 +12,9 @@ Cada 60 s, dentro del horario operativo y con huecos libres (`backend/funnel.py`
 
 - Un candidato del Paso 1 vuelve al Paso 2 cada 5 minutos hasta que haya una operación ejecutable o se llene el máximo de posiciones.
 - `ai_min_confidence` (10–90): confianza mayor que el umbral → se ejecuta; igual o menor → operación sombra.
-- Tamaño: `(capital × riesgo %) ÷ distancia al stop`. SL/TP fijos por ATR (2× / 4×) o los que propone la IA.
+- Tamaño: `(equidad × riesgo %) ÷ (distancia al stop + comisiones)`; por defecto cada stop cuesta el 1 % de la equidad.
+- Forex, viernes: sin entradas desde las 12:00 NY y cierre total a las 15:30 NY.
+- SL/TP: fijos por ATR (2× / 4×) o los que propone la IA.
 
 ## Horario y eventos rojos (`backend/trade_guard.py`)
 

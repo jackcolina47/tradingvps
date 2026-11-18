@@ -6,7 +6,14 @@ async def _hfm_alert_180(engine, db):
     await db.fx_config.update_one({"_id": "main", "hfm_alert_after_sec": 60}, {"$set": {"hfm_alert_after_sec": 180}})
 
 
-MIGRATIONS = {"2026-10-22-hfm-alert-180": _hfm_alert_180}
+async def _one_pct_stop(engine, db):
+    """Every stop-out = 1% of equity: 1% risk, fixed ATR stop/target and the minimum lot may not risk more than that (all still editable)."""
+    await db.settings.update_many({}, {"$set": {"risk_per_trade": 1.0, "atr_levels_enabled": True}})
+    for name in ("fx_settings", "pep_settings"):
+        await db[name].update_many({}, {"$set": {"risk_per_trade": 1.0, "atr_levels_enabled": True, "min_lot_max_risk": 1.0}})
+
+
+MIGRATIONS = {"2026-10-22-hfm-alert-180": _hfm_alert_180, "2026-11-19-one-pct-stop": _one_pct_stop}
 
 
 async def run(engine, db):

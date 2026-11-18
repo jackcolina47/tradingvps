@@ -50,6 +50,17 @@ def in_hours(kind: str, now: datetime = None) -> bool:
     return active_window(kind, now) is not None
 
 
+FRIDAY_BLOCK_MIN, FRIDAY_FLAT_MIN, FRIDAY_END_MIN = 12 * 60, 15 * 60 + 30, 17 * 60   # New York time (forex bots)
+
+
+def friday(now: datetime = None) -> dict:
+    """Forex Friday rule: no new entries from 12:00 NY, every open position is closed from 15:30 NY until the weekly close (17:00 NY)."""
+    ny = _utc(now).astimezone(NY)
+    mins = ny.hour * 60 + ny.minute
+    fri = ny.weekday() == 4
+    return {"block": fri and mins >= FRIDAY_BLOCK_MIN, "flat": fri and FRIDAY_FLAT_MIN <= mins < FRIDAY_END_MIN}
+
+
 def hours_status(kind: str, now: datetime = None) -> dict:
     now = _utc(now)
     ny = now.astimezone(NY)

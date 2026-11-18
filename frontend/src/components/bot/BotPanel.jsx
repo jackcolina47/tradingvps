@@ -75,7 +75,7 @@ export default function BotPanel({ settings: s, account, equity, mtf = false, fm
         </div>
         <p className="mt-1 text-[12px] leading-relaxed text-slate-400">
           Cada 60 s, dentro del horario operativo y con huecos libres: filtro técnico sin IA → el modelo rápido elige hasta 3 candidatos → el modelo potente decide BUY / SELL / PASS.
-          Solo se abre si su confianza supera el {s.ai_min_confidence}%; el resto se sigue como sombra. Tamaño siempre por riesgo fijo ({s.risk_per_trade}% por operación).
+          Solo se abre si su confianza supera el {s.ai_min_confidence}%; el resto se sigue como sombra. El tamaño se calcula para que el stop cueste el {s.risk_per_trade}% de la equidad actual, comisiones incluidas.
         </p>
       </div>
 

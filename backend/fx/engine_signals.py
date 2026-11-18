@@ -4,7 +4,7 @@ import asyncio
 from models import now_iso
 from legacy import exit_signal, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST
 from fx.models import FxSettings
-from fx.market import HTF, market_open, market_status, closing_soon
+from fx.market import HTF, market_open, market_status
 from fx.symbols import SPECS, pips
 from fx import filters
 import trade_guard
@@ -96,7 +96,7 @@ class SignalsMixin:
         used = len([p for p in docs if (p.get("horizon") or "short") == "short" and p.get("exit_mode") != "cross"])
         block = ("límite de pérdida diaria alcanzado" if acc["daily_paused"] else filters.rollover_block(settings.rollover_guard)
                  or (f"cuenta {self.bk} sin conexión con MetaApi" if self.live and self.hfm["down_since"] else None)
-                 or ("cierre de fin de semana inminente" if settings.close_before_weekend and closing_soon(30) else None)
+                 or ("regla del viernes · sin entradas nuevas desde las 12:00 NY" if settings.close_before_weekend and trade_guard.friday()["block"] else None)
                  or (f"máximo de posiciones alcanzado ({settings.max_positions})" if used >= settings.max_positions else None))
         return {"acc": acc, "open": {p["symbol"] for p in docs}, "free": settings.max_positions - used, "block": block}
 

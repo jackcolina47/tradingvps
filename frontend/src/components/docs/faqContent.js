@@ -44,7 +44,11 @@ export function buildFaq(bot) {
       a: "No. Se eliminó junto con las operaciones automáticas por noticia. Solo queda la guardia de eventos rojos del calendario económico, que no consume IA." },
 
     { cat: "Riesgo", q: "¿Cómo se calcula el tamaño de cada operación?", tags: ["tamaño", "riesgo", "lote", "posición"],
-      a: "Tamaño = (capital × riesgo %) ÷ distancia al stop. Si arriesgas el 1 % de $1.000, pierdes $10 cuando salta el stop, sea cual sea el par o lo lejos que esté el stop." },
+      a: "Tamaño = (equidad actual × riesgo %) ÷ (distancia al stop + comisiones). Con el 1 % por defecto y una cuenta de $1.000, pierdes $10 cuando salta el stop, sea cual sea el par. El stop está a 2×ATR, así que lo que cambia de una operación a otra es el tamaño. El redondeo al lote o un apalancamiento insuficiente pueden dejar la pérdida algo por debajo del 1 %, nunca por encima." },
+    ...(fx ? [{ cat: "Riesgo", q: "¿Qué hace el bot los viernes?", tags: ["viernes", "fin de semana", "cierre", "15:30"],
+      a: "Con «Regla del viernes» encendida: desde las 12:00 de Nueva York no abre entradas nuevas y a las 15:30 cierra todas las posiciones, estén en ganancia o en pérdida. Así no queda nada abierto durante el fin de semana." },
+    { cat: "Riesgo", q: "¿Por qué no abre operaciones en oro con una cuenta pequeña?", tags: ["oro", "lote mínimo", "xauusd"],
+      a: "Porque el lote mínimo (0,01) con un stop de 2×ATR puede arriesgar más del 1 % de la cuenta. En ese caso la operación no se abre y el registro lo explica. Puedes subir «Riesgo máx. lote mínimo» en Configuración si aceptas arriesgar más en esos pares." }] : []),
     { cat: "Riesgo", q: "¿Quién decide el stop y el objetivo?", tags: ["stop", "objetivo", "atr", "sl", "tp"],
       a: "Con «SL/TP dinámico por ATR» encendido, son fijos: stop a 2×ATR y objetivo a 4×ATR (configurables), así cada ganadora vale 2R. Apagado, se usan los niveles que propone la IA si son sensatos (stop entre 0,5 y 4 ATR y relación ≥ 1:1); si no, se vuelve a los múltiplos de ATR." },
     { cat: "Riesgo", q: "¿Qué protecciones tiene una posición abierta?", tags: ["breakeven", "trailing", "parcial"],
