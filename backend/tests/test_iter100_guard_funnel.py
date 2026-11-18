@@ -137,14 +137,23 @@ class TestStage0:
     def test_flat_quiet_discarded(self):
         assert funnel.stage0(self._m()) is not None
 
-    def test_near_zone_passes(self):
-        assert funnel.stage0(self._m(demand={"dist_atr": 0.5})) is None
+    def test_low_adx_discarded_even_near_zone(self):
+        assert "ADX" in funnel.stage0(self._m(adx=17.9, demand={"dist_atr": 0.5}, activity=2.0, trend="ALCISTA"))
 
-    def test_trending_passes(self):
-        assert funnel.stage0(self._m(trend="ALCISTA")) is None
+    def test_adx_ok_range_activity_ignored(self):
+        assert funnel.stage0(self._m(adx=18, activity=0.3)) is None
 
-    def test_active_passes(self):
-        assert funnel.stage0(self._m(activity=2.0)) is None
+    def test_weak_volume_discarded(self):
+        assert "volumen" in funnel.stage0(self._m(adx=25, activity=0.79, activity_kind="volumen"))
+
+    def test_adx_and_volume_ok_passes(self):
+        assert funnel.stage0(self._m(adx=18, activity=0.8, activity_kind="volumen")) is None
+
+    def test_next_trigger(self):
+        base = 1_800_000_000 // 900 * 900
+        assert funnel.next_trigger(base + 3) == base + 8
+        assert funnel.next_trigger(base + 8) == base + 908
+        assert funnel.next_trigger(base + 500) == base + 908
 
     def test_no_atr_discarded(self):
         assert funnel.stage0(self._m(atr=0)) == "sin ATR válido"

@@ -4,13 +4,13 @@ Panel web (React + FastAPI + MongoDB) con tres bots de trading: **Bybit** (futur
 
 ## Cómo decide una entrada
 
-Cada 60 s, dentro del horario operativo y con huecos libres (`backend/funnel.py`):
+En :00, :15, :30 y :45 de cada hora (+8 s), dentro del horario operativo y con huecos libres (`backend/funnel.py`):
 
-1. **Paso 0 · filtro técnico (sin IA):** EMA 20/50/200, RSI, MACD, ADX, ATR, actividad y zonas de oferta/demanda.
+1. **Paso 0 · filtro técnico (sin IA):** EMA 20/50/200, RSI, MACD, ADX, ATR, actividad y zonas de oferta/demanda. Descarta ADX < 18 o volumen < 0,8× (forex sin bróker conectado: solo ADX).
 2. **Paso 1 · modelo rápido:** elige de 0 a 3 candidatos en una llamada. Es multitemporal: Gemini 3.5 Flash evalúa 4H y 1H, y nunca se opera contra la tendencia de 4H.
 3. **Paso 2 · modelo potente:** BUY / SELL / PASS con un % de confianza, aplicando las reglas aprendidas.
 
-- Un candidato del Paso 1 vuelve al Paso 2 cada 5 minutos hasta que haya una operación ejecutable o se llene el máximo de posiciones.
+- Un candidato del Paso 1 vuelve al Paso 2 cada 15 minutos hasta que haya una operación ejecutable o se llene el máximo de posiciones.
 - `ai_min_confidence` (10–90): confianza mayor que el umbral → se ejecuta; igual o menor → operación sombra.
 - Tamaño: `(equidad × riesgo %) ÷ (distancia al stop + comisiones)`; por defecto cada stop cuesta el 1 % de la equidad.
 - Forex, viernes: sin entradas desde las 12:00 NY y cierre total a las 15:30 NY.

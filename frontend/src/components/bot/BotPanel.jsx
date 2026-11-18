@@ -11,9 +11,9 @@ const Stat = ({ label, value, testId }) => (
 );
 
 const STAGES = [
-  ["Etapa 0 · Filtro técnico (sin IA)", "EMAs 20/50/200, RSI, MACD, ADX, ATR, volumen y zonas de oferta/demanda de cada par. Descarta mercados planos, pares con posición abierta y pares bloqueados por evento rojo."],
+  ["Etapa 0 · Filtro técnico (sin IA)", "EMAs 20/50/200, RSI, MACD, ADX, ATR, volumen y zonas de oferta/demanda de cada par. Descarta sin gastar IA los pares con ADX menor a 18 o volumen menor a 0,8× (en forex el volumen solo cuenta con cuenta demo o real conectada), los que ya tienen posición y los bloqueados por evento rojo."],
   ["Etapa 1 · Modelo rápido", "Una sola llamada con la tabla de todos los pares: elige como máximo 3 candidatos."],
-  ["Etapa 2 · Modelo potente", "Analiza cada candidato como un trader profesional, aplica las reglas aprendidas y responde BUY / SELL / PASS con un % de confianza. Vuelve a analizar cada candidato cada 5 minutos hasta abrir operación o llenar las posiciones máximas."],
+  ["Etapa 2 · Modelo potente", "Analiza cada candidato como un trader profesional, aplica las reglas aprendidas y responde BUY / SELL / PASS con un % de confianza. Vuelve a analizar los candidatos al cierre de cada vela de 15 minutos hasta abrir operación o llenar las posiciones máximas."],
 ];
 
 const MTF_STAGES = [
@@ -32,7 +32,7 @@ export default function BotPanel({ settings: s, account, equity, mtf = false, fm
   return (
     <Panel testId="bot-plan-panel" title="Plan de trading" icon={ShieldCheck} className="lg:col-span-3" bodyClass="p-4 space-y-4 overflow-y-auto thin-scroll max-h-[540px]" delay={180}>
       <div>
-        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">Temporalidad {s.timeframe} · ciclo cada 60 s</p>
+        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">Temporalidad {s.timeframe} · análisis en :00, :15, :30 y :45 (+8 s)</p>
         <p data-testid="active-strategy-name" className="font-display mt-1 text-lg font-bold text-amber-400">Embudo IA</p>
         <ul className="mt-2 space-y-2">
           {(mtf ? MTF_STAGES : STAGES).map(([name, text]) => (
@@ -74,7 +74,7 @@ export default function BotPanel({ settings: s, account, equity, mtf = false, fm
           </span>
         </div>
         <p className="mt-1 text-[12px] leading-relaxed text-slate-400">
-          Cada 60 s, dentro del horario operativo y con huecos libres: filtro técnico sin IA → el modelo rápido elige hasta 3 candidatos → el modelo potente decide BUY / SELL / PASS.
+          Al cierre de cada vela de 15 minutos (:00, :15, :30 y :45, con 8 s de margen), dentro del horario operativo y con huecos libres: filtro técnico sin IA → el modelo rápido elige hasta 3 candidatos → el modelo potente decide BUY / SELL / PASS.
           Solo se abre si su confianza supera el {s.ai_min_confidence}%; el resto se sigue como sombra. El tamaño se calcula para que el stop cueste el {s.risk_per_trade}% de la equidad actual, comisiones incluidas.
         </p>
       </div>

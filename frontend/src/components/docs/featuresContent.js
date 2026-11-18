@@ -12,7 +12,7 @@ export function buildFeatures(bot) {
     text: `Analiza ${market} cada minuto. Un filtro técnico gratuito descarta lo que no merece atención, un modelo rápido elige como mucho 3 candidatos y un modelo potente los estudia como un trader profesional y responde BUY, SELL o PASS con un porcentaje de confianza. Solo se abre la operación si esa confianza supera el umbral que tú eliges. El tamaño siempre lo fija el riesgo por operación (% del capital). Empieza en paper trading y pasa a modo REAL sobre ${broker} cuando las métricas lo avalen.`,
     stats: [
       ["3", "etapas del embudo IA"],
-      ["60 s", "ciclo de análisis"],
+      ["15 min", "ciclo de análisis"],
       ["5 min", "reanálisis de candidatos"],
       ["±15 min", "bloqueo por evento rojo"],
       ["10–90 %", "umbral de confianza"],
@@ -28,7 +28,8 @@ export function buildFeatures(bot) {
         "Paso 1 · modelo rápido multitemporal (Gemini 3.5 Flash): evalúa cada par en 4H (estructura) y 1H (confirmación) y usa la temporalidad del bot como gatillo. Elige de 0 a 3 candidatos en una sola llamada.",
         "Nunca contra 4H: si la tendencia de 4H es alcista solo se analizan compras y si es bajista solo ventas; con 4H mixta se permiten ambos lados. Este bloqueo no gasta IA.",
         "Paso 2 · modelo potente: analiza cada candidato con las últimas velas, la temporalidad superior, los eventos próximos y tus reglas aprendidas. Responde BUY, SELL o PASS con un % de confianza.",
-        "Reanálisis cada 5 minutos: mientras un par siga siendo candidato del modelo rápido, vuelve al modelo potente cada 5 minutos hasta que salga una operación ejecutable o el bot llene el máximo de posiciones.",
+        "Sincronizado con el reloj: el embudo se dispara en :00, :15, :30 y :45 de cada hora con 8 segundos de margen, cuando la vela ya está cerrada y el volumen y los indicadores son definitivos.",
+        "Reanálisis cada 15 minutos: mientras un par siga siendo candidato del modelo rápido, vuelve al modelo potente en cada disparo hasta que salga una operación ejecutable o el bot llene el máximo de posiciones.",
         "Los pares que el modelo rápido descarta no llegan nunca al modelo potente.",
       ],
     },

@@ -21,13 +21,22 @@ STRATEGY = "ai_funnel"
 INFO = {STRATEGY: {"name": "Embudo IA", "rules": "Filtro técnico sin IA → modelo rápido elige hasta 3 candidatos → modelo potente decide BUY/SELL/PASS con un % de confianza. "
                                                  "Solo se ejecuta si la confianza supera «Confianza IA para abrir operación»; si no, se sigue como operación sombra.",
                    "basis": "Análisis discrecional de un trader profesional (tendencia, EMAs, momentum, volumen, oferta y demanda) con dimensionamiento por riesgo fijo."}}
-CYCLE_SEC = 60
+TRIGGER_MIN, TRIGGER_DELAY_SEC = 15, 8   # the funnel fires at :00/:15/:30/:45 + 8 s, once the exchange has closed the candle
+MIN_ADX, MIN_VOLUME = 18, 0.8
+
+
+def next_trigger(now: float = None) -> float:
+    """Epoch of the next quarter-hour mark + safety delay."""
+    now = time.time() if now is None else now
+    step = TRIGGER_MIN * 60
+    t = (now - TRIGGER_DELAY_SEC) // step * step + step + TRIGGER_DELAY_SEC
+    return t if t > now else t + step
 MAX_CANDIDATES = 3
 CONFIDENCE_LEVELS = (10, 20, 30, 40, 50, 60, 70, 80, 90)
 FAST_TIMEOUT_SEC, DEEP_TIMEOUT_SEC = 25, 75
 SL_ATR_BAND = (0.5, 4.0)   # an AI stop must sit between 0.5 and 4 ATR from the entry
 MIN_RR = 1.0
-DEEP_COOLDOWN_SEC = 300    # a stage-1 candidate goes back to the strong model every 5 min until it trades or the slots fill up
+DEEP_COOLDOWN_SEC = 300    # guard against manual re-scans: a candidate goes back to the strong model on every 15-min trigger, never sooner than 5 min
 REPEAT_MOVE_ATR = 0.15     # stage 1 is not repeated while no eligible pair moved this much (in ATR) since the last call on the same candle
 MTF_TTL = {"4h": 300, "1h": 120}   # seconds a higher-timeframe frame is reused (multi-timeframe engines only)
 MTF_FAST = {"provider": "gemini", "model": "gemini-3.5-flash"}   # cheap model of the multi-timeframe stage 1
@@ -81,9 +90,10 @@ def stage0(m: dict) -> str | None:
     """Deterministic filter: a flat, quiet pair far from any zone is not worth an AI call. Returns the discard reason."""
     if not m["atr"] > 0:
         return "sin ATR válido"
-    near_zone = any(z and z["dist_atr"] <= 0.75 for z in (m["demand"], m["supply"]))
-    if m["adx"] < 15 and m["activity"] < 1.0 and m["trend"] == "MIXTA" and not near_zone:
-        return f"mercado plano (ADX {m['adx']}, {m['activity_kind']} {m['activity']}×, EMAs mezcladas, lejos de zonas)"
+    if m["adx"] < MIN_ADX:
+        return f"sin tendencia (ADX {m['adx']} < {MIN_ADX})"
+    if m["activity_kind"] == "volumen" and m["activity"] < MIN_VOLUME:   # forex on Yahoo data has no reliable volume: ADX only
+        return f"volumen débil ({m['activity']}× < {MIN_VOLUME}×)"
     return None
 
 
@@ -349,7 +359,7 @@ async def run(engine, settings) -> int:
     deep_at = engine.__dict__.setdefault("funnel_deep_at", {})
     for cand in s1["candidates"][:limit]:
         if cand["symbol"] not in eligible or time.time() - deep_at.get(cand["symbol"], 0) < DEEP_COOLDOWN_SEC:
-            continue   # the strong model looks at a candidate again every 5 minutes, not every cycle
+            continue
         deep_at[cand["symbol"]] = time.time()
         try:
             found += await _deep(engine, settings, cand, eligible[cand["symbol"]], frames[cand["symbol"]], s1)
@@ -406,7 +416,7 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
     if not approved and candle_key in engine.signal_keys:   # this candle already has its shadow trade: just report the new verdict
         _note(engine, symbol, 2, "SOMBRA", f"Confianza {res['confidence']}% ≤ {threshold}% · {res['reasoning']}", res["confidence"])
         await _record(engine, cand, m, res, s1, tf, threshold, "BAJA_CONFIANZA", key, "Reanálisis: la operación sombra de esta vela ya está abierta")
-        await engine.log("AI_EVAL", f"{symbol} {res['decision']} · confianza {res['confidence']}% (umbral {threshold}%) → sigue sin ejecutarse · nuevo análisis en 5 min · {res['reasoning'][:160]}{tail}")
+        await engine.log("AI_EVAL", f"{symbol} {res['decision']} · confianza {res['confidence']}% (umbral {threshold}%) → sigue sin ejecutarse · nuevo análisis al cierre de la próxima vela de 15 min · {res['reasoning'][:160]}{tail}")
         return 0
     sig = {"side": side, "price": price, "sl": sl, "tp": tp, "strategy": STRATEGY, "atr": m["atr"], "score": 2, "key_ts": m["candle_ts"],
            "reasons": [f"Filtro rápido: {cand['reason']}", f"Modelo potente ({res['confidence']}%): {res['reasoning']}"],

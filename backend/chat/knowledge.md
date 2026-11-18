@@ -9,12 +9,12 @@ Cada bot tiene cuenta paper propia (capital inicial $500), ajustes, posiciones, 
 
 ## Arquitectura actual: Embudo IA (`funnel.py`)
 Ya NO existen estrategias estáticas, backtest, optimizador, walk-forward, perfiles de riesgo, modos test, laboratorio ni agente de noticias con titulares/sentimiento.
-Ciclo cada 60 s, solo dentro del horario operativo y con huecos libres:
-- **Paso 0** (sin IA): EMA 20/50/200, RSI, MACD, ADX, ATR, actividad (volumen o rango) y zonas de oferta/demanda. Descarta pares planos lejos de zonas.
+Disparo en :00/:15/:30/:45 + 8 s (`funnel.next_trigger`), solo dentro del horario operativo y con huecos libres:
+- **Paso 0** (sin IA): EMA 20/50/200, RSI, MACD, ADX, ATR, actividad (volumen o rango) y zonas de oferta/demanda. Descarta ADX < 18 o volumen < 0,8× (FX sin bróker conectado: solo ADX).
 - **Paso 1** (modelo rápido): elige 0–3 candidatos en una llamada. No se repite si ningún par se movió 0,15 ATR en la misma vela.
 - **Multitemporal (los tres bots)**: el Paso 1 usa Gemini 3.5 Flash (respaldo: modelo rápido normal) y evalúa 4H (estructura) + 1H (confirmación); `timeframe` es la temporalidad de entrada (recomendado 15m). Lado permitido = tendencia de 4H (ALCISTA→solo long, BAJISTA→solo short, MIXTA→ambos); lo contrario se bloquea sin IA.
 - **Paso 2** (modelo potente + reglas aprendidas): BUY / SELL / PASS con confianza 0–100.
-- Un candidato del Paso 1 vuelve al Paso 2 cada 5 minutos (`DEEP_COOLDOWN_SEC`) hasta que haya operación ejecutable o se llene `max_positions`. Los pares descartados en el Paso 1 no llegan al Paso 2.
+- Un candidato del Paso 1 vuelve al Paso 2 en cada disparo de 15 minutos hasta que haya operación ejecutable o se llene `max_positions`. Los pares descartados en el Paso 1 no llegan al Paso 2.
 - `ai_min_confidence` (10..90 en pasos de 10): confianza > umbral → se ejecuta; ≤ umbral → sombra `BAJA_CONFIANZA` (una por vela).
 - SL/TP: `atr_levels_enabled` → `atr_sl_mult`×ATR / `atr_tp_mult`×ATR (2 / 4 por defecto); apagado → niveles de la IA si son válidos (stop 0,5–4 ATR, R:R ≥ 1).
 - Tamaño: (equidad actual × `risk_per_trade` %) ÷ (distancia al stop + comisiones/spread): cada stop cuesta `risk_per_trade` % (1 % por defecto) de la equidad. `atr_levels_enabled` viene encendido (SL 2×ATR, TP 4×ATR). FX: `min_lot_max_risk` 1 % por defecto (si el lote mínimo arriesga más, no se abre).

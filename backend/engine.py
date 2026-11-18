@@ -718,9 +718,9 @@ class TradingEngine:
             except Exception as e:
                 logger.exception("scan error")
                 await self.log("ERROR", f"Error en escaneo: {e}")
-            self.next_scan_ts = time.time() + funnel.CYCLE_SEC
+            self.next_scan_ts = funnel.next_trigger()
             try:
-                await asyncio.wait_for(self.scan_event.wait(), timeout=funnel.CYCLE_SEC)
+                await asyncio.wait_for(self.scan_event.wait(), timeout=max(0.5, self.next_scan_ts - time.time()))
             except asyncio.TimeoutError:
                 pass
             self.scan_event.clear()

@@ -649,6 +649,12 @@ Decisiones del usuario: 1 % por defecto pero editable; sobre equidad actual; cie
 - Fix: `funnel._record()` guarda un Signal (`ai_decision` PASS / CONTRA_4H / BAJA_CONFIANZA, sl=tp=0, confianza, umbral, modelo, razonamiento) en cada análisis del modelo potente; log de PASS incluye «confianza N%». `AiSignals.jsx`: etiquetas «PASS · sin operación» / «Bloqueada · contra 4H», barra de confianza y SL/TP ocultos si sl=0. Rendimiento: etiquetas nuevas en señales por decisión.
 - Tested: testing_agent iteration_102 — backend 182/182 (`tests/test_iter102_funnel_decisions.py`, 9 nuevos, cripto + FX), frontend 100 % en los 3 bots con señales sembradas (ya borradas).
 
+## Iteración 107 (2026-11) — Disparo sincronizado con el reloj + pre-filtro ADX/volumen (3 bots)
+- `funnel.next_trigger()`: el scan loop de los 3 motores espera a :00/:15/:30/:45 + 8 s (decisión del usuario: 8 s). `scan_event` (iniciar bot / escaneo manual) sigue despertándolo. Sustituye al ciclo de 60 s; el reanálisis del modelo potente pasa a cada disparo de 15 min (decisión del usuario), `DEEP_COOLDOWN_SEC` queda como protección ante escaneos manuales.
+- `stage0`: descarta ADX < 18 (`MIN_ADX`) o volumen < 0,8× (`MIN_VOLUME`) antes del modelo rápido; el volumen solo se evalúa si `activity_kind == "volumen"` (cripto siempre; FX solo con bróker conectado). Sustituye a la regla anterior de «mercado plano».
+- Consecuencia: la watchlist (indicadores) se refresca cada 15 min.
+- Tested: pytest (stage0 + next_trigger nuevos) y log real del bucle. Sin testing agent.
+
 ### Pendiente
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.
