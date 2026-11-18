@@ -86,7 +86,7 @@ def run(coro_fn, monkeypatch, data, profile=HFM, daily_paused=False):
         async def hs(symbol, sig, *a, **k):
             e.normal_signals.append((symbol, sig["strategy"]))
         e._handle_signal = hs
-        await e._new_account(500.0)
+        await e._new_account(50000.0)
         if daily_paused:
             await e.db.account.update_one({"_id": "main"}, {"$set": {"daily_paused": True}})
         try:

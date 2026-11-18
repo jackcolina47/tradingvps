@@ -24,8 +24,8 @@ def position_size(equity: float, available: float, risk_pct: float, entry: float
     if dist <= 0 or entry <= 0:
         return 0.0, 0.0
     qty = (equity * risk_pct / 100) / dist
-    max_notional = available * leverage * 0.95
-    qty = min(qty, max_notional / entry)
+    if qty * entry > available * leverage * 0.95:
+        return 0.0, 0.0  # not enough margin for the exact risk: never open a smaller (or bigger) position
     if symbol or lot:
         qty = lot_qty(symbol, qty, lot)
     if qty * entry < min_notional:

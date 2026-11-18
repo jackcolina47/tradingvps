@@ -19,7 +19,7 @@ async def open_shadow(engine, signal_id: str, symbol: str, sig: dict, settings, 
     long = sig["side"] == "long"
     entry = price * (1 + SLIPPAGE) if long else price * (1 - SLIPPAGE)
     sl, tp = entry - (sig["price"] - sig["sl"]), entry + (sig["tp"] - sig["price"])
-    qty, margin = position_size(equity, equity, settings.risk_per_trade * risk_factor, entry, sl, settings.leverage, symbol)
+    qty, margin = position_size(equity, equity, settings.risk_per_trade, entry, sl, settings.leverage, symbol)
     if qty <= 0:
         return None
     doc = {"signal_id": signal_id, "symbol": symbol, "side": sig["side"], "strategy": sig["strategy"], "timeframe": settings.timeframe,

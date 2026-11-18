@@ -316,7 +316,8 @@ class PositionsMixin:
                             risk_reason: str = "noticias", expires_at: str = None, horizon: str = "short", exit_mode: str = None):
         """Returns (Position | None, reason) — reason explains why nothing was opened.
         `exit_mode="cross"` (Test cruce EMA): only the 3×ATR safety SL is sent (no TP), the position uses no slot and closes on the opposite cross."""
-        risk_pct = settings.risk_per_trade * risk_factor
+        risk_factor = 1.0  # fixed-fractional risk: no filter may change the size
+        risk_pct = settings.risk_per_trade
         cross = exit_mode == "cross"
         tickers = self.market.tickers
         async with self.lock:
@@ -348,8 +349,8 @@ class PositionsMixin:
                                                                  settings.min_lot_max_risk, lot)
                     if lots <= 0 or margin < 1:
                         need = risk.min_lot_risk_pct(info["equity"], entry, sl, symbol, tickers, lot["min"])
-                        reason = (f"tamaño por debajo del lote mínimo del bróker ({lot['min']:g}): con este stop arriesga el {need}% de la equidad real "
-                                  f"(objetivo {risk_pct:g}%, tope {settings.min_lot_max_risk:g}%)")
+                        reason = (f"no se puede arriesgar exactamente el {risk_pct:g}%: el lote mínimo del bróker ({lot['min']:g}) arriesgaría el {need}% de la equidad real, "
+                                  f"o falta margen para el tamaño necesario")
                         await self.log("RISK", f"{symbol}: {reason}")
                         return None, reason
                     await self._log_sizing(symbol, sig, lots, info["equity"], real_risk, entry, sl, tp)
@@ -403,8 +404,8 @@ class PositionsMixin:
                                                              settings.min_lot_max_risk)
                 if lots <= 0 or margin < 1:
                     need = risk.min_lot_risk_pct(s["equity"], entry, sl, symbol, tickers)
-                    reason = (f"tamaño por debajo del lote mínimo (0.01): con este stop el lote mínimo arriesga el {need}% de la equidad "
-                              f"(objetivo {risk_pct:g}%, tope con lote mínimo {settings.min_lot_max_risk:g}%) · sube el capital, el tope o usa una temporalidad menor")
+                    reason = (f"no se puede arriesgar exactamente el {risk_pct:g}%: el lote mínimo (0.01) arriesgaría el {need}% de la equidad, "
+                              f"o falta margen para el tamaño necesario · sube el capital o usa una temporalidad menor")
                     await self.log("RISK", f"{symbol}: {reason}")
                     return None, reason
                 await self._log_sizing(symbol, sig, lots, s["equity"], real_risk, entry, sl, tp)

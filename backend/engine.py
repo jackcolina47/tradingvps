@@ -559,7 +559,8 @@ class TradingEngine:
                             horizon: str = "short", entry_type: str = "market", fill: dict = None, exit_mode: str = None):
         """`fill` = an already executed maker order ({entry, qty, fee, order_id, link_id} in REAL; {entry} in PAPER): no new order is sent.
         `exit_mode="cross"` (Test cruce EMA): the SL/TP are virtual (sizing only), nothing is sent to Bybit and the position doesn't use a slot."""
-        risk_pct = settings.risk_per_trade * risk_factor
+        risk_factor = 1.0  # fixed-fractional risk: no filter may shrink the size
+        risk_pct = settings.risk_per_trade
         cross = exit_mode == "cross"
         async with self.lock:
             open_docs = await self._open_and_pending(exclude_symbol=symbol)

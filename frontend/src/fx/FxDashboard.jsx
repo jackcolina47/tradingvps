@@ -38,7 +38,7 @@ export const NEWS_WEIGHT_LABELS = { normal: "Normal · las alertas generales pue
 const EXTRA_SELECTS = [{ k: "ai_news_weight", label: "Peso de las noticias en la IA", options: ["normal", "bajo"], render: (o) => NEWS_WEIGHT_LABELS[o] || o,
   hint: "Cuánto pesan las alertas generales de mercado (no específicas del par) en el veredicto de la IA por señal. La optimización con IA lo calibra sola con las operaciones sombra «Rechazos de la IA por riesgo de noticias»." }];
 const EXTRA_TOGGLES = [
-  { k: "close_before_weekend", label: "Cerrar antes del fin de semana", hint: "Cierra todo 30 min antes del cierre del viernes (evita gaps del domingo)" },
+  { k: "close_before_weekend", label: "Regla del viernes (bloqueo 12:00 · cierre 15:30 NY)", hint: "Viernes, hora de Nueva York: sin nuevas entradas desde las 12:00 y cierre forzoso de todas las posiciones a las 15:30, estén en ganancia o en pérdida" },
   { k: "rollover_guard", label: "Guardia de rollover (17:00 NY)", hint: "Sin entradas 16:50–17:15 Nueva York; en paper los stops no se evalúan durante el pico de spread" },
   { k: "vol_filter_enabled", label: "Filtro de volatilidad (ATR)", hint: "Sin entradas con ATR bajo el percentil mínimo; riesgo a la mitad por encima del percentil alto" },
   { k: "seasonality_bias", label: "Estacionalidad intradía", hint: "Una divisa tiende a depreciarse en su horario local: señales contra el sesgo bloqueadas en los pares marcados y reducidas en el resto" },
@@ -220,7 +220,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
           <SettingsPanel settings={data.settings} meta={meta} profileActive={data.profile_active} leverageMax={500} maxPositions={12}
             hide={rulesOnly ? RULES_ONLY_HIDE : []}
             extraToggles={rulesOnly ? [LEARN_TOGGLE, ...EXTRA_TOGGLES.filter((t) => !RULES_ONLY_HIDE.includes(t.k))] : EXTRA_TOGGLES}
-            extraNums={rulesOnly ? EXTRA_NUMS.filter((n) => !RULES_ONLY_HIDE.includes(n.k)) : EXTRA_NUMS}
+            extraNums={EXTRA_NUMS.filter((n) => n.k !== "min_lot_max_risk" && !(rulesOnly && RULES_ONLY_HIDE.includes(n.k)))}
             extraChips={[...SESSION_CHIPS(meta), ...(rulesOnly ? [] : SEASON_CHIPS(meta))]} extraSelects={rulesOnly ? EXTRA_SELECTS.filter((x) => x.k !== "ai_news_weight") : EXTRA_SELECTS} fmtLeverage={fmtLev} strategyKeys={meta?.strategy_keys} longKeys={meta?.long_horizon_keys}
             onSave={(body) => act(() => http.put("/settings", body), "Configuración guardada")}
             onProfile={(level) => act(() => http.post("/profile", { level }), `Perfil de riesgo aplicado: ${meta?.profiles?.[level]?.name || level}`)} />

@@ -54,6 +54,13 @@ def next_change(now: datetime = None) -> datetime:
     return target.astimezone(timezone.utc)
 
 
+def friday_stage(now: datetime = None) -> str:
+    """Friday rule (New York time): "block" from 12:00 (no new entries), "flat" from 15:30 (everything is closed), else ""."""
+    ny = (now or datetime.now(timezone.utc)).astimezone(NY)
+    h = ny.hour + ny.minute / 60
+    return "" if ny.weekday() != 4 or h < 12 else "flat" if h >= 15.5 else "block"
+
+
 def closing_soon(minutes: int = 30, now: datetime = None) -> bool:
     now = now or datetime.now(timezone.utc)
     return market_open(now) and (next_change(now) - now) <= timedelta(minutes=minutes)

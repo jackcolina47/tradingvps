@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from models import Position, LogEntry
 import notify
 from fx.models import FxSettings
-from fx.market import FxMarket, market_open, closing_soon
+from fx.market import FxMarket, market_open, closing_soon, friday_stage
 from fx import risk
 from fx import filters
 from fx.live import FxLiveBroker, is_our_link
@@ -182,11 +182,11 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
         settings = await self.get_settings()
         tickers = await self.market.fetch_tickers(settings.symbols)
         now = datetime.now(timezone.utc)
-        if settings.close_before_weekend and closing_soon(30) and self._weekend_flat_day != today():
+        if settings.close_before_weekend and market_open() and friday_stage() == "flat" and self._weekend_flat_day != today():
             self._weekend_flat_day = today()
             ids = [str(d["_id"]) async for d in self.db.positions.find({}, {"_id": 1})]
             if ids:
-                await self.log("RISK", f"Cierre de fin de semana · {len(ids)} posiciones cerradas antes del cierre del mercado")
+                await self.log("RISK", f"Cierre de fin de semana · {len(ids)} posiciones cerradas (viernes 15:30 de Nueva York)")
                 for pid in ids:
                     await self.close_position(pid, reason="FIN_SEMANA")
         ex = None

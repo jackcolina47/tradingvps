@@ -6,7 +6,7 @@ from models import Signal, now_iso
 from indicators import trend_label, htf_trend, snapshot
 from strategies import evaluate, exit_signal, ema_test, ema_test_params, atr_params, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST
 from fx.models import FxSettings
-from fx.market import HTF, market_open, market_status, in_sessions, session_names, closing_soon
+from fx.market import HTF, market_open, market_status, in_sessions, session_names, closing_soon, friday_stage
 from fx.symbols import SPECS, pips
 from fx import filters
 from fx import regime as fx_regime
@@ -122,7 +122,7 @@ class SignalsMixin:
         acc = await self.account_summary()
         open_docs = await self.db.positions.find({}, {"symbol": 1, "exit_mode": 1}).to_list(100)
         block = ("límite de pérdida diaria alcanzado" if acc["daily_paused"] else "ya existe una posición del test abierta en el par" if self._pair_taken(open_docs, symbol, True)
-                 else "cierre de fin de semana inminente" if settings.close_before_weekend and closing_soon(30)
+                 else "viernes desde las 12:00 de Nueva York: sin nuevas entradas" if settings.close_before_weekend and friday_stage()
                  else f"cuenta {self.bk} sin conexión con MetaApi" if self.live and self.hfm["down_since"]
                  else f"par no operable en {self.bk} con el sufijo de símbolos configurado" if self.live and self.cfg and symbol in (self.cfg.hfm_symbols_bad or []) else None)
         if block:
@@ -140,6 +140,8 @@ class SignalsMixin:
         open_syms = [p["symbol"] for p in open_docs]
         if not market_open():
             return "mercado cerrado", "MERCADO", open_syms
+        if settings.close_before_weekend and friday_stage():
+            return "viernes desde las 12:00 de Nueva York: sin nuevas entradas hasta el lunes", "MERCADO", open_syms
         if horizon == "short" and not in_sessions(settings.sessions_allowed):
             return f"fuera de las sesiones permitidas ({session_names(settings.sessions_allowed)})", "SESION", open_syms
         if self._pair_taken(open_docs, symbol, False):

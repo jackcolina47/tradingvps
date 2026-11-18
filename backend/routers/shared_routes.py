@@ -14,7 +14,7 @@ import ai_advisor
 import position_review
 import ai_rules
 import trade_learning
-from fx.market import market_open as fx_market_open
+from fx.market import market_open as fx_market_open, friday_stage
 from models import ManualOrder
 import performance
 from auth import hash_password, verify_password, create_token
@@ -77,6 +77,8 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
             raise HTTPException(400, "Sin precio en vivo para ese par")
         if getattr(engine, "profile", None) and not fx_market_open():
             raise HTTPException(400, "Mercado cerrado")
+        if getattr(engine, "profile", None) and settings.close_before_weekend and friday_stage():
+            raise HTTPException(400, "Viernes desde las 12:00 de Nueva York: sin nuevas entradas hasta el lunes")
         d = 1 if body.side == "long" else -1
         if (price - body.sl) * d <= 0 or (body.tp - price) * d <= 0:
             raise HTTPException(400, f"Niveles inválidos para el precio actual ({price:.6g}): el SL debe quedar {'por debajo' if d > 0 else 'por encima'} y el TP al otro lado")

@@ -59,9 +59,8 @@ def position_size(equity: float, available: float, risk_pct: float, entry: float
     lots = (equity * risk_pct / 100) / per_lot_loss
     notional_per_lot = contract * base_usd(symbol, tickers, entry)
     max_affordable = available * leverage * 0.95 / notional_per_lot
-    lots = min(lots, max_affordable)
-    if lots < min_lot and max_affordable >= min_lot and per_lot_loss * min_lot / equity * 100 <= min_lot_max_risk:
-        lots = min_lot
+    if lots > max_affordable or lots < min_lot - 1e-9:
+        return 0.0, 0.0, 0.0  # exact risk not tradable (margin or minimum lot): never open with a different risk
     lots = round_lots(lots, lot)
     if lots <= 0:
         return 0.0, 0.0, 0.0
