@@ -1,0 +1,21 @@
+{
+  "summary": "Iter102 (funnel decisions panel). Added /app/backend/tests/test_iter102_funnel_decisions.py with 9 tests covering PASS/CONTRA_4H/BAJA_CONFIANZA/APROBADA record paths, PASS cooldown re-record, FX engine kind, and API persistence in signals/fx_signals/pep_signals. All 9 pass. Regression: 182 tests pass (173 previous + 9 new) running sequentially (-n 0) and excluding suites that need local mocks (iter5/iter18/iter21/iter28/iter49/trading_bot/plan_performance, per testing_notes.md). Frontend: seeded 4 signals (PASS 35, CONTRA_4H 62, BAJA_CONFIANZA 45, APROBADA 78) in each of signals/fx_signals/pep_signals and verified panel data-testid=ai-signals-panel renders all 4 cards on /bybit, /hotforex and /pepperstone with ai-decision-<id> labels ('PASS · sin operación', 'Bloqueada · contra 4H', 'Sombra · confianza baja', 'APROBADA'), ai-confidence-<id> showing '35% (umbral 60%)' etc., reasoning visible, PASS and CONTRA_4H cards do NOT show SL/TP (sl=0/tp=0 suppressed), no console errors (only PostHog/Recharts warnings). Mobile 390px: panel width 358px, no horizontal overflow. Empty state after cleanup shows the expected text 'Aquí aparece cada análisis del modelo potente (BUY, SELL o PASS) con su porcentaje de confianza…'. Every seeded document deleted; no bot was started or switched out of PAPER.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter102_funnel_decisions.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "funnel._record builds reasons with only a single string (stage-1 reason). For PASS/CONTRA_4H/BAJA_CONFIANZA the deep-model reasoning is stored in ai_reasoning (shown as paragraph in the card) but is NOT added to the reasons[] chip list, so the visible chips are 'Filtro rápido: …' only. Not a bug (reasoning is still visible), but consider adding 'Modelo potente (N%): …' to reasons for consistency with the APROBADA/BAJA_CONFIANZA execution path which does include both.",
+    "AiSignals.jsx line 53: SL/TP are suppressed when `s.sl` is falsy (0). Fine for the current fix. Keep in mind that any future non-zero-but-very-small SL would still render; current spec is OK.",
+    "_record() passes side = BUY/SELL verdict side even in the CONTRA_4H case (res.decision BUY→long, SELL→short). The side stored matches the AI's wish, not the allowed bias. The UI relies on this, but worth documenting."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Panel password BlackCat2233@ (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Inserted 4 TEST_iter102_UI Signal docs into each of signals, fx_signals, pep_signals for the UI verification; all deleted at the end (verified empty-state text).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "New suite at /app/backend/tests/test_iter102_funnel_decisions.py (9 tests, -n 0). It reuses the FakeEngine pattern from test_iter101; patches funnel.stage1/stage2 so no LLM tokens are spent. The DB-level API tests use a function-scoped motor client fixture. Regression suite count is 173 + 9 = 182 under the same exclusion list used historically. Bots left as they were (PAPER, stopped). Seed helper at /tmp/seed_signals.py (seed|clean) if UI needs to be re-seeded."
+}
