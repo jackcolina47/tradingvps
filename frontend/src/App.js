@@ -77,7 +77,7 @@ function Dashboard({ onLogout }) {
   const toggleBot = async () => {
     setBusy(true);
     const running = data.status.running;
-    await act(() => http.post(running ? "/bot/stop" : "/bot/start"), running ? "Bot detenido" : "Bot iniciado · operando 24/7");
+    await act(() => http.post(running ? "/bot/stop" : "/bot/start"), running ? "Bot detenido" : "Bot iniciado · operará dentro del horario operativo");
     setBusy(false);
   };
 

@@ -157,7 +157,7 @@ class TradingEngine:
     async def start(self):
         self.running = True
         await self.db.settings.update_one({"_id": "main"}, {"$set": {"bot_running": True}})
-        await self.log("INFO", f"Bot ACTIVADO · operando 24/7 en modo {'REAL en Bybit ' + self.env.upper() if self.live else 'paper trading'}")
+        await self.log("INFO", f"Bot ACTIVADO · embudo IA dentro del horario operativo · modo {'REAL en Bybit ' + self.env.upper() if self.live else 'paper trading'}")
         await self.tg(f"▶️ <b>Bot ACTIVADO</b> · modo {self.mode_label}" + (f" · Bybit {self.env}" if self.live else ""), "orders")
         self.scan_event.set()
 
