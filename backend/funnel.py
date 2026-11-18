@@ -29,6 +29,9 @@ SL_ATR_BAND = (0.5, 4.0)   # an AI stop must sit between 0.5 and 4 ATR from the 
 MIN_RR = 1.0
 DEEP_COOLDOWN_SEC = 300    # a stage-1 candidate goes back to the strong model every 5 min until it trades or the slots fill up
 REPEAT_MOVE_ATR = 0.15     # stage 1 is not repeated while no eligible pair moved this much (in ATR) since the last call on the same candle
+MTF_TTL = {"4h": 300, "1h": 120}   # seconds a higher-timeframe frame is reused (multi-timeframe engines only)
+MTF_FAST = {"provider": "gemini", "model": "gemini-3.5-flash"}   # cheap model of the multi-timeframe stage 1 (Bybit)
+BIAS_SIDE = {"ALCISTA": "long", "BAJISTA": "short"}
 MARKET = {"crypto": "criptomonedas (futuros perpetuos USDT)", "fx": "forex y metales (CFD)"}
 
 
@@ -107,6 +110,22 @@ FAST_SYSTEM = (
 )
 
 
+MTF_SYSTEM = (
+    " ANÁLISIS MULTITEMPORAL: cada par trae además su estructura en 4H y en 1H. Evalúa primero 4H (estructura y dirección de fondo), después 1H "
+    "(confirmación: tendencia, momentum y si el precio está en una zona útil) y usa la tabla de {tf} solo como gatillo de entrada. "
+    "Elige únicamente pares donde 4H y 1H apoyen la misma dirección o donde 1H esté retrocediendo hacia una zona a favor de 4H. "
+    "Respeta SIEMPRE el «lado permitido» de cada par: las entradas contra la tendencia de 4H están prohibidas."
+)
+
+
+def _mtf_txt(m: dict) -> str:
+    out = []
+    for tf, h in (m.get("mtf") or {}).items():
+        z = f" · demanda {_zone_txt(h['demand'])} · oferta {_zone_txt(h['supply'])}" if "demand" in h else ""
+        out.append(f"{tf.upper()}: tendencia {h['trend']} · RSI {h['rsi']} · ADX {h['adx']} · precio a {h['dist_ema50_atr']:+} ATR de su EMA50{z}")
+    return " || ".join(out) + (f" || lado permitido: {m['bias'].upper() if m.get('bias') else 'LONG o SHORT'}" if out else "")
+
+
 def _zone_txt(z) -> str:
     return f"{z['low']:.6g}-{z['high']:.6g} ({z['touches']} toques, a {z['dist_atr']} ATR)" if z else "ninguna"
 
@@ -114,16 +133,29 @@ def _zone_txt(z) -> str:
 def _row_txt(symbol: str, m: dict) -> str:
     return (f"{symbol}: precio {m['price']:.6g} | tendencia {m['trend']} (EMA20 {m['ema20']:.6g}, EMA50 {m['ema50']:.6g}, EMA200 {m['ema200']:.6g}; precio a {m['dist_ema20_atr']:+} ATR de EMA20) | "
             f"RSI {m['rsi']} | MACD hist {m['macd_hist']:.4g} {'subiendo' if m['macd_rising'] else 'bajando'} | ADX {m['adx']} | ATR {m['atr_pct']}% | "
-            f"{m['activity_kind']} {m['activity']}× | demanda {_zone_txt(m['demand'])} | oferta {_zone_txt(m['supply'])}")
+            f"{m['activity_kind']} {m['activity']}× | demanda {_zone_txt(m['demand'])} | oferta {_zone_txt(m['supply'])}"
+            + (f"\n   {_mtf_txt(m)}" if m.get("mtf") else ""))
 
 
 async def stage1(kind: str, tf: str, rows: dict, limit: int, usage_kind: str) -> dict:
-    cfg = fast_cfg()
-    t0 = time.monotonic()
-    chat = _chat(FAST_SYSTEM.format(market=MARKET[kind], tf=tf, n=limit), f"{usage_kind}-fast", cfg)
-    chat._probe = False
+    mtf = any(m.get("mtf") for m in rows.values())
+    system = FAST_SYSTEM.format(market=MARKET[kind], tf=tf, n=limit) + (MTF_SYSTEM.format(tf=tf) if mtf else "")
     prompt = "\n".join(_row_txt(s, m) for s, m in rows.items()) + f"\n\n¿Qué pares (máx. {limit}) merecen el análisis completo?"
-    data = parse_json(await asyncio.wait_for(_ask(chat, prompt), FAST_TIMEOUT_SEC), "embudo etapa 1")
+    t0 = time.monotonic()
+
+    async def ask(cfg):
+        chat = _chat(system, f"{usage_kind}-fast", cfg)
+        chat._probe = False
+        return parse_json(await asyncio.wait_for(_ask(chat, prompt), FAST_TIMEOUT_SEC), "embudo etapa 1")
+    cfg = {**_cfg, **MTF_FAST} if mtf else fast_cfg()
+    try:
+        data = await ask(cfg)
+    except Exception as e:
+        if not mtf:
+            raise
+        logger.warning(f"[STAGE 1] {cfg['model']} falló ({str(e)[:120]}) → modelo rápido de respaldo")
+        cfg = fast_cfg()
+        data = await ask(cfg)
     out = []
     for c in data.get("candidates") or []:
         sym, side = str((c or {}).get("symbol", "")).upper(), str((c or {}).get("side", "")).lower()
@@ -165,8 +197,10 @@ async def stage2(kind: str, symbol: str, tf: str, cand: dict, m: dict, df, i: in
     prompt = (
         f"PAR: {symbol} | TF {tf} | hora Nueva York {datetime.now(trade_guard.NY).strftime('%A %H:%M')}\n"
         f"Candidato del filtro rápido: {cand['side'].upper()} · {cand['reason']}\n"
-        f"ESTADO: {_row_txt(symbol, m)}\n"
-        f"TEMPORALIDAD SUPERIOR ({htf['tf']}): tendencia {htf['trend']} · RSI {htf['rsi']} · ADX {htf['adx']} · precio a {htf['dist_ema50_atr']:+} ATR de su EMA50\n"
+        f"ESTADO ({tf}): {_row_txt(symbol, {**m, 'mtf': None})}\n"
+        + (f"ANÁLISIS MULTITEMPORAL (4H = estructura, 1H = confirmación, {tf} = entrada; no se opera contra 4H): {_mtf_txt(m)}\n" if m.get("mtf") else
+           f"TEMPORALIDAD SUPERIOR ({htf['tf']}): tendencia {htf['trend']} · RSI {htf['rsi']} · ADX {htf['adx']} · precio a {htf['dist_ema50_atr']:+} ATR de su EMA50\n") +
+        
         f"CONTEXTO: {json.dumps(ctx, ensure_ascii=False)}\n"
         f"ÚLTIMAS VELAS CERRADAS ({tf}, UTC{', V = ' + ('volumen' if kind == 'crypto' else 'volumen de ticks del bróker') if has_volume else ', sin volumen fiable: usa el rango'}):\n"
         f"{_candles_txt(df, i, 40, has_volume)}\n"
@@ -209,6 +243,21 @@ def _htf(df: pd.DataFrame, tf: str) -> dict:
     e20, e50, e200, atr = float(r["ema20"]), float(r["ema50"]), float(r["ema200"]), float(r["atr"])
     return {"tf": tf, "trend": "ALCISTA" if e20 > e50 > e200 else "BAJISTA" if e20 < e50 < e200 else "MIXTA", "rsi": round(float(r["rsi"]), 1),
             "adx": round(float(r["adx"]), 1), "dist_ema50_atr": round((float(r["close"]) - e50) / atr, 2) if atr else 0}
+
+
+async def _mtf(engine, symbol: str, price: float) -> dict:
+    """4H structure + 1H confirmation of a pair (frames cached a few minutes: they change slowly)."""
+    cache, out = engine.__dict__.setdefault("funnel_mtf_cache", {}), {}
+    for tf in engine.funnel_mtf:
+        hit = cache.get((symbol, tf))
+        if not hit or time.time() - hit[0] > MTF_TTL[tf]:
+            df, _ = await engine.funnel_frame(symbol, tf, 250)
+            hit = cache[(symbol, tf)] = (time.time(), df)
+        df = hit[1]
+        out[tf] = _htf(df, tf)
+        if tf == "4h":
+            out[tf].update(zones(df, len(df) - 2, float(df["atr"].iloc[-2]), price))
+    return out
 
 
 def _upcoming(kind: str, symbol: str, hours: int = 4) -> list:
@@ -261,6 +310,16 @@ async def run(engine, settings) -> int:
         if why:
             _note(engine, symbol, 0, "DESCARTADO", why)
             continue
+        if getattr(engine, "funnel_mtf", None):
+            try:
+                m["mtf"] = await _mtf(engine, symbol, m["price"])
+            except Exception as e:
+                logger.exception(f"funnel mtf {symbol}")
+                _note(engine, symbol, 0, "DESCARTADO", f"Sin datos de 4H/1H · {str(e)[:100]}")
+                continue
+            m["bias"] = BIAS_SIDE.get(m["mtf"]["4h"]["trend"])
+            engine.analysis[symbol]["htf"] = {"MIXTA": "NEUTRAL"}.get(m["mtf"]["4h"]["trend"], m["mtf"]["4h"]["trend"])
+            engine.analysis[symbol]["mtf"] = {tf: h["trend"] for tf, h in m["mtf"].items()}
         eligible[symbol] = m
     if not eligible:
         return 0
@@ -276,11 +335,15 @@ async def run(engine, settings) -> int:
             logger.exception("funnel stage 1")
             await engine.log("ERROR", f"Embudo · filtro rápido sin respuesta: {str(e)[:140]}")
             return 0
+        for c in [c for c in s1["candidates"] if eligible[c["symbol"]].get("bias") not in (None, c["side"])]:
+            s1["candidates"].remove(c)   # free guard: never against the 4H trend
+            _note(engine, c["symbol"], 1, "DESCARTADO", f"{c['side'].upper()} contra la tendencia de 4H ({eligible[c['symbol']]['mtf']['4h']['trend']})")
+            await engine.log("RISK", f"{c['symbol']}: candidato {c['side'].upper()} descartado sin IA potente · va contra la tendencia de 4H")
         picked = {c["symbol"] for c in s1["candidates"]}
         for symbol in eligible:
             if symbol not in picked:
                 _note(engine, symbol, 1, "DESCARTADO", f"El filtro rápido no ve entrada ({s1['model']})")
-        await engine.log("SCAN", f"Embudo {tf} · {len(rows)} pares → {len(eligible)} tras filtro técnico → {len(picked)} candidato(s) del modelo rápido"
+        await engine.log("SCAN", f"Embudo {'4H/1H → ' if getattr(engine, 'funnel_mtf', None) else ''}{tf} · {len(rows)} pares → {len(eligible)} tras filtro técnico → {len(picked)} candidato(s) del modelo rápido"
                                  + (f": {', '.join(c['symbol'] + ' ' + c['side'].upper() for c in s1['candidates'])}" if picked else "") + f" · {s1['model']} · {s1['ms']} ms")
     found = 0
     deep_at = engine.__dict__.setdefault("funnel_deep_at", {})
@@ -305,11 +368,11 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
     candle_key = _key(symbol, m["candle_ts"])
     key = f"{candle_key}:{int(time.time())}"
     htf_tf = engine.funnel_htf(tf)
-    htf_df, _ = await engine.funnel_frame(symbol, htf_tf, 250)
+    htf = m["mtf"]["1h"] if m.get("mtf") else _htf((await engine.funnel_frame(symbol, htf_tf, 250))[0], htf_tf)
     rules = await ai_rules.active(engine.db, symbol)
     ctx = {**engine.funnel_ctx(symbol), "posiciones_abiertas": len(state["open"]), "max_posiciones": settings.max_positions,
            "pnl_dia_pct": state["acc"]["daily_pnl_pct"], "eventos_rojos_proximos": _upcoming(kind, symbol)}
-    res = await stage2(kind, symbol, tf, cand, m, df, i, has_volume, _htf(htf_df, htf_tf), rules, ctx, settings, engine.usage_kind)
+    res = await stage2(kind, symbol, tf, cand, m, df, i, has_volume, htf, rules, ctx, settings, engine.usage_kind)
     tail = f" · {res['model']} · {res['ms']} ms"
     if res["decision"] == "PASS":
         _note(engine, symbol, 2, "PASS", res["reasoning"], res["confidence"])
@@ -318,6 +381,10 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
         await engine.log("AI_EVAL", f"{symbol}: PASS del modelo potente" + (f" · regla «{res['rule']['text'][:80]}»" if res["rule"] else "") + f" · {res['reasoning'][:220]}{tail}")
         return 0
     side = "long" if res["decision"] == "BUY" else "short"
+    if m.get("bias") not in (None, side):
+        _note(engine, symbol, 2, "PASS", f"{res['decision']} contra la tendencia de 4H: bloqueada", res["confidence"])
+        await engine.log("RISK", f"{symbol}: {res['decision']} del modelo potente bloqueada · va contra la tendencia de 4H ({m['mtf']['4h']['trend']}){tail}")
+        return 0
     price = engine.market.tickers.get(symbol, {}).get("price") or m["price"]
     sl, tp, source = levels(side, price, m["atr"], settings, res["sl"], res["tp"], engine.funnel_digits(symbol))
     threshold = settings.ai_min_confidence
@@ -336,7 +403,7 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
                     ai_model=res["model"], ai_ms=res["ms"], ai_adjusted_sl=res["sl"], ai_adjusted_tp=res["tp"], ai_levels_applied=source == "ia",
                     ai_reasoning=res["reasoning"], key=key,
                     context={**ctx, "funnel": {"stage1": {"reason": cand["reason"], "model": s1["model"], "ms": s1["ms"]}, "levels": source, "trend": m["trend"],
-                                               "htf_tf": htf_tf, "activity_kind": m["activity_kind"], "demand": m["demand"], "supply": m["supply"]}})
+                                               "htf_tf": htf_tf, "mtf": {tf: h["trend"] for tf, h in (m.get("mtf") or {}).items()} or None, "activity_kind": m["activity_kind"], "demand": m["demand"], "supply": m["supply"]}})
     sid = str((await engine.db.signals.insert_one(signal.to_mongo())).inserted_id)
     head = f"{symbol} {res['decision']} · confianza {res['confidence']}% (umbral {threshold}%)"
     if not approved:

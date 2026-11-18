@@ -627,6 +627,12 @@ Decisiones del usuario: eliminar TODO backtest/optimizador/walk-forward; mantene
 - Quitados de Ajustes: menciones a «agente de noticias» y `admin/FundingSection.jsx`.
 - Tested: cálculo verificado con datos sintéticos en BD temporal; UI verificada por captura (vacío real + respuesta simulada, escritorio y móvil); pytest 173/173. Sin testing agent.
 
+## Iteración 103 (2026-11) — Bybit multitemporal 4H/1H (solo Bybit)
+- `engine.funnel_mtf = ("4h","1h")` (los motores FX no lo tienen → sin cambios). `funnel._mtf` añade a cada par elegible `m["mtf"]` (4H con zonas + 1H, caché 300/120 s) y `m["bias"]` (lado permitido por tendencia 4H).
+- Paso 1 Bybit: `MTF_FAST` = gemini / gemini-3.5-flash con la clave Emergent (respaldo automático a `fast_cfg()`), prompt `MTF_SYSTEM`. Paso 2 recibe el bloque multitemporal + velas de `settings.timeframe` (decisión del usuario: temporalidad de entrada = la configurada).
+- Bloqueo gratis contra 4H (decisión del usuario): candidatos del Paso 1 y decisiones del Paso 2 contra `bias` se descartan.
+- Tested: pytest 173/173; `scripts/funnel_dry_run.py bybit` real (Gemini 3.5 Flash → Sonnet 5.5) y candidato forzado contra 4H bloqueado; hfm sin cambios (Haiku). Sin testing agent.
+
 ### Pendiente
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.

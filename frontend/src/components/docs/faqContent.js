@@ -19,6 +19,8 @@ export function buildFaq(bot) {
 
     { cat: "Embudo IA", q: "¿Qué modelos de IA usa?", tags: ["modelo", "haiku", "sonnet", "rápido", "potente"],
       a: "Dos: uno rápido y barato para el Paso 1 y uno potente para el Paso 2. En Ajustes → IA eliges el proveedor y el modelo potente; el rápido se elige solo (Automático) o lo fijas tú." },
+    ...(fx ? [] : [{ cat: "Embudo IA", q: "¿Cómo funciona el análisis multitemporal de Bybit?", tags: ["4h", "1h", "15m", "multitemporal", "gemini"],
+      a: "El modelo rápido (Gemini 3.5 Flash) mira primero 4H para la estructura y 1H para confirmar, y usa la temporalidad configurada del bot como gatillo de entrada. El modelo potente recibe ese mismo contexto junto con las velas de la temporalidad de entrada. Las operaciones contra la tendencia de 4H se bloquean sin gastar IA. Para seguir el esquema 4H → 1H → 15m, pon la temporalidad del bot en 15m." }]),
     { cat: "Embudo IA", q: "¿Cada cuánto se vuelve a analizar un par?", tags: ["5 minutos", "reanálisis", "tokens", "coste"],
       a: "El ciclo corre cada 60 segundos, pero el modelo rápido solo se vuelve a llamar si algún par se ha movido. Un par elegido como candidato vuelve al modelo potente cada 5 minutos mientras siga siendo candidato, hasta que salga una operación ejecutable o el bot llene el máximo de posiciones. Los pares descartados por el modelo rápido nunca llegan al modelo potente." },
     { cat: "Embudo IA", q: "¿Qué significa «Confianza IA para abrir operación»?", tags: ["confianza", "umbral", "desplegable"],

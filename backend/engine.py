@@ -739,6 +739,8 @@ class TradingEngine:
     async def funnel_frame(self, symbol: str, tf: str, limit: int = 300):
         return build_df(await self.market.fetch_klines(symbol, tf, limit, cache_sec=30)), True
 
+    funnel_mtf = ("4h", "1h")   # Bybit only: 4H structure + 1H confirmation before the entry timeframe
+
     @staticmethod
     def funnel_htf(tf: str) -> str:
         return HTF[tf]

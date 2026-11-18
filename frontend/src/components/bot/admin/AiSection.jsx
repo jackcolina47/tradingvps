@@ -119,7 +119,7 @@ export default function AiSection({ config, onSave }) {
           </div>
         </div>
       )}
-      <Field label="Modelo rápido del embudo (etapa 1)" hint={`Modelo barato que descarta el ruido técnico antes del modelo principal. Automático = ${modelLabel(config.fast_model_auto || "")} (${config.fast_model_auto}). Se activa por bot en Ajustes → «Embudo IA en 2 etapas».`}>
+      <Field label="Modelo rápido del embudo (etapa 1)" hint={`El bot de Bybit usa siempre Gemini 3.5 Flash en su etapa 1 multitemporal (4H y 1H); este ajuste se aplica a los bots de forex y como respaldo. Modelo barato que descarta el ruido técnico antes del modelo principal. Automático = ${modelLabel(config.fast_model_auto || "")} (${config.fast_model_auto}). Se activa por bot en Ajustes → «Embudo IA en 2 etapas».`}>
         <Select value={form.ai_fast_model || AUTO} onValueChange={(v) => set("ai_fast_model", v === AUTO ? "" : v)}>
           <SelectTrigger data-testid="ai-fast-model-select" className={INPUT}><SelectValue /></SelectTrigger>
           <SelectContent className="border-[#1E293B] bg-[#0D111A]">

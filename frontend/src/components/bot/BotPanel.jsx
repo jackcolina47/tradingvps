@@ -16,7 +16,13 @@ const STAGES = [
   ["Etapa 2 · Modelo potente", "Analiza cada candidato como un trader profesional, aplica las reglas aprendidas y responde BUY / SELL / PASS con un % de confianza. Vuelve a analizar cada candidato cada 5 minutos hasta abrir operación o llenar las posiciones máximas."],
 ];
 
-export default function BotPanel({ settings: s, account, equity, fmtLeverage = (v) => `${v}x` }) {
+const MTF_STAGES = [
+  STAGES[0],
+  ["Etapa 1 · Modelo rápido multitemporal (Gemini 3.5 Flash)", "Evalúa cada par en 4H (estructura) y 1H (confirmación) y usa la temporalidad del bot como gatillo: elige como máximo 3 candidatos. Las entradas contra la tendencia de 4H se descartan sin gastar IA potente."],
+  STAGES[2],
+];
+
+export default function BotPanel({ settings: s, account, equity, mtf = false, fmtLeverage = (v) => `${v}x` }) {
   const used = Math.min(100, Math.max(0, (-account.daily_pnl_pct / s.daily_loss_limit) * 100));
   const nd0 = equity.length ? equity[0].net_deposits || 0 : 0;
   const hasFlows = equity.some((e) => (e.net_deposits || 0) !== nd0);
@@ -29,7 +35,7 @@ export default function BotPanel({ settings: s, account, equity, fmtLeverage = (
         <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">Temporalidad {s.timeframe} · ciclo cada 60 s</p>
         <p data-testid="active-strategy-name" className="font-display mt-1 text-lg font-bold text-amber-400">Embudo IA</p>
         <ul className="mt-2 space-y-2">
-          {STAGES.map(([name, text]) => (
+          {(mtf ? MTF_STAGES : STAGES).map(([name, text]) => (
             <li key={name} className="border-l-2 border-amber-500/40 pl-2.5">
               <p className="text-[13px] font-semibold text-slate-200">{name}</p>
               <p className="text-[12px] leading-relaxed text-slate-400">{text}</p>

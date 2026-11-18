@@ -25,7 +25,9 @@ export function buildFeatures(bot) {
       text: "Sustituye a las antiguas estrategias fijas, al backtest y al optimizador. Gasta tokens solo donde hay una oportunidad real.",
       bullets: [
         "Paso 0 · filtro técnico sin IA (gratis): EMA 20/50/200, RSI, MACD, ADX, ATR, actividad y zonas de oferta y demanda. Descarta los pares planos y lejos de cualquier zona.",
-        "Paso 1 · modelo rápido y barato: recibe la tabla de todos los pares que pasaron el filtro y elige de 0 a 3 candidatos en una sola llamada. No se repite mientras el mercado no se mueva.",
+        fx ? "Paso 1 · modelo rápido y barato: recibe la tabla de todos los pares que pasaron el filtro y elige de 0 a 3 candidatos en una sola llamada. No se repite mientras el mercado no se mueva."
+           : "Paso 1 · modelo rápido multitemporal (Gemini 3.5 Flash): evalúa cada par en 4H (estructura) y 1H (confirmación) y usa la temporalidad del bot como gatillo. Elige de 0 a 3 candidatos en una sola llamada.",
+        !fx && "Nunca contra 4H: si la tendencia de 4H es alcista solo se analizan compras y si es bajista solo ventas; con 4H mixta se permiten ambos lados. Este bloqueo no gasta IA.",
         "Paso 2 · modelo potente: analiza cada candidato con las últimas velas, la temporalidad superior, los eventos próximos y tus reglas aprendidas. Responde BUY, SELL o PASS con un % de confianza.",
         "Reanálisis cada 5 minutos: mientras un par siga siendo candidato del modelo rápido, vuelve al modelo potente cada 5 minutos hasta que salga una operación ejecutable o el bot llene el máximo de posiciones.",
         "Los pares que el modelo rápido descarta no llegan nunca al modelo potente.",
