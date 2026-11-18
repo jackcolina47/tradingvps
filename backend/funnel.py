@@ -359,6 +359,18 @@ async def run(engine, settings) -> int:
     return found
 
 
+async def _record(engine, cand: dict, m: dict, res: dict, s1: dict, tf: str, threshold: int, decision: str, key: str, note: str = ""):
+    """Stores a strong-model verdict that opens nothing (PASS, against 4H, repeated low confidence) so the decisions panel shows it with its confidence."""
+    side = {"BUY": "long", "SELL": "short"}.get(res["decision"], cand["side"])
+    await engine.db.signals.insert_one(Signal(
+        symbol=cand["symbol"], side=side, strategy=STRATEGY, timeframe=tf, price=m["price"], sl=0, tp=0, score=2, reasons=[f"Filtro rápido: {cand['reason']}"],
+        indicators={k: m[k] for k in ("close", "ema20", "ema50", "ema200", "rsi", "macd_hist", "adx", "atr", "activity")},
+        ai_decision=decision, ai_confidence=res["confidence"], ai_min_confidence=threshold, ai_stage=2, ai_model=res["model"], ai_ms=res["ms"],
+        ai_reasoning=res["reasoning"], note=note, key=key,
+        context={"funnel": {"stage1": {"reason": cand["reason"], "model": s1["model"], "ms": s1["ms"]}, "verdict": res["decision"],
+                            "mtf": {t: h["trend"] for t, h in (m.get("mtf") or {}).items()} or None}}).to_mongo())
+
+
 async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -> int:
     kind, tf, symbol = engine.guard_kind, settings.timeframe, cand["symbol"]
     df, i, has_volume = frame
@@ -374,23 +386,26 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
            "pnl_dia_pct": state["acc"]["daily_pnl_pct"], "eventos_rojos_proximos": _upcoming(kind, symbol)}
     res = await stage2(kind, symbol, tf, cand, m, df, i, has_volume, htf, rules, ctx, settings, engine.usage_kind)
     tail = f" · {res['model']} · {res['ms']} ms"
+    threshold = settings.ai_min_confidence
     if res["decision"] == "PASS":
+        await _record(engine, cand, m, res, s1, tf, threshold, "PASS", key, f"Regla aprendida: {res['rule']['text'][:120]}" if res["rule"] else "")
         _note(engine, symbol, 2, "PASS", res["reasoning"], res["confidence"])
         if res["rule"]:
             await ai_rules.hit(engine.db, res["rule"]["id"])
-        await engine.log("AI_EVAL", f"{symbol}: PASS del modelo potente" + (f" · regla «{res['rule']['text'][:80]}»" if res["rule"] else "") + f" · {res['reasoning'][:220]}{tail}")
+        await engine.log("AI_EVAL", f"{symbol}: PASS del modelo potente · confianza {res['confidence']}%" + (f" · regla «{res['rule']['text'][:80]}»" if res["rule"] else "") + f" · {res['reasoning'][:220]}{tail}")
         return 0
     side = "long" if res["decision"] == "BUY" else "short"
     if m.get("bias") not in (None, side):
         _note(engine, symbol, 2, "PASS", f"{res['decision']} contra la tendencia de 4H: bloqueada", res["confidence"])
-        await engine.log("RISK", f"{symbol}: {res['decision']} del modelo potente bloqueada · va contra la tendencia de 4H ({m['mtf']['4h']['trend']}){tail}")
+        await _record(engine, cand, m, res, s1, tf, threshold, "CONTRA_4H", key, f"{res['decision']} bloqueada: va contra la tendencia de 4H ({m['mtf']['4h']['trend']})")
+        await engine.log("RISK", f"{symbol}: {res['decision']} del modelo potente (confianza {res['confidence']}%) bloqueada · va contra la tendencia de 4H ({m['mtf']['4h']['trend']}){tail}")
         return 0
     price = engine.market.tickers.get(symbol, {}).get("price") or m["price"]
     sl, tp, source = levels(side, price, m["atr"], settings, res["sl"], res["tp"], engine.funnel_digits(symbol))
-    threshold = settings.ai_min_confidence
     approved = res["confidence"] > threshold
     if not approved and candle_key in engine.signal_keys:   # this candle already has its shadow trade: just report the new verdict
         _note(engine, symbol, 2, "SOMBRA", f"Confianza {res['confidence']}% ≤ {threshold}% · {res['reasoning']}", res["confidence"])
+        await _record(engine, cand, m, res, s1, tf, threshold, "BAJA_CONFIANZA", key, "Reanálisis: la operación sombra de esta vela ya está abierta")
         await engine.log("AI_EVAL", f"{symbol} {res['decision']} · confianza {res['confidence']}% (umbral {threshold}%) → sigue sin ejecutarse · nuevo análisis en 5 min · {res['reasoning'][:160]}{tail}")
         return 0
     sig = {"side": side, "price": price, "sl": sl, "tp": tp, "strategy": STRATEGY, "atr": m["atr"], "score": 2, "key_ts": m["candle_ts"],

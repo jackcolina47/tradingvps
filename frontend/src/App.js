@@ -157,7 +157,7 @@ function Dashboard({ onLogout }) {
             </Tabs>
           </Panel>
           <AiSignals signals={data.signals} ai={data.status.ai} usage={data.status.ai_usage} minConfidence={data.settings.ai_min_confidence} title="Decisiones del embudo IA"
-            emptyText="Aquí aparecen las decisiones BUY / SELL del modelo potente: las que superan el umbral de confianza se ejecutan y el resto se sigue como sombra." />
+            emptyText="Aquí aparece cada análisis del modelo potente (BUY, SELL o PASS) con su porcentaje de confianza: las BUY / SELL que superan el umbral se ejecutan y el resto se sigue como sombra." />
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <SettingsPanel settings={data.settings} meta={meta}
