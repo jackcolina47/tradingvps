@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Panel } from "../Panel";
-import { http, errMsg } from "@/lib/api";
+import { http, errMsg, STRATEGY_LABELS } from "@/lib/api";
 import { INPUT, BTN } from "./SecuritySection";
 
 const PAGE = 10;
@@ -59,7 +59,7 @@ function RuleRow({ r, busy, onToggle, onRemove, onSave }) {
             className="w-full rounded-sm border border-amber-500/40 bg-[#07090E] px-2 py-1 text-xs text-slate-100 outline-none" />
         )}
         <p className="mt-0.5 font-mono text-[10px] text-slate-500">
-          {r.symbol ? `Solo ${r.symbol}` : "Todos los símbolos"}{r.verdict ? ` · de un análisis ${r.verdict}` : ""}{r.created_at ? ` · ${new Date(r.created_at).toLocaleDateString("es-ES")}` : ""}{r.auto ? " · automática" : ""}
+          {r.symbol ? `Solo ${r.symbol}` : "Todos los símbolos"}{r.side ? ` · solo ${r.side === "long" ? "largos" : "cortos"}` : ""}{r.strategy ? ` · solo ${STRATEGY_LABELS[r.strategy] || r.strategy}` : ""}{r.verdict ? ` · de un análisis ${r.verdict}` : ""}{r.created_at ? ` · ${new Date(r.created_at).toLocaleDateString("es-ES")}` : ""}{r.auto ? " · automática" : ""}
         </p>
         <p data-testid={`learned-rule-stats-${r.id}`} className="mt-0.5 font-mono text-[10px] text-slate-500">
           {r.hits || 0} señales bloqueadas{r.blocked_closed ? <> · de {r.blocked_closed} ya resueltas, {r.blocked_wins} habrían ganado (<span className={r.blocked_pnl > 0 ? "text-rose-300" : "text-emerald-300"}>{r.blocked_pnl > 0 ? "+" : ""}{r.blocked_pnl} sin la regla</span>)</> : ""}

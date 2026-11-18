@@ -13,6 +13,14 @@ from models import Position
 logger = logging.getLogger("position_review")
 CANDLES = 60
 SHOCK_COOLDOWN = 30 * 60
+SKIP_R, SKIP_MAX_SEC = 0.5, 4 * 3600  # a position is re-reviewed only after moving ≥ 0.5R since its last review, or every 4 h
+
+
+def _move_r(p, price):
+    risk = abs(p.entry_price - (p.initial_sl or p.sl))
+    if not price or risk <= 0:
+        return None
+    return round((price - p.entry_price) * (1 if p.side == "long" else -1) / risk, 2)
 
 
 def _rows(rows: list) -> list:
@@ -69,7 +77,7 @@ async def btc_shock(engine, settings) -> str:
     return f"ALERTA BTC: Bitcoin {verb} un {c1h:+.2f} % en la última hora ({c30:+.2f} % en 30 min), por encima del umbral de {pct:g} %."
 
 
-async def review_open_positions(engine, settings, currency: str, bot_name: str, trigger: str = "") -> list:
+async def review_open_positions(engine, settings, currency: str, bot_name: str, trigger: str = "", force: bool = False) -> list:
     """Runs one review cycle. Returns the list of reviews (also stored on each position as `ai_review`). `trigger` = extraordinary reason (BTC shock)."""
     engine._ai_review_last = time.time()
     docs = await engine.db.positions.find().to_list(200)
@@ -94,6 +102,12 @@ async def review_open_positions(engine, settings, currency: str, bot_name: str, 
     out = []
     for doc in docs:
         p = Position.from_mongo(doc)
+        r_now = _move_r(p, (engine.market.tickers.get(p.symbol) or {}).get("price"))
+        mark = doc.get("ai_review_mark")
+        if not trigger and not force and mark and r_now is not None and abs(r_now - mark["r"]) < SKIP_R and time.time() - mark["ts"] < SKIP_MAX_SEC:
+            continue  # nothing relevant changed since the last review: no AI call
+        if r_now is not None:
+            await engine.db.positions.update_one({"_id": doc["_id"]}, {"$set": {"ai_review_mark": {"r": r_now, "ts": time.time()}}})
         try:
             candles = _rows(await engine.market.fetch_klines(p.symbol, tf, CANDLES + 1, cache_sec=60))
             if len(candles) < 15:

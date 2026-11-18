@@ -2,7 +2,7 @@
 avoidable losses become learned rules and winners that a current rule would have blocked count against that rule."""
 import time
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from bson import ObjectId
 
 import ai_advisor
@@ -62,6 +62,10 @@ FX_MARKET = "forex y metales (CFD con lotes y pips)"
 async def learn(engine, trade: Trade, currency: str = "USDT", before_unit: str = "ms"):
     """Runs after every closed trade of a rules-only bot (never raises)."""
     try:
+        if trade.pnl >= 0:  # winners are not analysed (saves the expensive call): only the cheap check of rules that would have blocked them
+            if trade.pnl > 0:
+                await _check_winner(engine, trade, currency)
+            return
         rules = await ai_rules.list_rules(engine.db)
         out = await review(engine, trade, currency, before_unit, rules)
         await engine.log("AI_EVAL", f"{trade.symbol}: operación cerrada analizada · {out['verdict']} · {out['verdict_reason']}")
@@ -75,13 +79,14 @@ async def learn(engine, trade: Trade, currency: str = "USDT", before_unit: str =
                 await engine.log("AI_EVAL", f"{line} (análisis de {trade.symbol} {trade.pnl:+.2f} {currency})")
                 await engine.tg(f"📚 <b>{line[:350]}</b>\nTras analizar {trade.side.upper()} {trade.symbol} ({trade.pnl:+.2f} {currency})", "ai")
         if trade.pnl < 0 and out["verdict"] in RULE_VERDICTS and len(out["lesson"]) >= 5:
-            rule = await ai_rules.auto_add(engine.db, out["lesson"], trade.id, out["verdict"])
+            sc = out.get("lesson_scope") or {}
+            rule = await ai_rules.auto_add(engine.db, out["lesson"], trade.id, out["verdict"], symbol=trade.symbol if sc.get("symbol") else "",
+                                           side=trade.side if sc.get("side") else "", strategy=trade.strategy if sc.get("strategy") else "")
             if rule:
                 await ai_rules.event(engine.db, "NUEVA", rule["text"], out["verdict_reason"], src)
                 await engine.log("AI_EVAL", f"Regla aprendida de {trade.symbol} ({trade.pnl:+.2f} {currency}): «{rule['text']}»")
                 await engine.tg(f"📚 <b>Regla aprendida</b> · {trade.side.upper()} {trade.symbol} ({trade.pnl:+.2f} {currency} · {out['verdict']})\n«{rule['text']}»", "ai")
-        elif trade.pnl > 0:
-            await _check_winner(engine, trade, currency)
+        await _weekly_cleanup(engine)
     except Exception as e:
         logger.exception("learn")
         await engine.log("ERROR", f"{trade.symbol}: no se pudo analizar la operación cerrada · {ai_advisor.friendly_error(e)}")
@@ -89,7 +94,7 @@ async def learn(engine, trade: Trade, currency: str = "USDT", before_unit: str =
 
 async def _check_winner(engine, trade: Trade, currency: str = "USDT"):
     """A winner that a currently active rule would have blocked is a miss for that rule (auto-off after MAX_MISSES)."""
-    active = await ai_rules.active(engine.db, trade.symbol)
+    active = await ai_rules.active(engine.db, trade.symbol, trade.side, trade.strategy)
     signal = await _signal(engine, trade)
     if not active or not signal:
         return
@@ -104,3 +109,27 @@ async def _check_winner(engine, trade: Trade, currency: str = "USDT"):
         if off:
             await ai_rules.event(engine.db, "DESACTIVAR", r["text"], f"habría bloqueado {r['misses']} operaciones ganadoras", {"trade_id": trade.id, "symbol": trade.symbol, "pnl": trade.pnl})
             await engine.tg(f"📚 <b>Regla apagada</b>: habría bloqueado {r['misses']} operaciones ganadoras\n«{r['text']}»", "ai")
+
+
+CLEANUP_DAYS, CLEANUP_MIN_RULES = 7, 8
+
+
+async def _weekly_cleanup(engine):
+    """Once a week merges the rules the AI flags as clear DUPLICATES (same scope). Contradictions are left for the manual «Limpiar con IA»."""
+    meta = await engine.db.ai_rule_meta.find_one({"_id": "cleanup"}) or {}
+    if meta.get("at") and (datetime.now(timezone.utc) - datetime.fromisoformat(meta["at"])).days < CLEANUP_DAYS:
+        return
+    rules = await ai_rules.list_rules(engine.db)
+    if len(rules) < CLEANUP_MIN_RULES:
+        return
+    await engine.db.ai_rule_meta.update_one({"_id": "cleanup"}, {"$set": {"at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+    by_id, merged = {r["id"]: r for r in rules}, 0
+    for g in await ai_advisor.cleanup_rules(rules):
+        group = [by_id[r["id"]] for r in g["rules"]]
+        if g["type"] != "DUPLICADAS" or not g["merged"] or len({(r["side"], r["strategy"]) for r in group}) > 1:
+            continue
+        await ai_rules.merge(engine.db, ai_rules.MergeIn(ids=[r["id"] for r in group], merged=g["merged"], reason=f"Limpieza semanal automática: {g['reason']}"))
+        merged += len(group) - 1
+    if merged:
+        await engine.log("AI_EVAL", f"Limpieza semanal de reglas: {merged} regla(s) duplicada(s) fusionada(s)")
+        await engine.tg(f"📚 <b>Limpieza semanal de reglas</b>: {merged} regla(s) duplicada(s) fusionada(s)", "ai")

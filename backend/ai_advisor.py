@@ -427,6 +427,9 @@ async def analyze_trade(t: dict, signal: dict | None, pa: dict, before: list, du
            "—indicadores, tendencia, velas previas, niveles, hora— y si ya está cubierta por alguna de estas, devuelve \"lesson\":\"\"):\n"
            + "\n".join(f"{i}. [{'activa' if r['enabled'] else 'apagada'} · {r.get('hits', 0)} bloqueos · {r.get('misses', 0)} ganadoras que habría bloqueado] {r['text']}"
                         + (f" (solo {r['symbol']})" if r.get("symbol") else "") for i, r in enumerate(known_rules, 1)) + "\n"
+           "ALCANCE DE LA LECCIÓN: añade \"lesson_scope\":{\"symbol\":true|false,\"side\":true|false,\"strategy\":true|false} — true si la regla solo tiene sentido "
+           "para el par / el sentido (largo o corto) / la estrategia de ESTA operación; false si vale en general. Sé estricto: marca true siempre que la lección "
+           "dependa de ello, así la regla solo se comprobará en señales a las que aplica.\n"
            "MANTENIMIENTO DE REGLAS: además del análisis, añade al JSON el campo \"rule_actions\": lista (normalmente vacía, máximo 3) de cambios sobre las reglas "
            "numeradas, solo cuando ESTA operación aporte evidencia clara: {\"n\":número de regla,\"action\":\"DESACTIVAR\"|\"MODIFICAR\"|\"ELIMINAR\","
            "\"text\":\"nuevo texto de la regla (solo MODIFICAR, máx. 40 palabras)\",\"reason\":\"1 frase\"}. DESACTIVAR si la regla es dudosa o esta operación la contradice; "
@@ -441,6 +444,7 @@ async def analyze_trade(t: dict, signal: dict | None, pa: dict, before: list, du
         "what_happened": str(data.get("what_happened", ""))[:700], "better_decision": str(data.get("better_decision", ""))[:900],
         "verdict": verdict if verdict in ("BUENA", "ACEPTABLE", "EVITABLE", "MALA") else "ACEPTABLE", "verdict_reason": str(data.get("verdict_reason", ""))[:300],
         "rule_actions": [a for a in (data.get("rule_actions") or []) if isinstance(a, dict)][:3] if known_rules is not None else [],
+        "lesson_scope": {k: bool((data.get("lesson_scope") or {}).get(k)) for k in ("symbol", "side", "strategy")} if isinstance(data.get("lesson_scope"), dict) else {},
         "lesson": str(data.get("lesson", ""))[:300], "confidence": int(max(0, min(100, int(data.get("confidence", 0) or 0)))),
         "price_action": pa.get("summary"), "model": label(_cfg["model"]), "at": datetime.now(timezone.utc).isoformat(),
     }

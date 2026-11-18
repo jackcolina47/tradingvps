@@ -136,7 +136,7 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
             raise HTTPException(400, "El filtro IA está desactivado en Ajustes")
         bot_name = engine.profile.bot_name if hasattr(engine, "profile") else "Bybit"
         try:
-            reviews = await position_review.review_open_positions(engine, settings, currency, bot_name)
+            reviews = await position_review.review_open_positions(engine, settings, currency, bot_name, force=True)
         except Exception as e:
             raise HTTPException(424, f"Error IA: {friendly_error(e)}")
         return {"ok": True, "reviews": reviews, "count": len(reviews)}

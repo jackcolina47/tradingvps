@@ -858,7 +858,7 @@ class TradingEngine:
             return
 
         approve, rule = True, None
-        rules = await ai_rules.active(self.db, symbol)
+        rules = await ai_rules.active(self.db, symbol, sig["side"], sig["strategy"])
         if not rules:
             signal.ai_reasoning = "Sin reglas aprendidas activas: entrada directa"
         else:

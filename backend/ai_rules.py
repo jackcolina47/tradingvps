@@ -24,6 +24,7 @@ class RulePatch(BaseModel):
 def _pub(d: dict) -> dict:
     return {"id": str(d["_id"]), "text": d["text"], "symbol": d.get("symbol") or "", "enabled": d.get("enabled", True),
             "source_trade_id": d.get("source_trade_id"), "verdict": d.get("verdict"), "created_at": d.get("created_at"), "hits": d.get("hits", 0),
+            "side": d.get("side") or "", "strategy": d.get("strategy") or "",
             "misses": d.get("misses", 0), "auto": bool(d.get("auto")), "ai_edited_at": d.get("ai_edited_at"), "ai_note": d.get("ai_note")}
 
 
@@ -38,12 +39,12 @@ async def list_rules(db) -> List[dict]:
     return out
 
 
-async def auto_add(db, text: str, trade_id: str, verdict: str) -> Optional[dict]:
+async def auto_add(db, text: str, trade_id: str, verdict: str, symbol: str = "", side: str = "", strategy: str = "") -> Optional[dict]:
     """Rule learned from a closed trade; returns None when the same text already exists."""
     text = " ".join(text.split())[:300]
     if await db.ai_rules.find_one({"text": text}):
         return None
-    doc = {"text": text, "symbol": "", "enabled": True, "source_trade_id": trade_id, "verdict": verdict, "auto": True,
+    doc = {"text": text, "symbol": symbol, "side": side, "strategy": strategy, "enabled": True, "source_trade_id": trade_id, "verdict": verdict, "auto": True,
            "created_at": datetime.now(timezone.utc).isoformat(), "hits": 0, "misses": 0}
     res = await db.ai_rules.insert_one(doc)
     doc["_id"] = res.inserted_id
@@ -61,12 +62,13 @@ async def miss(db, rule_id: str) -> dict:
     return _pub(doc)
 
 
-async def active(db, symbol: str = None) -> List[dict]:
-    """Enabled rules that apply to `symbol` (global rules + symbol-specific ones)."""
+async def active(db, symbol: str = None, side: str = None, strategy: str = None) -> List[dict]:
+    """Enabled rules that apply to this signal: a rule scoped to a pair / side / strategy is only sent to the AI for matching signals."""
     q = {"enabled": True}
     if symbol:
         q["$or"] = [{"symbol": ""}, {"symbol": None}, {"symbol": symbol}]
-    return [_pub(d) async for d in db.ai_rules.find(q).sort("_id", -1)]
+    rules = [_pub(d) async for d in db.ai_rules.find(q).sort("_id", -1)]
+    return [r for r in rules if (not side or r["side"] in ("", side)) and (not strategy or r["strategy"] in ("", strategy))]
 
 
 async def add(db, body: RuleIn) -> dict:
@@ -163,6 +165,7 @@ async def merge(db, body: MergeIn) -> dict:
     if len(text) >= 5:
         await db.ai_rules.delete_many({"_id": {"$in": [d["_id"] for d in docs]}})
         doc = {"text": text, "symbol": docs[0].get("symbol") or "", "enabled": any(d.get("enabled", True) for d in docs), "auto": all(d.get("auto") for d in docs),
+               **{k: (docs[0].get(k) or "") if len({d.get(k) or "" for d in docs}) == 1 else "" for k in ("side", "strategy")},
                "created_at": datetime.now(timezone.utc).isoformat(), "hits": sum(d.get("hits", 0) for d in docs), "misses": 0,
                "ai_edited_at": datetime.now(timezone.utc).isoformat(), "ai_note": f"Fusión de {len(docs)} reglas"}
         await db.ai_rules.delete_many({"text": text})

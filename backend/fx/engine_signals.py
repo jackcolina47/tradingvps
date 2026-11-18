@@ -242,7 +242,7 @@ class SignalsMixin:
         signal = Signal(**base, ai_decision="SIN_IA")
         approve, shadow_kind, rule = True, None, None
         if rules_only:
-            rules = await ai_rules.active(self.db, symbol)
+            rules = await ai_rules.active(self.db, symbol, sig["side"], sig["strategy"])
             if not rules:
                 signal.ai_reasoning = "Sin reglas aprendidas activas: entrada directa"
             else:
@@ -277,7 +277,7 @@ class SignalsMixin:
                 "news": news_ctx, "news_weight": settings.ai_news_weight,
                 "horizon": horizon, "vol_regime": g_ctx.get("vol_regime"), "season_bias": g_ctx.get("season_bias"), "usd_regime": g_ctx.get("usd_regime"),
                 "price_action": pa,
-                "learned_rules": await ai_rules.active(self.db, symbol),
+                "learned_rules": await ai_rules.active(self.db, symbol, sig["side"], sig["strategy"]),
             }
             try:
                 fast = None
