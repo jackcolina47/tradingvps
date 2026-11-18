@@ -1,0 +1,37 @@
+{
+  "summary": "Iter101 cleanup+retry regression. BACKEND 173/173 pass (96 existing iter99+iter100 + 77 new in test_iter101_cleanup_retry.py). The new suite covers: (a) removed endpoints return 404/405 (news, news/refresh, fx/news, fx/news/trades, profile POST, fx/profile POST, backtest, optimize, walk-forward/check, ai/optimize-all, rotation/refresh, housekeeping/reopt, cron/walk-forward, lab/*). (b) /api/meta and /api/fx/meta no longer expose profiles/mode_info/strategies/signal_modes and do expose confidence_levels=[10..90] and strategy_info.ai_funnel. (c) /api/dashboard, /api/fx/dashboard, /api/pepper/dashboard no longer contain news/profile_active/optimize_job. (d) POST /api/plan and /api/fx/plan return projection without any 'backtest' key. (e) PUT /api/config and /api/fx/config no longer expose news_* / wf_auto_remove but still persist auto_review_enabled and telegram. (f) PUT /api/settings|fx/settings|pepper/settings persist atr_levels_enabled/breakeven/trailing/partial_tp toggles. (g) POST /api/ai/advise and /api/fx/ai/advise with unknown scope → 400 (no token spent). (h) chat.tools.TOOLS has get_guard and no longer has run_backtest/run_optimizer/run_walk_forward/get_news/get_market_context/get_walk_forward_status; chat.proposals.ACTIONS does not include set_profile/refresh_news. (i) Funnel retry logic with monkey-patched stage1/stage2 and a fake engine: low confidence (40<60) creates one BAJA_CONFIANZA shadow, stage2 not re-called in the next immediate cycle (cooldown 300s), when deep_at is backdated stage2 is called again and no duplicate shadow is produced for the same candle, with maker entry_order_type a raised confidence (75>60) creates a pending_entry, pairs not picked by stage1 never reach stage2, confidence == threshold (60==60) goes to shadow (not executed), and when max_positions is already full stage1/stage2 are never called (funnel paused). (j) maker.cancel_all(symbols=['BTCUSDT']) deletes only the BTCUSDT pending_entry, the ETHUSDT one remains; cancel_all() without filter cancels all. FRONTEND: login OK, selector shows 3 bot cards (bot-card-crypto / bot-card-fx / bot-card-pepper) describing 'Embudo IA' without '8 estrategias' and without 'trading por noticias'. On /bybit /hotforex /pepperstone all tabs (positions/history/performance + pairs on crypto + news/plan/evolution) open without console errors or page errors. On tab-news the red calendar renders (red-event-* rows, no old Titulares/Sentimiento panel). On tab-performance no 'Encender/Apagar' strategy toggle table. On tab-pairs (bybit) no 'Re-optimización' block. tab-plan renders without 'Monte Carlo'. VPS page does not mention 'walk-forward'. Documentation renders with 'Embudo IA', 'Nueva York' and '5 min' in text; FAQ search for 'confianza' returns matches. settings-ai-confidence-select on /bybit is 60%, changed to 70, saved, reload → 70, restored to 60 (persistence confirmed). Ajustes page has 'Telegram' and 'Revisión IA' sections and no 'Agente de noticias' / 'Trading por noticias' SECTION. No console/page errors on any flow.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Ajustes (AdminSettings)", "issues": [
+        "Stale description text in /app/frontend/src/components/bot/AdminSettings.jsx:40 still says '...revisión automática, agente de noticias, cuenta paper y copias de seguridad...'. The 'agente de noticias' phrase should be removed (the news-agent section itself is already gone).",
+        "Same stale wording in /app/frontend/src/fx/FxAdminSettings.jsx:53: '...agente de noticias y trading por noticias, revisión IA automática...'. Should be trimmed."
+      ]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter101_cleanup_retry.py",
+    "/app/backend/tests/test_iter100_guard_funnel.py",
+    "/app/backend/tests/test_iter99_trade_guard.py",
+    "/app/test_reports/pytest/iter101_results.xml"
+  ],
+  "action_items": [
+    "Minor copy fix (not a blocker): update the Spanish descriptive paragraph at the top of AdminSettings.jsx (line 40) and FxAdminSettings.jsx (line 53) to drop the references to 'agente de noticias' / 'trading por noticias' — the sections themselves are already gone, only the header description is stale."
+  ],
+  "critical_code_review_comments": [
+    "funnel.run() still has a tiny ordering nit: engine.funnel_deep_at is only initialised inside run() via setdefault, so stage1 tests that introspect it before the first run must do engine.__dict__.setdefault themselves (handled in the new tests by setting it after the first run). Not a bug, just a note for future testers.",
+    "maker.cancel_all queries `{'symbol': {'$in': symbols}}` — if an upstream caller ever passes an empty list, Mongo will match nothing (safe) but the engine._monitor_once path only calls it when `hit` is non-empty, so this is fine as-is. Adding `if not symbols: return 0` would be slightly more defensive.",
+    "AdminSettings.jsx description text is out of sync with the actual sections rendered (see design_issues). Low-risk but user-visible."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter101_cleanup_retry.py (new: 77 tests)"
+  ],
+  "success_rate": {"backend": "100% (173/173)", "frontend": "100% on the listed flows"},
+  "test_credentials": "BlackCat2233@ (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "test_iter101 only toggles settings and config via PUT, restores the originals before finishing. No bot was started. No posts to /guard/refresh, no LLM tokens spent (stage1/stage2 monkey-patched in all funnel tests, /ai/advise tested only with an invalid scope to exercise the 400 path).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run `cd /app/backend && python -m pytest tests/ -q -n 0` for the full iter99+iter100+iter101 regression (173 tests, ~1 min). pytest-asyncio was installed (`pip install pytest-asyncio`) to run the funnel/maker async tests. If xdist is used (default addopts -n 2 --dist loadscope) tests also pass; the new TestConfigPut/TestSettingsPut classes mutate server state temporarily but each class restores originals — do not run two agents at once against the same backend. Minor stale-copy issue in AdminSettings*.jsx (see design_issues) is the only outstanding finding. Nothing else was changed in the app; bots left STOPPED, PAPER mode."
+}

@@ -609,8 +609,22 @@ Decisiones del usuario: horarios todos los días (sáb/dom incl.); riesgo fijo =
 - UI: `GuardStrip.jsx` (horario + cuenta atrás), `RedCalendar.jsx` (pestaña Noticias), desplegable de confianza en `SettingsPanel.jsx`, insignias de etapa en Watchlist, panel «Plan de trading» = Embudo IA; quitadas pestañas Backtest/Optimizador/Filtros, chips de estrategias, perfiles de riesgo y test EMA del panel.
 - QA: `scripts/funnel_dry_run.py <bybit|hfm|pepperstone> [umbral] [SYMBOL:side[:confianza]]`; tests `tests/test_iter99_trade_guard.py`, `tests/test_iter100_guard_funnel.py`. Los tests iter1..98 son de la arquitectura antigua (obsoletos).
 
+### Nota: decisión posterior del usuario (sustituye al bloqueo por vela)
+Un candidato del modelo rápido vuelve al modelo potente cada 5 min (`funnel.DEEP_COOLDOWN_SEC`) hasta operación ejecutable o `max_positions` lleno. Solo candidatos del Paso 1. Una sombra BAJA_CONFIANZA por vela.
+
+## Iteración 101 (2026-11) — Limpieza final + reintento 5 min + cancelación de límites + documentación
+Decisiones del usuario: eliminar TODO backtest/optimizador/walk-forward; mantener simplificados Plan de crecimiento, revisión IA automática y asesor IA; eliminar agente antiguo de noticias IA; al empezar un bloqueo rojo cancelar solo las órdenes límite de los pares afectados; actualizar guía in-app, guía VPS y README.
+- **Backend borrado**: strategies(.py/_slow), backtest, optimizer, wfcheck, profiles, regime, news, lab, fx/{backtest,optimizer,wfcheck,profiles,regime,strategies_slow,news,ai,lab}, routers/walk_forward_routes, tests iter1–98. Rutas eliminadas (404): /news*, /profile, /backtest, /optimize*, /walk-forward*, /ai/optimize-all, /rotation/refresh, /housekeeping/reopt, /cron/walk-forward, /lab/*.
+- **Backend simplificado**: `deps.FX_BOTS` = tuplas (engine, store); `/meta` = symbols, timeframes, strategy_info (legacy + ai_funnel), confidence_levels; dashboard sin news/profile_active/optimize_job; `review.ai_policy()` única; `/ai/advise` solo scope `plan`; `market_routes` solo órdenes maker pendientes; `housekeeping` solo poda; `plan.py` sin Monte Carlo; config sin `news_*`/`wf_auto_remove`; Settings sin `ema_test_*` (salvo parcial), `reopt_*`, `ai_funnel_enabled`, `price_action_*`; chat: herramienta `get_guard`, sin backtest/optimizer/walk-forward/news/set_profile; `legacy.py` conserva nombres de estrategias antiguas (historial) y salida por cruce de posiciones EMA antiguas.
+- **Cancelación de límites**: `engine._monitor_once` → `maker.cancel_all(symbols=afectados)` al entrar en bloqueo rojo (solo Bybit; FX no usa órdenes límite).
+- **Frontend**: borrados NewsPanel, FxNewsPanel, FxNewsSection, admin/NewsSection, Optimizer + optimizer/*, Backtest, RegimePanel, RiskProfileBar, EmaTestSettings, FxFiltersPanel, PlanMonteCarlo. Pestaña «Eventos rojos» (solo RedCalendar). Rendimiento sin on/off de estrategias. MaintenanceStatus solo poda.
+- **Docs**: components/docs/{features,howTo,faq}Content.js reescritos; backend/chat/knowledge.md; README.md; deploy/INSTALACION.md, deploy/README.md, install.sh/update*.sh (quitan cron walk-forward), vpsContent.js; `.emergent/crons.yml` sin walk-forward.
+- Tested: testing_agent iteration_101 — backend 173/173 (`tests/test_iter101_cleanup_retry.py` 77 nuevos: endpoints eliminados, reintento 5 min con stage1/stage2 simulados, cancelación selectiva de pendientes), frontend 100 % en los 3 bots.
+
 ### Pendiente
-- P0 Limpieza backend (Fase 3): borrar strategies.py, strategies_slow.py, backtest.py, optimizer.py, wfcheck.py, profiles.py, regime/funding gates, fx/filters viejos, fx/backtest|optimizer|wfcheck|profiles|regime|strategies_slow, rutas analysis/walk_forward, código muerto `_handle_signal`/`_scan_slow`/ema_test en motores, ajustes obsoletos en Settings/FxSettings; decidir con el usuario qué pasa con Plan de crecimiento, revisión IA automática, resumen semanal, chat (dependen de backtest/optimizador/perfiles) y con el agente de noticias IA antiguo (NewsPanel/FxNewsPanel, news trading). Borrar tests obsoletos y componentes frontend huérfanos (Backtest, Optimizer, RiskProfileBar, EmaTestSettings, FxFiltersPanel, WalkForward…).
-- P1 Órdenes maker pendientes (Bybit) no se cancelan al entrar en ventana de evento rojo.
-- P1 Documentación del bot (components/docs) y guía VPS; copiar frontend/yarn.lock a deploy/ si cambia package.json.
-- P2 Redondeo del umbral de confianza para valores antiguos (45 → 40, redondeo bancario).
+- P3 Texto descriptivo de AdminSettings.jsx:40 y fx/FxAdminSettings.jsx:53 aún menciona «agente de noticias».
+- P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
+- P3 funding.py / FundingSection: el nivel de funding solo se muestra en la watchlist (ya no es puerta de entrada); decidir si se retira.
+- P2 Redondeo del umbral de confianza para valores antiguos (45 → 40).
+- P1 Validar en REAL (Bybit testnet / MetaApi) el ciclo completo: orden límite maker, cancelación por evento rojo y protección pre-noticia.
+- P1 Telegram end-to-end en el VPS.
