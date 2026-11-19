@@ -1,4 +1,5 @@
 import time
+import ai_advisor
 import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
@@ -43,7 +44,7 @@ def today() -> str:
 
 class TradingEngine:
     bot_key, tg_prefix = "bybit", ""
-    candle_sync, scan_full = True, False
+    candle_sync, scan_full, ai_gate = True, False, True
 
     async def tg(self, text: str, kind: str):
         return await _notify.notify(self.tg_prefix + text, kind, bot=self.bot_key)
@@ -754,7 +755,8 @@ class TradingEngine:
         acc = await self.account_summary()
         open_syms = [p["symbol"] for p in await self._open_and_pending()]
         block = ("límite de pérdida diaria alcanzado" if acc["daily_paused"] else "ya existe una posición abierta en el par" if symbol in open_syms
-                 else "Bybit sin respuesta · sin conexión con el exchange" if self.live and self.bybit["down_since"] else None)
+                 else "Bybit sin respuesta · sin conexión con el exchange" if self.live and self.bybit["down_since"]
+                 else await ai_advisor.balance_block() if self.ai_gate else None)
         if block:
             signal.ai_decision, signal.note = "BLOQUEADA", f"Bloqueada por riesgo: {block}"
             await self.db.signals.insert_one(signal.to_mongo())
@@ -827,6 +829,8 @@ class TradingEngine:
             block = "límite de pérdida diaria alcanzado"
         elif self.live and self.bybit["down_since"]:
             block = "Bybit sin respuesta · sin conexión con el exchange"
+        else:
+            block = await ai_advisor.balance_block()
         t0 = self.market.tickers.get(symbol, {})
         closes = df["close"].iloc[-22:-1]
         context = {"mode": "REAL" if self.live else "PAPER", "htf_tf": htf_tf, "htf_trend": {1: "ALCISTA", -1: "BAJISTA", 0: "NEUTRAL"}.get(htf, "N/D"),
@@ -866,7 +870,10 @@ class TradingEngine:
                         signal.ai_reasoning += f" · niveles ajustados por lo aprendido: {change}" + (f" · {res['reason']}" if res["reason"] else "")
             except Exception as e:
                 logger.exception("rules check")
-                signal.note = f"Reglas no comprobadas (IA sin respuesta: {str(e)[:120]}) · se abre sin filtro"
+                if ai_advisor.classify(e)[0] == "balance":
+                    approve, signal.ai_decision, signal.note = False, "BLOQUEADA", f"Bloqueada: {ai_advisor.BALANCE_BLOCK}"
+                else:
+                    signal.note = f"Reglas no comprobadas (IA sin respuesta: {str(e)[:120]}) · se abre sin filtro"
             await self.log("AI_EVAL", f"{symbol}: {signal.ai_reasoning or signal.note}" + (f" · {signal.ai_model} · {signal.ai_ms} ms" if signal.ai_model else ""))
             if rule:
                 await self.tg(f"📚 <b>{symbol} {sig['side'].upper()} bloqueada por regla</b>\n{signal.ai_reasoning[:300]}", "ai")
@@ -883,4 +890,4 @@ class TradingEngine:
                 await self.db.signals.update_one({"_id": res.inserted_id}, {"$set": {"note": f"No ejecutada: {reason}"}})
                 await open_shadow(self, sid, symbol, sig, settings, "NO_EJECUTADA", acc["equity"], horizon=horizon)
         else:
-            await open_shadow(self, sid, symbol, sig, settings, "REGLA", acc["equity"], horizon=horizon, rule_id=rule["id"])
+            await open_shadow(self, sid, symbol, sig, settings, "REGLA" if rule else "BLOQUEADA", acc["equity"], horizon=horizon, rule_id=rule["id"] if rule else None)

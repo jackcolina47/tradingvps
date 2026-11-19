@@ -17,6 +17,7 @@ import ai_funnel
 import price_action
 import ai_rules
 import trade_learning
+import ai_advisor
 from ai_advisor import label as ai_label
 from fx.backtest import build_fx_df
 from fx.shadow import open_shadow
@@ -112,7 +113,8 @@ class SignalsMixin:
         block = ("límite de pérdida diaria alcanzado" if acc["daily_paused"] else "ya existe una posición del test abierta en el par" if self._pair_taken(open_docs, symbol, True)
                  else "viernes desde las 12:00 de Nueva York: sin nuevas entradas" if settings.close_before_weekend and friday_stage()
                  else f"cuenta {self.bk} sin conexión con MetaApi" if self.live and self.hfm["down_since"]
-                 else f"par no operable en {self.bk} con el sufijo de símbolos configurado" if self.live and self.cfg and symbol in (self.cfg.hfm_symbols_bad or []) else None)
+                 else f"par no operable en {self.bk} con el sufijo de símbolos configurado" if self.live and self.cfg and symbol in (self.cfg.hfm_symbols_bad or [])
+                 else await ai_advisor.balance_block())
         if block:
             signal.ai_decision, signal.note = "BLOQUEADA", f"Bloqueada por riesgo: {block}"
             await self.db.signals.insert_one(signal.to_mongo())
@@ -139,6 +141,9 @@ class SignalsMixin:
             return slot, "BLOQUEADA", open_syms
         if acc["daily_paused"]:
             return "límite de pérdida diaria alcanzado", "BLOQUEADA", open_syms
+        ai_block = await ai_advisor.balance_block()
+        if ai_block:
+            return ai_block, "BLOQUEADA", open_syms
         roll = filters.rollover_block(settings.rollover_guard)
         if roll:
             return roll, "ROLLOVER", open_syms
@@ -252,7 +257,10 @@ class SignalsMixin:
                             signal.ai_reasoning += f" · niveles ajustados por lo aprendido: {change}" + (f" · {res['reason']}" if res["reason"] else "")
                 except Exception as e:
                     logger.exception("rules check")
-                    signal.note = f"Reglas no comprobadas (IA sin respuesta: {str(e)[:120]}) · se abre sin filtro"
+                    if ai_advisor.classify(e)[0] == "balance":
+                        approve, shadow_kind, signal.ai_decision, signal.note = False, "BLOQUEADA", "BLOQUEADA", f"Bloqueada: {ai_advisor.BALANCE_BLOCK}"
+                    else:
+                        signal.note = f"Reglas no comprobadas (IA sin respuesta: {str(e)[:120]}) · se abre sin filtro"
                 await self.log("AI_EVAL", f"{symbol}: {signal.ai_reasoning or signal.note}" + (f" · {signal.ai_model} · {signal.ai_ms} ms" if signal.ai_model else ""))
         elif settings.ai_enabled:
             await self.log("AI_EVAL", f"{ai_label()} evaluando {symbol} {sig['side'].upper()}...")

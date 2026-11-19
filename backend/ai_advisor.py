@@ -1,3 +1,4 @@
+import time
 import os
 import re
 import json
@@ -78,6 +79,26 @@ def set_health_hook(fn):
 
 def health() -> dict:
     return {**_health, "label": CODE_LABELS.get(_health["code"]) if _health["code"] else None}
+
+
+BALANCE_PROBE_SEC = 300
+BALANCE_BLOCK = "IA sin saldo o cuota agotada: entradas bloqueadas hasta que la IA vuelva a responder"
+_balance_probe_at = 0.0
+
+
+async def balance_block():
+    """Entry gate: while the AI is down for lack of balance no position is opened. A cheap ping every 5 min detects the recovery."""
+    global _balance_probe_at
+    if _health["ok"] or _health["code"] != "balance":
+        return None
+    if time.time() - _balance_probe_at >= BALANCE_PROBE_SEC:
+        _balance_probe_at = time.time()
+        try:
+            await ping()
+            return None
+        except Exception:
+            pass
+    return None if _health["ok"] else BALANCE_BLOCK
 
 
 def classify(e: Exception) -> tuple:

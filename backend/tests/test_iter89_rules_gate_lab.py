@@ -264,3 +264,27 @@ def test_rules_check_builds_prompt(monkeypatch):
         out = asyncio.run(ai_funnel.rules_check("BTCUSDT", "1h", dict(SIG), ctx, [{"id": "1", "text": "regla", "symbol": ""}]))
         assert out["violates"] is False
     assert "REGLAS" in seen[0] and "Sesiones abiertas" in seen[1]
+
+
+def test_ai_without_balance_blocks_entries(monkeypatch):
+    import ai_advisor
+
+    async def run():
+        e, db = await mk("bal")
+        await ai_rules.add(db, ai_rules.RuleIn(text="Regla cualquiera de prueba"))
+
+        async def broke(*a, **k):
+            raise RuntimeError("insufficient credit balance")
+        monkeypatch.setattr(ai_funnel, "rules_check", broke)
+        await e._handle_signal("BTCUSDT", dict(SIG), await e.get_settings(), DF, 1, "4h")
+        n1 = await db.positions.count_documents({})
+
+        async def blocked():
+            return ai_advisor.BALANCE_BLOCK
+        monkeypatch.setattr(ai_advisor, "balance_block", blocked)
+        await e._handle_signal("BTCUSDT", {**SIG, "key_ts": 2}, await e.get_settings(), DF, 1, "4h")
+        n2 = await db.positions.count_documents({})
+        notes = [s.get("note") async for s in db.signals.find()]
+        await db.client.drop_database(db.name)
+        assert n1 == 0 and n2 == 0 and all("IA sin saldo" in (x or "") for x in notes) and len(notes) == 2
+    asyncio.run(run())
