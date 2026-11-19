@@ -97,7 +97,7 @@ def test_rule_blocks_passes_and_fails_open(monkeypatch):
         assert (await ai_rules.list_rules(db))[0]["hits"] == 1
 
         async def ok(symbol, tf, sig, ctx, rules):
-            return {"violates": False, "rule": None, "reason": "", "model": "m", "ms": 1}
+            return {"violates": False, "rule": None, "reason": "", "sl": None, "tp": None, "model": "m", "ms": 1}
         monkeypatch.setattr(ai_funnel, "rules_check", ok)
         await e._handle_signal("BTCUSDT", {**SIG, "key_ts": 2}, s, DF, 1, "4h")
         assert await db.positions.count_documents({}) == 1 and (await db.signals.find_one({"key": {"$regex": ":2$"}}))["ai_decision"] == "APROBADA"
@@ -107,8 +107,8 @@ def test_rule_blocks_passes_and_fails_open(monkeypatch):
             raise RuntimeError("IA caída")
         monkeypatch.setattr(ai_funnel, "rules_check", down)
         await e._handle_signal("BTCUSDT", {**SIG, "key_ts": 3}, s, DF, 1, "4h")
-        assert await db.positions.count_documents({}) == 1
-        assert "se abre sin filtro" in (await db.signals.find_one({"key": {"$regex": ":3$"}}))["note"]
+        assert await db.positions.count_documents({}) == 0
+        assert "fail-safe activo" in (await db.signals.find_one({"key": {"$regex": ":3$"}}))["note"]
     asyncio.run(run())
 
 

@@ -870,11 +870,14 @@ class TradingEngine:
                         signal.ai_reasoning += f" · niveles ajustados por lo aprendido: {change}" + (f" · {res['reason']}" if res["reason"] else "")
             except Exception as e:
                 logger.exception("rules check")
+                approve, signal.ai_decision = False, "BLOQUEADA"
                 if ai_advisor.classify(e)[0] == "balance":
-                    approve, signal.ai_decision, signal.note = False, "BLOQUEADA", f"Bloqueada: {ai_advisor.BALANCE_BLOCK}"
+                    signal.note = f"Bloqueada: {ai_advisor.BALANCE_BLOCK}"
                 else:
-                    signal.note = f"Reglas no comprobadas (IA sin respuesta: {str(e)[:120]}) · se abre sin filtro"
-            await self.log("AI_EVAL", f"{symbol}: {signal.ai_reasoning or signal.note}" + (f" · {signal.ai_model} · {signal.ai_ms} ms" if signal.ai_model else ""))
+                    signal.note = f"Bloqueada por seguridad (IA sin respuesta: {(str(e).strip() or type(e).__name__)[:100]}) · fail-safe activo"
+                await self.log("AI_EVAL", f"{symbol}: señal descartada · {signal.note}")
+            else:
+                await self.log("AI_EVAL", f"{symbol}: {signal.ai_reasoning or signal.note}" + (f" · {signal.ai_model} · {signal.ai_ms} ms" if signal.ai_model else ""))
             if rule:
                 await self.tg(f"📚 <b>{symbol} {sig['side'].upper()} bloqueada por regla</b>\n{signal.ai_reasoning[:300]}", "ai")
         res = await self.db.signals.insert_one(signal.to_mongo())
