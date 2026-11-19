@@ -36,6 +36,7 @@ CONFIDENCE_LEVELS = (10, 20, 30, 40, 50, 60, 70, 80, 90)
 FAST_TIMEOUT_SEC, DEEP_TIMEOUT_SEC = 25, 75
 SL_ATR_BAND = (0.5, 4.0)   # an AI stop must sit between 0.5 and 4 ATR from the entry
 MIN_RR = 1.0
+COUNTER_MIN_RR = 1.5   # a trade against the 4H trend needs this much room to the AI target (first EMA / zone of 4H-1H)
 DEEP_COOLDOWN_SEC = 300    # guard against manual re-scans: a candidate goes back to the strong model on every 15-min trigger, never sooner than 5 min
 REPEAT_MOVE_ATR = 0.15     # stage 1 is not repeated while no eligible pair moved this much (in ATR) since the last call on the same candle
 MTF_TTL = {"4h": 300, "1h": 120}   # seconds a higher-timeframe frame is reused (multi-timeframe engines only)
@@ -123,8 +124,9 @@ FAST_SYSTEM = (
 MTF_SYSTEM = (
     " ANÁLISIS MULTITEMPORAL: cada par trae además su estructura en 4H y en 1H. Evalúa primero 4H (estructura y dirección de fondo), después 1H "
     "(confirmación: tendencia, momentum y si el precio está en una zona útil) y usa la tabla de {tf} solo como gatillo de entrada. "
-    "Elige únicamente pares donde 4H y 1H apoyen la misma dirección o donde 1H esté retrocediendo hacia una zona a favor de 4H. "
-    "Respeta SIEMPRE el «lado permitido» de cada par: las entradas contra la tendencia de 4H están prohibidas."
+    "Prefiere pares donde 4H y 1H apoyen la misma dirección o donde 1H esté retrocediendo hacia una zona a favor de 4H. "
+    "También puedes proponer el lado contrario a 4H como rebote técnico de contratendencia, pero solo si {tf} muestra un giro claro: RSI en sobreventa/sobrecompra extrema, "
+    "rechazo o absorción en una demanda/oferta relevante, o cruce de las EMAs 20/50."
 )
 
 
@@ -133,7 +135,7 @@ def _mtf_txt(m: dict) -> str:
     for tf, h in (m.get("mtf") or {}).items():
         z = f" · demanda {_zone_txt(h['demand'])} · oferta {_zone_txt(h['supply'])}" if "demand" in h else ""
         out.append(f"{tf.upper()}: tendencia {h['trend']} · RSI {h['rsi']} · ADX {h['adx']} · precio a {h['dist_ema50_atr']:+} ATR de su EMA50{z}")
-    return " || ".join(out) + (f" || lado permitido: {m['bias'].upper() if m.get('bias') else 'LONG o SHORT'}" if out else "")
+    return " || ".join(out) + (f" || lado a favor de 4H: {m['bias'].upper() + ' (el contrario solo como rebote de contratendencia)' if m.get('bias') else 'LONG o SHORT'}" if out else "")
 
 
 def _zone_txt(z) -> str:
@@ -181,7 +183,12 @@ DEEP_SYSTEM = (
     "Eres un trader profesional de {market} con 20 años de experiencia operando intradía. Analizas UN par en la temporalidad {tf} y decides si abrir una "
     "operación AHORA. Valora como lo harías con tu propio dinero: estructura y tendencia (EMAs 20/50/200 y temporalidad superior), momentum (RSI, MACD, ADX), "
     "volumen/actividad, zonas de oferta y demanda, dónde quedaría el stop y cuánto recorrido libre hay hasta el objetivo, y si la entrada llega tarde. "
-    "Sé exigente: PASS es la respuesta correcta la mayoría de las veces. "
+    "Actúa como un trader intradía profesional y decisivo. Si la estructura en la temporalidad operativa ({tf}) muestra alineación técnica clara, el stop loss queda "
+    "técnicamente protegido y existe un espacio libre con un ratio riesgo/beneficio real >= 1.5 hacia el siguiente obstáculo relevante, prioriza emitir BUY o SELL. "
+    "Usa PASS únicamente si existe un conflicto severo o riesgo de invalidación inmediata. "
+    "Si la operación va en contra de la tendencia mayor de 4H (rebote técnico), el Take Profit debe fijarse obligatoriamente antes de la primera EMA relevante "
+    "(EMA 20 o EMA 50 de 4H/1H) o bloque de oferta/demanda previo, asegurando una toma de beneficios rápida: en ese caso devuelve SIEMPRE `tp` como precio, "
+    "con al menos 1.5 veces la distancia del stop. "
     "`confidence` es tu estimación honesta (0-100) de la probabilidad de que la operación alcance el objetivo antes que el stop; no la infles. "
     "{levels} "
     "Si hay REGLAS APRENDIDAS, tienen prioridad: si la operación incumple alguna, responde PASS e indica su número en `rule`. "
@@ -200,15 +207,15 @@ def _candles_txt(df: pd.DataFrame, i: int, n: int, has_volume: bool) -> str:
 
 async def stage2(kind: str, symbol: str, tf: str, cand: dict, m: dict, df, i: int, has_volume: bool, htf: dict, rules: list, ctx: dict, settings, usage_kind: str) -> dict:
     fixed = settings.atr_levels_enabled
-    lv = (f"El stop y el objetivo son FIJOS: SL a {settings.atr_sl_mult:g}×ATR y TP a {settings.atr_tp_mult:g}×ATR de la entrada; deja sl y tp en null y juzga la operación con esos niveles."
+    lv = (f"El stop y el objetivo son FIJOS: SL a {settings.atr_sl_mult:g}×ATR y TP a {settings.atr_tp_mult:g}×ATR de la entrada; deja sl y tp en null y juzga la operación con esos niveles (excepción: en contratendencia contra 4H el stop sigue fijo pero el `tp` lo fijas tú)."
           if fixed else "Propón `sl` y `tp` como precios: el stop detrás de la estructura (entre 0,5 y 4 ATR de la entrada) y el objetivo antes del siguiente obstáculo, con R:R ≥ 1.")
     chat = _chat(DEEP_SYSTEM.format(market=MARKET[kind], tf=tf, levels=lv), usage_kind)
     rule_lines = "\n".join(f"{n}. {r['text']}" + (f" (solo {r['symbol']})" if r.get("symbol") else "") for n, r in enumerate(rules, 1))
     prompt = (
         f"PAR: {symbol} | TF {tf} | hora Nueva York {datetime.now(trade_guard.NY).strftime('%A %H:%M')}\n"
-        f"Candidato del filtro rápido: {cand['side'].upper()} · {cand['reason']}\n"
+        f"Candidato del filtro rápido: {cand['side'].upper()} · {cand['reason']}" + (" · CONTRATENDENCIA (contra 4H): rebote técnico con TP corto" if cand.get("counter_trend") else "") + "\n"
         f"ESTADO ({tf}): {_row_txt(symbol, {**m, 'mtf': None})}\n"
-        + (f"ANÁLISIS MULTITEMPORAL (4H = estructura, 1H = confirmación, {tf} = entrada; no se opera contra 4H): {_mtf_txt(m)}\n" if m.get("mtf") else
+        + (f"ANÁLISIS MULTITEMPORAL (4H = estructura, 1H = confirmación, {tf} = entrada): {_mtf_txt(m)}\n" if m.get("mtf") else
            f"TEMPORALIDAD SUPERIOR ({htf['tf']}): tendencia {htf['trend']} · RSI {htf['rsi']} · ADX {htf['adx']} · precio a {htf['dist_ema50_atr']:+} ATR de su EMA50\n") +
         
         f"CONTEXTO: {json.dumps(ctx, ensure_ascii=False)}\n"
@@ -345,10 +352,10 @@ async def run(engine, settings) -> int:
             logger.exception("funnel stage 1")
             await engine.log("ERROR", f"Embudo · filtro rápido sin respuesta: {str(e)[:140]}")
             return 0
-        for c in [c for c in s1["candidates"] if eligible[c["symbol"]].get("bias") not in (None, c["side"])]:
-            s1["candidates"].remove(c)   # free guard: never against the 4H trend
-            _note(engine, c["symbol"], 1, "DESCARTADO", f"{c['side'].upper()} contra la tendencia de 4H ({eligible[c['symbol']]['mtf']['4h']['trend']})")
-            await engine.log("RISK", f"{c['symbol']}: candidato {c['side'].upper()} descartado sin IA potente · va contra la tendencia de 4H")
+        for c in s1["candidates"]:
+            if eligible[c["symbol"]].get("bias") not in (None, c["side"]):
+                c["counter_trend"] = True   # stage 2 must set the target before the first 4H/1H obstacle
+                await engine.log("SCAN", f"{c['symbol']}: candidato {c['side'].upper()} de contratendencia (4H {eligible[c['symbol']]['mtf']['4h']['trend']}) · el modelo potente exigirá TP corto")
         picked = {c["symbol"] for c in s1["candidates"]}
         for symbol in eligible:
             if symbol not in picked:
@@ -405,13 +412,21 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
         await engine.log("AI_EVAL", f"{symbol}: PASS del modelo potente · confianza {res['confidence']}%" + (f" · regla «{res['rule']['text'][:80]}»" if res["rule"] else "") + f" · {res['reasoning'][:220]}{tail}")
         return 0
     side = "long" if res["decision"] == "BUY" else "short"
-    if m.get("bias") not in (None, side):
-        _note(engine, symbol, 2, "PASS", f"{res['decision']} contra la tendencia de 4H: bloqueada", res["confidence"])
-        await _record(engine, cand, m, res, s1, tf, threshold, "CONTRA_4H", key, f"{res['decision']} bloqueada: va contra la tendencia de 4H ({m['mtf']['4h']['trend']})")
-        await engine.log("RISK", f"{symbol}: {res['decision']} del modelo potente (confianza {res['confidence']}%) bloqueada · va contra la tendencia de 4H ({m['mtf']['4h']['trend']}){tail}")
-        return 0
     price = engine.market.tickers.get(symbol, {}).get("price") or m["price"]
     sl, tp, source = levels(side, price, m["atr"], settings, res["sl"], res["tp"], engine.funnel_digits(symbol))
+    counter = m.get("bias") not in (None, side)
+    if counter:   # against the 4H trend: the stop stays, the target is the AI's (before the first 4H/1H obstacle), never further than the normal one
+        d = 1 if side == "long" else -1
+        risk, reward = (price - sl) * d, ((res["tp"] or price) - price) * d
+        if reward < COUNTER_MIN_RR * risk:
+            why = f"{res['decision']} de contratendencia sin recorrido: " + (f"R:R {reward / risk:.2f} < {COUNTER_MIN_RR} hasta el objetivo de la IA" if res["tp"] else "la IA no fijó objetivo")
+            _note(engine, symbol, 2, "PASS", why, res["confidence"])
+            await _record(engine, cand, m, res, s1, tf, threshold, "CONTRA_4H", key, f"{why} (4H {m['mtf']['4h']['trend']})")
+            await engine.log("RISK", f"{symbol}: {why} · confianza {res['confidence']}% · 4H {m['mtf']['4h']['trend']}{tail}")
+            return 0
+        if reward < abs(tp - price):
+            dg = engine.funnel_digits(symbol)
+            tp, source = float(res["tp"]) if dg is None else round(float(res["tp"]), dg), "contra"
     approved = res["confidence"] > threshold
     if not approved and candle_key in engine.signal_keys:   # this candle already has its shadow trade: just report the new verdict
         _note(engine, symbol, 2, "SOMBRA", f"Confianza {res['confidence']}% ≤ {threshold}% · {res['reasoning']}", res["confidence"])
@@ -419,7 +434,8 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
         await engine.log("AI_EVAL", f"{symbol} {res['decision']} · confianza {res['confidence']}% (umbral {threshold}%) → sigue sin ejecutarse · nuevo análisis al cierre de la próxima vela de 15 min · {res['reasoning'][:160]}{tail}")
         return 0
     sig = {"side": side, "price": price, "sl": sl, "tp": tp, "strategy": STRATEGY, "atr": m["atr"], "score": 2, "key_ts": m["candle_ts"],
-           "reasons": [f"Filtro rápido: {cand['reason']}", f"Modelo potente ({res['confidence']}%): {res['reasoning']}"],
+           "reasons": [f"Filtro rápido: {cand['reason']}", f"Modelo potente ({res['confidence']}%): {res['reasoning']}"]
+                      + ([f"Contratendencia (4H {m['mtf']['4h']['trend']}): objetivo corto fijado por la IA"] if counter else []),
            "indicators": {k: m[k] for k in ("close", "ema20", "ema50", "ema200", "rsi", "macd_hist", "adx", "atr", "activity")}}
     if source == "atr":
         sig["atr_levels"] = (settings.atr_sl_mult, settings.atr_tp_mult)
@@ -427,7 +443,7 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
                     ai_decision="APROBADA" if approved else "BAJA_CONFIANZA", ai_confidence=res["confidence"], ai_min_confidence=threshold, ai_stage=2,
                     ai_model=res["model"], ai_ms=res["ms"], ai_adjusted_sl=res["sl"], ai_adjusted_tp=res["tp"], ai_levels_applied=source == "ia",
                     ai_reasoning=res["reasoning"], key=key,
-                    context={**ctx, "funnel": {"stage1": {"reason": cand["reason"], "model": s1["model"], "ms": s1["ms"]}, "levels": source, "trend": m["trend"],
+                    context={**ctx, "funnel": {"stage1": {"reason": cand["reason"], "model": s1["model"], "ms": s1["ms"]}, "levels": source, "counter_trend": counter, "trend": m["trend"],
                                                "htf_tf": htf_tf, "mtf": {tf: h["trend"] for tf, h in (m.get("mtf") or {}).items()} or None, "activity_kind": m["activity_kind"], "demand": m["demand"], "supply": m["supply"]}})
     sid = str((await engine.db.signals.insert_one(signal.to_mongo())).inserted_id)
     head = f"{symbol} {res['decision']} · confianza {res['confidence']}% (umbral {threshold}%)"
@@ -437,7 +453,7 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
         engine.signal_keys.add(candle_key)
         await engine.funnel_shadow(sid, symbol, sig, settings, "BAJA_CONFIANZA", state["acc"], res["confidence"])
         return 1
-    await engine.log("AI_EVAL", f"{head} → APROBADA · SL/TP {'fijos por ATR' if source == 'atr' else 'de la IA'} · {res['reasoning'][:200]}{tail}")
+    await engine.log("AI_EVAL", f"{head} → APROBADA · {'CONTRATENDENCIA · SL fijo y TP corto de la IA' if source == 'contra' else 'SL/TP fijos por ATR' if source == 'atr' else 'SL/TP de la IA'} · {res['reasoning'][:200]}{tail}")
     ok, reason = await engine.funnel_open(symbol, sig, settings, sid, state["acc"])
     if ok:
         _note(engine, symbol, 2, "EJECUTADA", res["reasoning"], res["confidence"])

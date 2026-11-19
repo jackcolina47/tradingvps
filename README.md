@@ -7,7 +7,7 @@ Panel web (React + FastAPI + MongoDB) con tres bots de trading: **Bybit** (futur
 En :00, :15, :30 y :45 de cada hora (+8 s), dentro del horario operativo y con huecos libres (`backend/funnel.py`):
 
 1. **Paso 0 · filtro técnico (sin IA):** EMA 20/50/200, RSI, MACD, ADX, ATR, actividad y zonas de oferta/demanda. Descarta ADX < 18 o volumen < 0,8× (forex sin bróker conectado: solo ADX).
-2. **Paso 1 · modelo rápido:** elige de 0 a 3 candidatos en una llamada. Es multitemporal: Gemini 3.5 Flash evalúa 4H y 1H, y nunca se opera contra la tendencia de 4H.
+2. **Paso 1 · modelo rápido:** elige de 0 a 3 candidatos en una llamada. Es multitemporal: Gemini 3.5 Flash evalúa 4H y 1H, y contra la tendencia de 4H solo se opera como rebote con objetivo corto (R:R ≥ 1,5).
 3. **Paso 2 · modelo potente:** BUY / SELL / PASS con un % de confianza, aplicando las reglas aprendidas.
 
 - Un candidato del Paso 1 vuelve al Paso 2 cada 15 minutos hasta que haya una operación ejecutable o se llene el máximo de posiciones.

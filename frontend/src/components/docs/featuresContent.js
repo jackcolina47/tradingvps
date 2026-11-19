@@ -26,7 +26,7 @@ export function buildFeatures(bot) {
       bullets: [
         "Paso 0 · filtro técnico sin IA (gratis): EMA 20/50/200, RSI, MACD, ADX, ATR, actividad y zonas de oferta y demanda. Descarta los pares planos y lejos de cualquier zona.",
         "Paso 1 · modelo rápido multitemporal (Gemini 3.5 Flash): evalúa cada par en 4H (estructura) y 1H (confirmación) y usa la temporalidad del bot como gatillo. Elige de 0 a 3 candidatos en una sola llamada.",
-        "Nunca contra 4H: si la tendencia de 4H es alcista solo se analizan compras y si es bajista solo ventas; con 4H mixta se permiten ambos lados. Este bloqueo no gasta IA.",
+        "Contratendencia controlada: se prefiere operar a favor de 4H, pero se permite el lado contrario como rebote técnico si la temporalidad de entrada muestra un giro claro. En ese caso el stop sigue fijo y el objetivo lo fija la IA antes de la primera EMA o zona de 4H/1H, con R:R mínimo de 1,5; si no hay ese recorrido, no se abre.",
         "Paso 2 · modelo potente: analiza cada candidato con las últimas velas, la temporalidad superior, los eventos próximos y tus reglas aprendidas. Responde BUY, SELL o PASS con un % de confianza.",
         "Sincronizado con el reloj: el embudo se dispara en :00, :15, :30 y :45 de cada hora con 8 segundos de margen, cuando la vela ya está cerrada y el volumen y los indicadores son definitivos.",
         "Reanálisis cada 15 minutos: mientras un par siga siendo candidato del modelo rápido, vuelve al modelo potente en cada disparo hasta que salga una operación ejecutable o el bot llene el máximo de posiciones.",

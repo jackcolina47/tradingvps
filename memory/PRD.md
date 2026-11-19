@@ -655,6 +655,13 @@ Decisiones del usuario: 1 % por defecto pero editable; sobre equidad actual; cie
 - Consecuencia: la watchlist (indicadores) se refresca cada 15 min.
 - Tested: pytest (stage0 + next_trigger nuevos) y log real del bucle. Sin testing agent.
 
+## Iteración 108 (2026-11) — Contratendencia permitida + modelo potente más decisivo (3 bots)
+Petición explícita del usuario (sustituye a «bloquear contra 4H sin gastar IA»).
+- Paso 1: ya no elimina candidatos contra 4H; los marca `counter_trend` (prompt MTF permite rebote con giro claro en la TF de entrada).
+- `DEEP_SYSTEM`: texto «trader decisivo» del usuario (PASS solo ante conflicto severo; R:R real ≥ 1,5) + regla de TP obligatorio antes de la primera EMA/zona 4H-1H en contratendencia.
+- `_deep`: si el lado va contra `bias` → SL normal (fijo ATR), TP = el de la IA (nunca más lejos que el normal), exige R:R ≥ `COUNTER_MIN_RR` 1,5; si no hay TP o no llega → Signal `CONTRA_4H` sin abrir. `context.funnel.counter_trend`, source `contra`.
+- Tested: pytest (nuevo test de contratendencia). Sin testing agent. Efecto esperado: más operaciones y más gasto de IA potente.
+
 ### Pendiente
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.

@@ -12,7 +12,7 @@ Ya NO existen estrategias estáticas, backtest, optimizador, walk-forward, perfi
 Disparo en :00/:15/:30/:45 + 8 s (`funnel.next_trigger`), solo dentro del horario operativo y con huecos libres:
 - **Paso 0** (sin IA): EMA 20/50/200, RSI, MACD, ADX, ATR, actividad (volumen o rango) y zonas de oferta/demanda. Descarta ADX < 18 o volumen < 0,8× (FX sin bróker conectado: solo ADX).
 - **Paso 1** (modelo rápido): elige 0–3 candidatos en una llamada. No se repite si ningún par se movió 0,15 ATR en la misma vela.
-- **Multitemporal (los tres bots)**: el Paso 1 usa Gemini 3.5 Flash (respaldo: modelo rápido normal) y evalúa 4H (estructura) + 1H (confirmación); `timeframe` es la temporalidad de entrada (recomendado 15m). Lado permitido = tendencia de 4H (ALCISTA→solo long, BAJISTA→solo short, MIXTA→ambos); lo contrario se bloquea sin IA.
+- **Multitemporal (los tres bots)**: el Paso 1 usa Gemini 3.5 Flash (respaldo: modelo rápido normal) y evalúa 4H (estructura) + 1H (confirmación); `timeframe` es la temporalidad de entrada (recomendado 15m). Contra la tendencia de 4H se permite solo como rebote (contratendencia): SL fijo, TP de la IA antes de la primera EMA/zona de 4H-1H, R:R ≥ 1,5 (`COUNTER_MIN_RR`); si no, queda como CONTRA_4H sin abrir. El modelo potente es decisivo: PASS solo ante conflicto severo.
 - **Paso 2** (modelo potente + reglas aprendidas): BUY / SELL / PASS con confianza 0–100.
 - Un candidato del Paso 1 vuelve al Paso 2 en cada disparo de 15 minutos hasta que haya operación ejecutable o se llene `max_positions`. Los pares descartados en el Paso 1 no llegan al Paso 2.
 - `ai_min_confidence` (10..90 en pasos de 10): confianza > umbral → se ejecuta; ≤ umbral → sombra `BAJA_CONFIANZA` (una por vela).

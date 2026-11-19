@@ -335,6 +335,37 @@ class TestContra4H:
         assert eng.opened == []
         assert eng.shadows == []
 
+    @pytest.mark.asyncio
+    async def test_counter_trend_with_ai_target_opens(self, monkeypatch):
+        await _force_in_hours(monkeypatch)
+        eng = FakeEngine(mtf=True)
+        s = _settings(ai_min_confidence=60)
+
+        async def fake_mtf(engine, symbol, price):
+            return {"4h": {"tf": "4h", "trend": "ALCISTA", "rsi": 60, "adx": 25, "dist_ema50_atr": 0.5, "demand": None, "supply": None},
+                    "1h": {"tf": "1h", "trend": "ALCISTA", "rsi": 55, "adx": 20, "dist_ema50_atr": 0.3}}
+        monkeypatch.setattr(funnel_mod, "_mtf", fake_mtf)
+        seen = {}
+
+        async def fake_stage1(kind, tf, rows, limit, usage_kind):
+            seen["price"], seen["atr"] = rows["BTCUSDT"]["price"], rows["BTCUSDT"]["atr"]
+            return {"candidates": [{"symbol": "BTCUSDT", "side": "short", "reason": "rebote"}], "model": "fast", "ms": 10}
+
+        async def fake_stage2(kind, symbol, tf, cand, m, *a, **kw):
+            seen["counter"] = cand.get("counter_trend")
+            return {"decision": "SELL", "confidence": 75, "sl": None, "tp": m["price"] - 3.2 * m["atr"],
+                    "rule": None, "reasoning": "rebote", "model": "deep", "ms": 11}
+        monkeypatch.setattr(funnel_mod, "stage1", fake_stage1)
+        monkeypatch.setattr(funnel_mod, "stage2", fake_stage2)
+
+        await funnel_mod.run(eng, s)
+        assert seen["counter"] is True
+        d = eng.db.signals.docs[0]
+        assert d["ai_decision"] == "APROBADA" and d["context"]["funnel"]["counter_trend"] is True
+        assert abs(d["sl"] - (seen["price"] + 2 * seen["atr"])) < 1e-6
+        assert abs(d["tp"] - (seen["price"] - 3.2 * seen["atr"])) < 1e-6
+        assert len(eng.opened) == 1
+
 
 # ====================== 5. APROBADA regression ======================
 class TestApprovedExecutes:

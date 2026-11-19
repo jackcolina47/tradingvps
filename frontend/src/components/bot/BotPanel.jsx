@@ -18,7 +18,7 @@ const STAGES = [
 
 const MTF_STAGES = [
   STAGES[0],
-  ["Etapa 1 · Modelo rápido multitemporal (Gemini 3.5 Flash)", "Evalúa cada par en 4H (estructura) y 1H (confirmación) y usa la temporalidad del bot como gatillo: elige como máximo 3 candidatos. Las entradas contra la tendencia de 4H se descartan sin gastar IA potente."],
+  ["Etapa 1 · Modelo rápido multitemporal (Gemini 3.5 Flash)", "Evalúa cada par en 4H (estructura) y 1H (confirmación) y usa la temporalidad del bot como gatillo: elige como máximo 3 candidatos. Las entradas contra la tendencia de 4H solo se proponen como rebote técnico, con giro claro en la temporalidad de entrada."],
   STAGES[2],
 ];
 
