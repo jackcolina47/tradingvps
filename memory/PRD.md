@@ -602,3 +602,9 @@
 - Iter 104: sin saldo de IA → entradas bloqueadas en Bybit, HotForex y Pepperstone (`ai_advisor.balance_block`: health code 'balance'; ping de recuperación cada 5 min). Incluye test EMA; no Bybit Lab ni órdenes manuales. Un fallo de saldo en `rules_check` bloquea en vez de abrir sin filtro. Tests: tests/test_iter104_ai_balance_block.py.
 - Iter 105: Bybit fail-safe — si hay reglas activas y `rules_check` falla (cualquier error), la señal queda BLOQUEADA (sombra BLOQUEADA) en vez de abrirse sin filtro. HotForex sigue abriendo sin filtro en fallos que no sean de saldo.
 - Iter 106: fail-safe de reglas también en HotForex (fx/engine_signals.py). Pepperstone ya rechazaba (decisión ERROR) cuando la evaluación IA falla; verificado con test.
+
+## Iteración 99 · Reintento antes de bloquear (jun 2026)
+- Bybit y HotForex: la comprobación de reglas aprendidas se reintenta a los 2 s y a los 5 s antes de bloquear la señal por fail-safe (`ai_funnel.rules_check_retry`, `RULES_RETRY_DELAYS`).
+- Sin reintento si el fallo es de saldo/cuota, API key o modelo inexistente.
+- Pepperstone y Bybit Lab sin cambios.
+- Tests: `backend/tests/test_iter99_rules_retry.py` (22 passed junto a iter89/iter92). Sin confirmar en VPS.

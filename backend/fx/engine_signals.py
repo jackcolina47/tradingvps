@@ -240,7 +240,7 @@ class SignalsMixin:
                 signal.ai_reasoning = "Sin reglas aprendidas activas: entrada directa"
             else:
                 try:
-                    res = await ai_funnel.rules_check(symbol, tf, sig, {**context, "price_action": pa, "recent_changes": [round(x, 3) for x in (df["close"].iloc[-22:-1].pct_change().dropna() * 100).tolist()]},
+                    res = await ai_funnel.rules_check_retry(symbol, tf, sig, {**context, "price_action": pa, "recent_changes": [round(x, 3) for x in (df["close"].iloc[-22:-1].pct_change().dropna() * 100).tolist()]},
                                                       rules, market=trade_learning.FX_MARKET)
                     signal.ai_stage, signal.ai_model, signal.ai_ms = 1, res["model"], res["ms"]
                     if res["violates"]:
@@ -259,7 +259,7 @@ class SignalsMixin:
                     logger.exception("rules check")
                     approve, shadow_kind, signal.ai_decision = False, "BLOQUEADA", "BLOQUEADA"
                     signal.note = (f"Bloqueada: {ai_advisor.BALANCE_BLOCK}" if ai_advisor.classify(e)[0] == "balance"
-                                   else f"Bloqueada por seguridad (IA sin respuesta: {(str(e).strip() or type(e).__name__)[:100]}) · fail-safe activo")
+                                   else f"Bloqueada por seguridad (IA sin respuesta tras {len(ai_funnel.RULES_RETRY_DELAYS) + 1} intentos: {(str(e).strip() or type(e).__name__)[:100]}) · fail-safe activo")
                 await self.log("AI_EVAL", f"{symbol}: {signal.ai_reasoning or signal.note}" + (f" · {signal.ai_model} · {signal.ai_ms} ms" if signal.ai_model else ""))
         elif settings.ai_enabled:
             await self.log("AI_EVAL", f"{ai_label()} evaluando {symbol} {sig['side'].upper()}...")

@@ -5,7 +5,7 @@ import json
 import asyncio
 import logging
 
-from ai_advisor import _chat, _ask, _cfg, parse_json, label
+from ai_advisor import _chat, _ask, _cfg, parse_json, label, classify, CONFIG_CODES
 
 logger = logging.getLogger("ai.funnel")
 
@@ -141,6 +141,21 @@ RULES_SYSTEM = (
     '"reason":"máx. 25 palabras en español citando el dato concreto que incumple la regla, o por qué ajustas los niveles; vacío si pasa sin cambios",'
     '"sl":número o null,"tp":número o null}}'
 )
+
+
+RULES_RETRY_DELAYS = (2, 5)  # seconds before each quick retry of a failed rules check
+
+
+async def rules_check_retry(*args, **kwargs) -> dict:
+    """rules_check with quick retries on one-off failures; balance/auth/model errors are not retried."""
+    for delay in (*RULES_RETRY_DELAYS, None):
+        try:
+            return await rules_check(*args, **kwargs)
+        except Exception as e:
+            if delay is None or classify(e)[0] in CONFIG_CODES:
+                raise
+            logger.warning(f"[RULES RETRY] {args[0]} · {(str(e).strip() or type(e).__name__)[:100]} · reintento en {delay}s")
+            await asyncio.sleep(delay)
 
 
 async def rules_check(symbol: str, timeframe: str, sig: dict, ctx: dict, rules: list, market: str = "criptomonedas (perpetuos USDT)") -> dict:

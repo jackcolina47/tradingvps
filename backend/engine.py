@@ -855,7 +855,7 @@ class TradingEngine:
             signal.ai_reasoning = "Sin reglas aprendidas activas: entrada directa"
         else:
             try:
-                res = await ai_funnel.rules_check(symbol, tf, sig, context, rules)
+                res = await ai_funnel.rules_check_retry(symbol, tf, sig, context, rules)
                 signal.ai_stage, signal.ai_model, signal.ai_ms = 1, res["model"], res["ms"]
                 if res["violates"]:
                     rule, approve = res["rule"], False
@@ -874,7 +874,7 @@ class TradingEngine:
                 if ai_advisor.classify(e)[0] == "balance":
                     signal.note = f"Bloqueada: {ai_advisor.BALANCE_BLOCK}"
                 else:
-                    signal.note = f"Bloqueada por seguridad (IA sin respuesta: {(str(e).strip() or type(e).__name__)[:100]}) · fail-safe activo"
+                    signal.note = f"Bloqueada por seguridad (IA sin respuesta tras {len(ai_funnel.RULES_RETRY_DELAYS) + 1} intentos: {(str(e).strip() or type(e).__name__)[:100]}) · fail-safe activo"
                 await self.log("AI_EVAL", f"{symbol}: señal descartada · {signal.note}")
             else:
                 await self.log("AI_EVAL", f"{symbol}: {signal.ai_reasoning or signal.note}" + (f" · {signal.ai_model} · {signal.ai_ms} ms" if signal.ai_model else ""))
