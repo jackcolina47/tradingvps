@@ -140,3 +140,24 @@ def test_dual_pair_only_hfm():
         assert out["hfm"] == (False, True, False, True, True, True, False)
         assert out["pepperstone"] == (True, True, True, True, True, False, False)
     asyncio.run(run())
+
+
+def test_fail_safe_when_ai_down(monkeypatch):
+    async def run():
+        async def down(*a, **k):
+            raise TimeoutError()
+        monkeypatch.setattr(ai_funnel, "rules_check", down)
+        monkeypatch.setattr(ai_funnel, "final_eval", down)
+        out = {}
+        for prof, nm in ((HFM, "h"), (PEPPERSTONE, "i")):
+            e, db = await mk(prof, nm)
+            await ai_rules.add(e.db, ai_rules.RuleIn(text="Regla cualquiera de prueba"))
+            s = await e.get_settings()
+            s.ai_funnel_enabled, s.price_action_block, s.seasonality_bias, s.vol_filter_enabled, s.usd_regime_filter, s.fomc_rule = (False,) * 6
+            await e._handle_signal("EURUSD", dict(SIG), s, DF, 1, "4h")
+            doc = await e.db.signals.find_one({})
+            out[prof.key] = (await e.db.positions.count_documents({}), doc["ai_decision"], doc.get("note") or "")
+            await db.client.drop_database(db.name)
+        assert out["hfm"][0] == 0 and out["hfm"][1] == "BLOQUEADA" and "fail-safe activo" in out["hfm"][2], out
+        assert out["pepperstone"][0] == 0 and out["pepperstone"][1] == "ERROR", out
+    asyncio.run(run())
