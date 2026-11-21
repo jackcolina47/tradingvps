@@ -4,7 +4,7 @@ import httpx
 
 logger = logging.getLogger("notify")
 TG = "https://api.telegram.org/bot{token}/{method}"
-BOTS = ("bybit", "hfm", "pepperstone", "lab")
+BOTS = ("bybit", "hfm", "pepperstone", "lab", "lab4h")
 _cfg = {"enabled": False, "token": "", "chat_id": "", "chat_ids": [], "alerts": {}, "chat_bots": {}}
 
 

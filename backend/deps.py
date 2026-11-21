@@ -51,6 +51,8 @@ ALL_ENGINES = (engine, fx_engine, pep_engine)
 from lab import LabEngine  # noqa: E402
 
 lab_engine = LabEngine(db, engine)  # paper-only research clone of the Bybit bot (test cruce EMA)
+lab4h_engine = LabEngine(db, engine, key="lab4h", name="Bybit Lab 4H", source=lab_engine, timeframe="4h", capital=1000.0)
+LABS = (lab_engine, lab4h_engine)
 
 
 async def _ai_health_event(event: str, h: dict):

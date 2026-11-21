@@ -33,6 +33,13 @@ const BOTS = [
     desc: "Clon de Bybit para probar el Test cruce EMA 10/20 sin riesgo: cuenta paper, historial y ajustes propios, backtest y gráfico. Sin IA, sin noticias y sin modo REAL.",
     tags: ["Test cruce EMA 10/20", "Solo paper", "Datos del bot Bybit"],
   },
+  {
+    key: "lab4h", path: "/lab4h", icon: FlaskConical, accent: "fuchsia",
+    title: <>Bybit <span className="text-fuchsia-400">Lab 4H</span></>,
+    subtitle: "Investigación de estrategias · solo paper · velas de 4 horas",
+    desc: "Segundo laboratorio independiente: mismo Test cruce EMA 10/20 que Bybit Lab pero en 4H por defecto, con su propia cuenta paper, historial y ajustes.",
+    tags: ["Test cruce EMA 10/20", "4H por defecto", "Solo paper"],
+  },
 ];
 const ACCENT = {
   fuchsia: { ring: "hover:border-fuchsia-500/60 hover:shadow-[0_0_0_1px_rgba(217,70,239,0.35),0_30px_80px_-30px_rgba(217,70,239,0.35)]", mark: "bg-fuchsia-500 text-[#07090E]", btn: "bg-fuchsia-500 text-[#07090E] hover:bg-fuchsia-400", tag: "border-fuchsia-500/30 text-fuchsia-300" },
@@ -66,9 +73,9 @@ export default function BotSelector({ onLogout }) {
     setApiBase("");
     document.title = "AI Trading · Selecciona un bot";
     const load = async () => {
-      const [c, f, p, l] = await Promise.allSettled([api.get("/overview"), api.get("/fx/overview"), api.get("/pepper/overview"), api.get("/lab/overview")]);
+      const [c, f, p, l, l4] = await Promise.allSettled([api.get("/overview"), api.get("/fx/overview"), api.get("/pepper/overview"), api.get("/lab/overview"), api.get("/lab4h/overview")]);
       const v = (r) => (r.status === "fulfilled" ? r.value.data : { error: true });
-      setStatus({ crypto: v(c), fx: v(f), pepper: v(p), lab: v(l) });
+      setStatus({ crypto: v(c), fx: v(f), pepper: v(p), lab: v(l), lab4h: v(l4) });
     };
     load();
   }, []);

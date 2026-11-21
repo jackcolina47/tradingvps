@@ -30,7 +30,7 @@ from review import job_state  # noqa: E402
 from profiles import PROFILES, detect_profile, profile_patch  # noqa: E402
 import migrations  # noqa: E402
 import funding  # noqa: E402
-from deps import client, db, engine, store, news, protected_router, fx_engine, fx_store, fx_news, pep_engine, pep_store, pep_news, FX_BOTS, ai_usage, lab_engine, require_auth  # noqa: E402
+from deps import client, db, engine, store, news, protected_router, fx_engine, fx_store, fx_news, pep_engine, pep_store, pep_news, FX_BOTS, ai_usage, LABS, require_auth  # noqa: E402
 import lab  # noqa: E402
 from routers import cron_routes, weekly_routes, walk_forward_routes, bybit_routes, ai_routes, analysis_routes, backup_routes, deploy_routes, market_routes, chat_routes  # noqa: E402
 from routers.shared_routes import add_shared_routes  # noqa: E402
@@ -310,9 +310,10 @@ app.include_router(backup_routes.router)
 app.include_router(deploy_routes.router)
 app.include_router(market_routes.router)
 app.include_router(chat_routes.router)
-lab_router = lab.build_router(lab_engine, require_auth)
-add_shared_routes(lab_router, lab_engine, lab.NAME)
-app.include_router(lab_router)
+for _lab in LABS:
+    _lab_router = lab.build_router(_lab, require_auth)
+    add_shared_routes(_lab_router, _lab, _lab.name)
+    app.include_router(_lab_router)
 for _eng, _st, _nw in FX_BOTS:
     app.include_router(fx_routes.build_router(_eng, _st, _nw))
 app.add_middleware(
@@ -329,13 +330,15 @@ app.add_middleware(
 async def startup():
     store.listeners.append(engine.apply_config)
     store.listeners.append(news.configure)
-    store.listeners.append(lab_engine.apply_config)
+    for _l in LABS:
+        store.listeners.append(_l.apply_config)
     await store.load()
     await ai_usage.load()
     await engine.init()
     await news.init()
     await migrations.run(engine, db)
-    await lab_engine.init()
+    for _l in LABS:
+        await _l.init()
     await cron_routes.init()
     await backup_routes.init()
     for eng, st, nw in FX_BOTS:
@@ -352,6 +355,7 @@ async def shutdown():
         await nw.aclose()
         await eng.shutdown()
     await news.aclose()
-    await lab_engine.shutdown()
+    for _l in LABS:
+        await _l.shutdown()
     await engine.shutdown()
     client.close()

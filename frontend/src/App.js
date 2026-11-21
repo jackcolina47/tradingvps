@@ -209,6 +209,7 @@ export default function App() {
           <Route path="/bybit" element={<Dashboard onLogout={logout} />} />
           <Route path="/hotforex" element={<FxDashboard onLogout={logout} bot="fx" />} />
           <Route path="/lab" element={<LabDashboard onLogout={logout} />} />
+          <Route path="/lab4h" element={<LabDashboard key="lab4h" onLogout={logout} bot="lab4h" suffix=" 4H" />} />
           <Route path="/pepperstone" element={<FxDashboard onLogout={logout} bot="pepper" />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

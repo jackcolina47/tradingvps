@@ -22,10 +22,11 @@ DEFAULT_PAIRS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT"]
 
 
 class LabEngine(TradingEngine):
-    bot_key, tg_prefix = "lab", f"🧪 <b>{NAME}</b>\n"
-
-    def __init__(self, db, main: TradingEngine):
-        super().__init__(PrefixedDB(db, "lab_"))
+    def __init__(self, db, main: TradingEngine, key: str = "lab", name: str = NAME, source: "LabEngine" = None, timeframe: str = None, capital: float = None):
+        """`source`: another lab whose current settings seed this clone on its first start (with `timeframe` and `capital` overriding)."""
+        super().__init__(PrefixedDB(db, f"{key}_"))
+        self.bot_key, self.name, self.tg_prefix = key, name, f"🧪 <b>{name}</b>\n"
+        self.source, self.seed_timeframe, self.seed_capital = source, timeframe, capital
         self.market = main.market  # shared tickers and candle cache: no extra requests for prices
 
     async def apply_config(self, cfg):
@@ -33,14 +34,16 @@ class LabEngine(TradingEngine):
 
     async def init(self):
         if not await self.db.settings.find_one({"_id": "main"}):
-            await self.db.settings.insert_one({"_id": "main", **Settings(ema_test_enabled=True, ema_test_symbols=DEFAULT_PAIRS, symbols=DEFAULT_PAIRS, bot_running=False).model_dump()})
+            seed = (await self.source.get_settings()).model_dump() if self.source else Settings(ema_test_enabled=True, ema_test_symbols=DEFAULT_PAIRS, symbols=DEFAULT_PAIRS).model_dump()
+            seed.update(bot_running=False, **({"timeframe": self.seed_timeframe} if self.seed_timeframe else {}))
+            await self.db.settings.insert_one({"_id": "main", **seed})
         if not await self.db.account.find_one({"_id": "main"}):
-            await self._new_account()
+            await self._new_account(*([self.seed_capital] if self.seed_capital else []))
         self.running = (await self.get_settings()).bot_running
         async for s in self.db.signals.find({}, {"key": 1}).sort("_id", -1).limit(500):
             if s.get("key"):
                 self.signal_keys.add(s["key"])
-        await self.log("INFO", f"{NAME} iniciado · solo paper · test cruce EMA · bot {'ACTIVO' if self.running else 'DETENIDO'}")
+        await self.log("INFO", f"{self.name} iniciado · solo paper · test cruce EMA · bot {'ACTIVO' if self.running else 'DETENIDO'}")
         self.tasks = [asyncio.create_task(self._monitor_loop()), asyncio.create_task(self._scan_loop())]
 
     async def shutdown(self):
@@ -127,7 +130,7 @@ class LabEngine(TradingEngine):
 
 
 def build_router(lab: LabEngine, require_auth) -> APIRouter:
-    r = APIRouter(prefix="/api/lab", dependencies=[Depends(require_auth)])
+    r = APIRouter(prefix=f"/api/{lab.bot_key}", dependencies=[Depends(require_auth)])
     db = lab.db
 
     def status() -> dict:

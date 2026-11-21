@@ -608,3 +608,8 @@
 - Sin reintento si el fallo es de saldo/cuota, API key o modelo inexistente.
 - Pepperstone y Bybit Lab sin cambios.
 - Tests: `backend/tests/test_iter99_rules_retry.py` (22 passed junto a iter89/iter92). Sin confirmar en VPS.
+
+## Iteración 100 · Bybit Lab 4H (jun 2026)
+- Segundo laboratorio paper-only: `LabEngine(key="lab4h")` en `deps.py` (`LABS`), colecciones `lab4h_*`, API `/api/lab4h`, ruta `/lab4h`, tarjeta en el selector y opción `lab4h` en Telegram por chat.
+- En su primer arranque copia los ajustes de Bybit Lab con temporalidad 4h (editable) y capital 1000 USDT; historial propio desde cero.
+- Verificado en preview: API (ajustes copiados, 1000 USDT, aislamiento de ajustes) y pantalla. Sin confirmar en VPS.
