@@ -1,7 +1,7 @@
 from typing import Optional, List, Dict
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from models import STRATEGY_KEYS, SIGNAL_MODES
-from fx.symbols import AVAILABLE, DEFAULT_SYMBOLS
+from fx.symbols import SPECS as AVAILABLE, DEFAULT_SYMBOLS  # validators accept every known symbol; each broker profile narrows its own list
 from fx.market import SESSION_IDS
 
 NEWS_WEIGHTS = ("normal", "bajo")  # weight of market-wide news alerts in the per-signal AI verdict
@@ -80,6 +80,8 @@ class FxSettings(BaseModel):
     ema_test_confirm_adx: float = 24.0
     ema_test_confirm_dist_atr: float = 0.5
     ema_test_confirm_bars: int = 20
+    ema_sl_atr: float = 3.0
+    ema_touch_exit_enabled: bool = False
     bot_running: bool = False
 
     @field_validator("ema_test_symbols")
@@ -269,6 +271,8 @@ class FxSettingsUpdate(BaseModel):
     ema_test_confirm_adx: Optional[float] = Field(default=None, ge=5, le=60)
     ema_test_confirm_dist_atr: Optional[float] = Field(default=None, ge=0.1, le=3.0)
     ema_test_confirm_bars: Optional[int] = Field(default=None, ge=1, le=100)
+    ema_sl_atr: Optional[float] = Field(default=None, ge=0.5, le=10)
+    ema_touch_exit_enabled: Optional[bool] = None
 
 
 class HfmTestRequest(BaseModel):

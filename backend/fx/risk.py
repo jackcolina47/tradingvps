@@ -117,7 +117,7 @@ def update_trailing(side: str, entry: float, sl: float, initial_sl: float, atr: 
 
 DEFAULT_RULES = {"trailing_enabled": True, "breakeven_enabled": True, "be_start_r": 1.0, "trail_start_r": 1.5, "trail_atr_mult": 1.0,
                  "partial_tp_enabled": False, "partial_tp_r": 1.5, "partial_tp_pct": 50,
-                 "ema_test_partial_enabled": False, "ema_test_partial_atr": 1.5}
+                 "ema_test_partial_enabled": False, "ema_test_partial_atr": 1.5, "ema_touch_exit_enabled": False}
 
 
 def trade_rules(settings) -> dict:

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import numpy as np
 from indicators import build_df
 from backtest import scan_signals, _levels, _iso
-from strategies import exit_signal, EXIT_REASON, CROSS_ONLY
+from strategies import exit_signal, EXIT_REASON, CROSS_ONLY, TOUCH_REASON
 from risk import check_exit as bar_exit, EMA_PARTIAL_PCT
 from fx import risk
 from fx.market import sessions as fx_sessions
@@ -39,7 +39,7 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
     tickers = tickers or {}
     spread = costs.spread(symbol) if costs else SPECS[symbol]["spread"]
     highs, lows, closes, ts = df["high"].values, df["low"].values, df["close"].values, df["ts"].values
-    e10, e20 = df["ema10"].values, df["ema20"].values
+    e10, e20, e21 = df["ema10"].values, df["ema20"].values, df["ema21"].values
     n = len(df)
     end = end or n
     step_ms = float(np.median(np.diff(ts[:200]))) if n > 2 else 0
@@ -83,6 +83,8 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
                 close(closes[i], "TIEMPO", i)
             elif exit_signal(pos["strategy"], pos["side"], e10[i], e20[i]):
                 close(closes[i], EXIT_REASON, i)
+            elif cross_only and rules["ema_touch_exit_enabled"] and lows[i] <= e21[i] <= highs[i]:
+                close(closes[i], TOUCH_REASON, i)
             elif cross_only:
                 if rules["ema_test_partial_enabled"] and not pos["partial"] and fav >= rules["ema_test_partial_atr"] * pos["atr"]:
                     d = 1 if pos["side"] == "long" else -1

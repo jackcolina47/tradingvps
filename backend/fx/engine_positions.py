@@ -283,7 +283,7 @@ class PositionsMixin:
                       mfe_r=round(mfe, 2), mae_r=round(p.mae_r, 2), mfe_tp_pct=round(mfe / tp_r * 100, 1) if tp_r else 0.0,
                       partial_tp=p.partial_done and bool(p.partial_gross), hold_min=round(hold, 1),
                       sl=p.sl, tp=p.tp, initial_sl=p.initial_sl, atr=p.atr, breakeven=p.breakeven, signal_id=p.signal_id, order_id=p.order_id,
-                      exit_mode=p.exit_mode, tags=[EMA_TEST_TAG] if p.exit_mode == "cross" else [])
+                      exit_mode=p.exit_mode, tags=[EMA_TEST_TAG] if p.exit_mode == "cross" and not self.profile.ema_only else [])
         res = await self.db.trades.insert_one(trade.to_mongo())
         trade.id = str(res.inserted_id)
         if self.profile.rules_only and trade.exit_mode != "cross" and trade.strategy != "manual":
@@ -422,12 +422,12 @@ class PositionsMixin:
         if real_risk > risk_pct + 0.05:
             reduced += f" · lote mínimo: riesgo real {real_risk:g}% (objetivo {risk_pct:g}%)"
         f = lambda v: fmt_price(symbol, v)  # noqa: E731
-        levels = (f"SL de seguridad {f(sl)} ({pips(symbol, abs(entry - sl)):.1f} pips) · sin TP · cierre en el cruce contrario · ⚠️ {EMA_TEST_TAG}" if cross
+        levels = (f"SL de seguridad {f(sl)} ({pips(symbol, abs(entry - sl)):.1f} pips) · sin TP · cierre en el cruce contrario" + ("" if self.profile.ema_only else f" · ⚠️ {EMA_TEST_TAG}") if cross
                   else f"SL {f(sl)} ({pips(symbol, abs(entry - sl)):.1f} pips) · TP {f(tp)}")
         await self.log("ORDER", f"ABIERTA {tag}{sig['side'].upper()} {symbol} @ {f(entry)} · {lots:.2f} lotes · 1:{leverage} · {levels}{reduced}")
         await self.tg(f"{'🟢' if long else '🔴'} <b>ABIERTA {tag}{sig['side'].upper()} {symbol}</b> @ {f(entry)}\n"
                       f"{lots:.2f} lotes · 1:{leverage} · margen ${margin:,.2f}\n{levels}\n"
-                      f"Estrategia: {FX_STRATEGY_INFO.get(sig['strategy'], {}).get('name', sig['strategy'])}{reduced}", "orders")
+                      f"Estrategia: {self.strat_name if cross else FX_STRATEGY_INFO.get(sig['strategy'], {}).get('name', sig['strategy'])}{reduced}", "orders")
         return pos, None
 
     async def close_position(self, pos_id: str, price: float = None, reason: str = "MANUAL"):

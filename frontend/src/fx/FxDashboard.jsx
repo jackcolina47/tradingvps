@@ -11,6 +11,7 @@ import Watchlist from "@/components/bot/Watchlist";
 import PriceChart from "@/components/bot/PriceChart";
 import BotPanel from "@/components/bot/BotPanel";
 import PositionsTable from "@/components/bot/PositionsTable";
+import PositionCards from "@/components/bot/PositionCards";
 import TradeHistory from "@/components/bot/TradeHistory";
 import Performance from "@/components/bot/Performance";
 import Backtest from "@/components/bot/Backtest";
@@ -74,12 +75,17 @@ const AI_ALL_INTRO = (n) => `Corre el optimizador y el walk-forward en los ${n} 
 const SESSION_CHIPS = (meta) => [{ k: "sessions_allowed", label: "Sesiones para abrir posiciones", emptyLabel: "todas", options: meta?.sessions || [],
   hint: "El bot solo abre nuevas entradas cuando alguna de las sesiones marcadas está abierta (Londres y Nueva York concentran la liquidez). Sin selección opera en todo el horario forex. Las posiciones abiertas se gestionan igual en cualquier sesión. El backtest aplica el mismo filtro." }];
 const fmtLev = (v) => `1:${v}`;
+const EMA_HIDE = ["scan_interval_sec", "ai_enabled", "ai_funnel_enabled", "ai_min_confidence", "min_rr", "breakeven_enabled", "trailing_enabled", "htf_filter"];
+const EMA_TOGGLES = EXTRA_TOGGLES.filter((t) => ["close_before_weekend", "rollover_guard"].includes(t.k))
+  .map((t) => ({ ...t, hint: `${t.hint} · no se aplica a las criptomonedas, que operan 24/7` }));
+const EMA_BT_INTRO = (brand) => (s) => `Cruce EMA 10 y 20 Personalizado sobre las últimas 1.000 velas con los ajustes guardados (SL ${s.ema_sl_atr}×ATR, entrada confirmada, parcial + breakeven y toque de EMA 21 si están activos): ${s.risk_per_trade}% por operación, 1:${s.leverage}, ${brand.costsNote}. Las criptomonedas usan las velas del perpetuo USDT y no aplican cierre de fin de semana.`;
 const PLAN_INTRO = (brand) => `Plan de crecimiento compuesto para la cuenta forex: cuándo reinvertir, cuándo subir el riesgo y cuándo empezar a retirar. Los escenarios Prudente / Realista / Ambicioso son rentabilidades mensuales supuestas para la proyección (no tienen relación con el perfil de riesgo del bot); el escenario «Según backtest» usa Monte Carlo sobre tus propias estrategias en lotes y pips (${brand.costsNote}, lote mínimo, sesiones y cierre de fin de semana como en el bot, sin filtro IA). Tu meta, aporte y escenario quedan guardados en la configuración de este bot.`;
 
 export default function FxDashboard({ onLogout, bot = "fx" }) {
   setApiBase(bot);
   const brand = BRANDS[bot] || BRANDS.fx;
   const rulesOnly = bot === "fx";  // HotForex: entries gated only by risk limits + learned rules
+  const emaOnly = !!brand.emaOnly;  // Pepperstone: single fixed strategy, no AI in the trading flow
   const nav = useNavigate();
   const [meta, setMeta] = useState(null);
   const [symbol, setSymbol] = useState("XAUUSD");
@@ -142,7 +148,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
         <main className="mx-auto max-w-[1920px] p-4 md:p-6"><FxAdminSettings account={data.account} refresh={refresh} /></main>
       ) : (
       <main className="mx-auto max-w-[1920px] space-y-4 p-4 md:p-6">
-        <AiHealthBanner ai={data.status.ai} />
+        {!emaOnly && <AiHealthBanner ai={data.status.ai} />}
         {data.status.exchange_error && (
           <div data-testid="fx-exchange-error-banner" className="rounded-md border border-rose-500/40 bg-rose-500/10 px-4 py-2 font-mono text-[11px] text-rose-200">
             Yahoo Finance sin respuesta: {data.status.exchange_error} · mostrando los últimos datos locales
@@ -162,10 +168,12 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
           <Watchlist items={data.watchlist} selected={symbol} onSelect={setSymbol} />
           <PriceChart symbol={symbol} defaultTf={data.settings.timeframe} kind={meta?.symbol_info?.[symbol]?.name || "Forex"} tfs={FX_TFS}
             trade={{ riskPct: data.settings.risk_per_trade, equity: data.account.equity, live: data.status.mode === "REAL", currency: "USD", onDone: refresh }} />
-          <BotPanel settings={data.settings} meta={meta} account={data.account} equity={data.equity} profileActive={data.profile_active} fmtLeverage={fmtLev} rulesOnly={rulesOnly} />
+          {emaOnly
+            ? <AiSignals rulesOnly signals={data.signals} title="Cruces detectados" emptyText="Cuando el bot detecte un cruce de EMAs válido aparecerá aquí." className="lg:col-span-3" />
+            : <BotPanel settings={data.settings} meta={meta} account={data.account} equity={data.equity} profileActive={data.profile_active} fmtLeverage={fmtLev} rulesOnly={rulesOnly} />}
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
-          <Panel testId="fx-operations-panel" className="lg:col-span-8" delay={220}>
+          <Panel testId="fx-operations-panel" className={emaOnly ? "lg:col-span-12" : "lg:col-span-8"} delay={220}>
             <Tabs defaultValue="positions" className="flex h-full flex-col">
               <div className="flex items-center gap-3 border-b border-[#1E293B] px-4 py-2.5">
                 <Layers className="h-4 w-4 shrink-0 text-amber-400" />
@@ -174,6 +182,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
                   <TabsTrigger data-testid="fx-tab-history" value="history" className={TAB_CLS}>Historial</TabsTrigger>
                   <TabsTrigger data-testid="fx-tab-backtest" value="backtest" className={TAB_CLS}>Backtest</TabsTrigger>
                   <TabsTrigger data-testid="fx-tab-performance" value="performance" className={TAB_CLS}>Rendimiento</TabsTrigger>
+                  {!emaOnly && <>
                   <TabsTrigger data-testid="fx-tab-optimizer" value="optimizer" className={TAB_CLS}>Optimizador</TabsTrigger>
                   <TabsTrigger data-testid="fx-tab-news" value="news" className={`${TAB_CLS} relative`}>
                     Noticias y agenda
@@ -187,6 +196,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
                   </TabsTrigger>
                   <TabsTrigger data-testid="fx-tab-evolution" value="evolution" className={TAB_CLS}>Evolución</TabsTrigger>
                   <TabsTrigger data-testid="fx-tab-filters" value="filters" className={TAB_CLS}>Filtros</TabsTrigger>
+                  </>}
                 </TabsList>
               </div>
               <TabsContent value="evolution" className="mt-0"><EvolutionPanel /></TabsContent>
@@ -194,11 +204,14 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
                 <FxFiltersPanel settings={data.settings} symbolNames={meta?.symbol_info} onSave={(body) => act(() => http.put("/settings", body), "Configuración actualizada")} />
               </TabsContent>
               <TabsContent value="positions" className="mt-0">
-                <PositionsTable positions={data.positions} onClose={(id) => act(() => http.post(`/positions/${id}/close`), "Posición cerrada")}
-                  onCloseAll={() => act(() => http.post("/positions/close-all"), "Cierre de emergencia ejecutado")} />
+                {emaOnly
+                  ? <PositionCards positions={data.positions} onClose={(id) => act(() => http.post(`/positions/${id}/close`), "Posición cerrada")}
+                      onCloseAll={() => act(() => http.post("/positions/close-all"), "Cierre de emergencia ejecutado")} />
+                  : <PositionsTable positions={data.positions} onClose={(id) => act(() => http.post(`/positions/${id}/close`), "Posición cerrada")}
+                      onCloseAll={() => act(() => http.post("/positions/close-all"), "Cierre de emergencia ejecutado")} />}
               </TabsContent>
               <TabsContent value="history" className="mt-0"><TradeHistory trades={data.trades} /></TabsContent>
-              <TabsContent value="backtest" className="mt-0"><Backtest meta={meta} settings={data.settings} intro={BT_INTRO(brand)} /></TabsContent>
+              <TabsContent value="backtest" className="mt-0"><Backtest meta={meta} settings={emaOnly ? { ...data.settings, strategy: "ema_test" } : data.settings} intro={emaOnly ? EMA_BT_INTRO(brand) : BT_INTRO(brand)} /></TabsContent>
               <TabsContent value="performance" className="mt-0">
                 <Performance tradeCount={data.account.total_trades} settings={data.settings} strategyKeys={meta?.strategy_keys} onSave={(body) => act(() => http.put("/settings", body), "Configuración actualizada")} />
               </TabsContent>
@@ -213,10 +226,15 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
               </TabsContent>
             </Tabs>
           </Panel>
-          <AiSignals signals={data.signals} ai={data.status.ai} usage={data.status.ai_usage} minConfidence={data.settings.ai_min_confidence} rulesOnly={rulesOnly}
-            {...(rulesOnly ? { title: "Señales y reglas aprendidas", emptyText: "Cada señal detectada se abre directamente; aquí verás si alguna regla aprendida la bloqueó y por qué." } : {})} />
+          {!emaOnly && <AiSignals signals={data.signals} ai={data.status.ai} usage={data.status.ai_usage} minConfidence={data.settings.ai_min_confidence} rulesOnly={rulesOnly}
+            {...(rulesOnly ? { title: "Señales y reglas aprendidas", emptyText: "Cada señal detectada se abre directamente; aquí verás si alguna regla aprendida la bloqueó y por qué." } : {})} />}
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          {emaOnly ? (
+            <SettingsPanel emaOnly settings={data.settings} meta={meta} leverageMax={500} maxPositions={12} hide={EMA_HIDE} extraToggles={EMA_TOGGLES}
+              extraChips={SESSION_CHIPS(meta).map((c) => ({ ...c, hint: "El bot solo abre nuevas entradas en pares de divisas y metales cuando alguna de las sesiones marcadas está abierta. Sin selección opera en todo el horario forex. Las criptomonedas no usan este filtro." }))}
+              fmtLeverage={fmtLev} strategyKeys={[]} onSave={(body) => act(() => http.put("/settings", body), "Configuración guardada")} />
+          ) : (
           <SettingsPanel settings={data.settings} meta={meta} profileActive={data.profile_active} leverageMax={500} maxPositions={12}
             hide={rulesOnly ? ["scan_interval_sec", ...RULES_ONLY_HIDE] : ["scan_interval_sec"]}
             extraToggles={rulesOnly ? [LEARN_TOGGLE, ...EXTRA_TOGGLES.filter((t) => !RULES_ONLY_HIDE.includes(t.k))] : EXTRA_TOGGLES}
@@ -224,10 +242,11 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
             extraChips={[...SESSION_CHIPS(meta), ...(rulesOnly ? [] : SEASON_CHIPS(meta))]} extraSelects={rulesOnly ? EXTRA_SELECTS.filter((x) => x.k !== "ai_news_weight") : EXTRA_SELECTS} fmtLeverage={fmtLev} strategyKeys={meta?.strategy_keys} longKeys={meta?.long_horizon_keys}
             onSave={(body) => act(() => http.put("/settings", body), "Configuración guardada")}
             onProfile={(level) => act(() => http.post("/profile", { level }), `Perfil de riesgo aplicado: ${meta?.profiles?.[level]?.name || level}`)} />
+          )}
           <Terminal logs={data.logs} onClear={() => act(() => http.delete("/logs"))} />
         </div>
         <p className="pb-4 pt-2 font-mono text-[10px] uppercase tracking-wider text-slate-600">
-          Simulación con precios reales de Yahoo Finance · Lotes y pips según especificaciones de {brand.broker}{data.status.costs?.commission_lot_usd ? ` · comisión ${data.status.costs.commission_lot_usd} USD/lote` : ""} · No es asesoría financiera · El apalancamiento implica alto riesgo
+          Simulación con precios reales de Yahoo Finance{emaOnly ? " (cripto: perpetuos USDT)" : ""} · Lotes y pips según especificaciones de {brand.broker}{data.status.costs?.commission_lot_usd ? ` · comisión ${data.status.costs.commission_lot_usd} USD/lote` : ""} · No es asesoría financiera · El apalancamiento implica alto riesgo
         </p>
       </main>
       )}

@@ -30,9 +30,12 @@ def register(router, engine, store, news):
 
     @router.post("/backtest")
     async def backtest(req: FxBacktestRequest):
-        if req.symbol not in AVAILABLE or req.timeframe not in FX_TIMEFRAMES or req.strategy not in FX_STRATEGY_KEYS + [EMA_TEST]:
+        if engine.profile.ema_only:
+            req.strategy = EMA_TEST
+        if req.symbol not in engine.profile.symbols or req.timeframe not in FX_TIMEFRAMES or req.strategy not in FX_STRATEGY_KEYS + [EMA_TEST]:
             raise HTTPException(400, "Parámetros inválidos")
         s = await engine.get_settings()
+        crypto = bool(SPECS[req.symbol].get("crypto"))  # 24/7: no weekend flat, no forex sessions
         tf = req.timeframe
         params = dict(s.symbol_params.get(req.symbol) or {})
         if req.strategy == EMA_TEST:
@@ -52,15 +55,15 @@ def register(router, engine, store, news):
         else:
             klines = await engine.market.fetch_klines(req.symbol, req.timeframe, 1000, cache_sec=60)
         result = await asyncio.to_thread(run_backtest, klines, req.strategy, req.risk_per_trade, req.leverage, trade_rules(s), await _initial_balance(),
-                                         req.symbol, s.signal_mode, s.disabled_strategies, dict(engine.market.tickers), s.min_lot_max_risk, s.close_before_weekend,
-                                         tuple(s.sessions_allowed), engine.costs, params or None)
+                                         req.symbol, s.signal_mode, s.disabled_strategies, dict(engine.market.tickers), s.min_lot_max_risk, s.close_before_weekend and not crypto,
+                                         () if crypto else tuple(s.sessions_allowed), engine.costs, params or None)
         result.pop("r_multiples", None)
         return {"symbol": req.symbol, "strategy": req.strategy, "timeframe": tf, "params": params or None, "spread_pips": round(pips(req.symbol, engine.costs.spread(req.symbol)), 1), "commission_lot_usd": engine.costs.commission_lot_usd,
                 "sessions_allowed": s.sessions_allowed, **result}
 
     @router.post("/optimize")
     async def optimize_symbol(req: OptimizeRequest):
-        if req.symbol not in AVAILABLE:
+        if req.symbol not in engine.profile.symbols:
             raise HTTPException(400, "Símbolo inválido")
         s = await engine.get_settings()
         klines = await engine.market.fetch_klines(req.symbol, s.timeframe, 1000, cache_sec=300)
@@ -69,7 +72,7 @@ def register(router, engine, store, news):
 
     @router.post("/optimize/walk-forward")
     async def optimize_walk_forward(req: OptimizeRequest):
-        if req.symbol not in AVAILABLE:
+        if req.symbol not in engine.profile.symbols:
             raise HTTPException(400, "Símbolo inválido")
         s = await engine.get_settings()
         klines = await engine.market.fetch_klines(req.symbol, s.timeframe, WF_CANDLES, cache_sec=600)

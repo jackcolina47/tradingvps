@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 import httpx
-from fx.symbols import SPECS, CONVERSION
+from fx.symbols import SPECS, CONVERSION, AVAILABLE, CRYPTO_SPREAD_PCT
 
 logger = logging.getLogger("fx.market")
 CHART = "https://query1.finance.yahoo.com/v8/finance/chart/{t}"
@@ -135,6 +135,17 @@ class FxMarket:
         self._lock = asyncio.Lock()
         self._last_req = 0.0
         self._cooldown_until = 0.0
+        self.crypto = None  # crypto bot MarketData (Bybit/Bitget USDT perpetuals): source of the crypto CFD prices and candles
+
+    def _merge_crypto(self, out: dict, wanted: list) -> dict:
+        src = self.crypto.tickers if self.crypto else {}
+        for s in wanted:
+            t = src.get(SPECS[s].get("crypto") or "")
+            if t:
+                SPECS[s]["spread"] = round(t["price"] * CRYPTO_SPREAD_PCT, SPECS[s]["digits"]) or SPECS[s]["spread"]
+                out[s] = {"symbol": s, "price": t["price"], "change_pct": t["change_pct"], "high": t["high"], "low": t["low"], "volume_usdt": t["volume_usdt"],
+                          "spread": SPECS[s]["spread"], "updated_at": int(self.crypto.tickers_ts or time.time())}
+        return out
 
     async def detect(self):
         try:
@@ -184,9 +195,10 @@ class FxMarket:
 
     async def fetch_tickers(self, symbols: list = None, cache_sec: int = 20) -> dict:
         """One spark request for every wanted symbol (+ conversion pairs): price, day change, high/low."""
-        wanted = list(dict.fromkeys((symbols or list(SPECS)) + CONVERSION))
+        asked = list(dict.fromkeys((symbols or AVAILABLE) + CONVERSION))
+        wanted = [s for s in asked if SPECS[s]["yahoo"]]
         if self.tickers and time.time() - self.tickers_ts < cache_sec and all(s in self.tickers for s in wanted):
-            return self.tickers
+            return self._merge_crypto(self.tickers, asked)
         by_yahoo = {SPECS[s]["yahoo"]: s for s in wanted}
         try:
             data = await self._get(SPARK, {"symbols": ",".join(by_yahoo), "range": "1d", "interval": "15m"})
@@ -212,10 +224,12 @@ class FxMarket:
         self.error = f"sin precio para {', '.join(missing[:4])}" if missing and len(missing) == len(wanted) else None
         if missing:
             logger.warning(f"tickers sin precio: {missing[:6]}")
-        self.tickers, self.tickers_ts = out, time.time()
+        self.tickers, self.tickers_ts = self._merge_crypto(out, asked), time.time()
         return out
 
     async def fetch_klines(self, symbol: str, tf: str, limit: int = 300, cache_sec: int = 30) -> list:
+        if SPECS[symbol].get("crypto"):
+            return await self.crypto.fetch_klines(SPECS[symbol]["crypto"], tf, limit, cache_sec=min(cache_sec, 60) or 8)
         key = (symbol, tf, limit)
         hit = self._kcache.get(key)
         if hit and time.time() - hit[0] < cache_sec:
@@ -250,6 +264,8 @@ class FxMarket:
     async def fetch_before(self, symbol: str, tf: str, end_ts: int, limit: int = 500, cache_sec: int = 600) -> list:
         """Up to `limit` candles strictly older than `end_ts` (unix s) via Yahoo period1/period2; window ×1.5 covers weekends. Empty once Yahoo's
         history cap for the interval is reached."""
+        if SPECS[symbol].get("crypto"):
+            return await self.crypto.fetch_before(SPECS[symbol]["crypto"], tf, end_ts * 1000, limit)
         key = (symbol, tf, "before", end_ts, limit)
         hit = self._kcache.get(key)
         if hit and time.time() - hit[0] < cache_sec:

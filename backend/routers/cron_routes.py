@@ -61,6 +61,8 @@ async def _accept(request: Request) -> bool:
 
 
 async def _safe_auto_review(bot: dict):
+    if getattr(getattr(bot["engine"], "profile", None), "ema_only", False):
+        return  # single fixed strategy: no AI review
     try:
         await bot["review"](bot["engine"], bot["db"], bot["store"])
     except Exception as e:
@@ -108,7 +110,7 @@ async def cron_walk_forward(request: Request):
     if await _accept(request):
         return {"accepted": True, "duplicate": True}
     started = await wfcheck.start_check(engine, db, store, "auto")
-    started_fx = [await wfcheck.start_check(e, e.db, s, "auto", e.wf_kit) for e, s, _ in FX_BOTS]
+    started_fx = [False if e.profile.ema_only else await wfcheck.start_check(e, e.db, s, "auto", e.wf_kit) for e, s, _ in FX_BOTS]
     return {"accepted": True, "scheduled": started, "scheduled_fx": started_fx[0], "scheduled_pepper": started_fx[1]}
 
 

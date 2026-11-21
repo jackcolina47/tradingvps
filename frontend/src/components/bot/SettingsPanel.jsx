@@ -44,7 +44,7 @@ const Sel = ({ label, value, onChange, options, render, testId }) => (
   </div>
 );
 
-export default function SettingsPanel({ settings, meta, profileActive, onSave, onProfile, leverageMax = 20, maxPositions = 10, extraToggles = [], extraNums = [], extraChips = [], extraSelects = [], fmtLeverage, strategyKeys = STRATEGY_KEYS, longKeys = [], hide = [], testOnly = false }) {
+export default function SettingsPanel({ settings, meta, profileActive, onSave, onProfile, leverageMax = 20, maxPositions = 10, extraToggles = [], extraNums = [], extraChips = [], extraSelects = [], fmtLeverage, strategyKeys = STRATEGY_KEYS, longKeys = [], hide = [], testOnly = false, emaOnly = false, className = "lg:col-span-5" }) {
   const [form, setForm] = useState(settings);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -87,7 +87,7 @@ export default function SettingsPanel({ settings, meta, profileActive, onSave, o
       body[k] = Math.min(max, Math.max(min, (k.endsWith("bars") ? Math.round(v) : v) || def));
       if (body[k] !== v) clamped.push(`${label} → ${body[k]}`);
     });
-    [["atr_sl_mult", 0.5, 10, 2, "Multiplicador SL (×ATR)"], ["atr_tp_mult", 0.5, 20, 4, "Multiplicador TP (×ATR)"]].forEach(([k, min, max, def, label]) => {
+    [["ema_sl_atr", 0.5, 10, 3, "Stop loss (×ATR)"], ["atr_sl_mult", 0.5, 10, 2, "Multiplicador SL (×ATR)"], ["atr_tp_mult", 0.5, 20, 4, "Multiplicador TP (×ATR)"]].forEach(([k, min, max, def, label]) => {
       if (!(k in body)) return;
       const v = Number(body[k]);
       body[k] = Math.min(max, Math.max(min, v || def));
@@ -105,7 +105,7 @@ export default function SettingsPanel({ settings, meta, profileActive, onSave, o
   };
 
   return (
-    <Panel testId="settings-panel" title={testOnly ? "Ajustes del laboratorio" : "Estrategia y riesgo"} icon={SlidersHorizontal} className="lg:col-span-5" bodyClass="p-4 space-y-4" delay={320}
+    <Panel testId="settings-panel" title={testOnly ? "Ajustes del laboratorio" : "Estrategia y riesgo"} icon={SlidersHorizontal} className={className} bodyClass="p-4 space-y-4" delay={320}
       actions={
         <Button data-testid="settings-save-button" size="sm" onClick={save} disabled={!dirty || saving || !form.symbols.length}
           className="h-7 bg-amber-500 font-mono text-[10px] font-bold uppercase tracking-wider text-[#07090E] hover:bg-amber-400">
@@ -118,12 +118,12 @@ export default function SettingsPanel({ settings, meta, profileActive, onSave, o
       )}
       <div className="grid grid-cols-2 gap-3">
         <Sel label="Temporalidad" value={form.timeframe} onChange={(v) => set("timeframe", v)} options={meta?.timeframes || []} testId="settings-timeframe-select" />
-        {!testOnly && <Sel label="Criterios de entrada" value={form.signal_mode} onChange={(v) => set("signal_mode", v)} options={meta?.signal_modes || []}
+        {!testOnly && !emaOnly && <Sel label="Criterios de entrada" value={form.signal_mode} onChange={(v) => set("signal_mode", v)} options={meta?.signal_modes || []}
           render={(o) => MODE_LABELS[o]} testId="settings-signal-mode-select" />}
       </div>
       {meta?.mode_info?.[form.signal_mode] && <p data-testid="settings-signal-mode-hint" className="-mt-2 text-[11px] text-slate-500">{meta.mode_info[form.signal_mode].desc}</p>}
       {!testOnly && <>
-      <div>
+      <div className={emaOnly ? "hidden" : ""}>
         <p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-slate-500">Estrategias activas ({active.length}/{strategyKeys.length})</p>
         <div className="flex flex-wrap gap-1.5">
           {strategyKeys.map((k) => (
@@ -194,9 +194,9 @@ export default function SettingsPanel({ settings, meta, profileActive, onSave, o
             <Switch data-testid={`settings-${t.k.replace(/_/g, "-")}-switch`} checked={form[t.k]} onCheckedChange={(v) => set(t.k, v)} />
           </label>
         ))}
-        {!testOnly && <AtrLevelsSettings form={form} set={set} />}
-        {!testOnly && <AiPositionReviewSettings form={form} set={set} />}
-        <EmaTestSettings form={form} set={set} meta={meta} />
+        {!testOnly && !emaOnly && <AtrLevelsSettings form={form} set={set} />}
+        {!testOnly && !emaOnly && <AiPositionReviewSettings form={form} set={set} />}
+        <EmaTestSettings form={form} set={set} meta={meta} main={emaOnly} />
       </div>
     </Panel>
   );

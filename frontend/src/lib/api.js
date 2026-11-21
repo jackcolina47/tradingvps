@@ -28,7 +28,11 @@ const withAuth = (client) => {
 // One shared client: the active bot (crypto → /api, HotForex → /api/fx, Pepperstone → /api/pepper) switches the base URL so every panel is reusable.
 export const http = withAuth(axios.create({ baseURL: API, timeout: 90000 }));
 export const BOT_API = { fx: "/api/fx", pepper: "/api/pepper", lab: "/api/lab", lab4h: "/api/lab4h" };
-export const setApiBase = (bot) => { http.defaults.baseURL = BOT_API[bot] ? `${BACKEND}${BOT_API[bot]}` : API; };
+export const EMA_MAIN_NAME = "Cruce EMA 10 y 20 Personalizado";
+export const setApiBase = (bot) => {
+  http.defaults.baseURL = BOT_API[bot] ? `${BACKEND}${BOT_API[bot]}` : API;
+  STRATEGY_LABELS.ema_test = bot === "pepper" ? EMA_MAIN_NAME : "Test cruce EMA 10/20";  // Pepperstone: the EMA cross is the bot's only, main strategy
+};
 // Global features (chat, backups, VPS package) always talk to /api, whichever dashboard is open. Use relative paths ("/chat").
 // (In the VPS build REACT_APP_BACKEND_URL is "" so API is relative and could not be used as an absolute URL with `http`.)
 export const api = withAuth(axios.create({ baseURL: API, timeout: 90000 }));
@@ -79,7 +83,7 @@ export const MODE_LABELS = { strict: "Estrictos", relaxed: "Relajados", minimal:
 export const activeStrategies = (s, keys = STRATEGY_KEYS) => (s.strategy === "all" ? keys.filter((k) => !(s.disabled_strategies || []).includes(k)) : [s.strategy]);
 export const HORIZON_LABELS = { short: "Corto plazo", long: "Largo plazo" };
 export const ENTRY_LABELS = { market: "A mercado", maker: "Límite maker", market_fallback: "Mercado tras espera" };
-export const REASON_LABELS = { TP: "Take Profit", SL: "Stop Loss", TRAILING: "Trailing", BREAKEVEN: "Breakeven", MANUAL: "Manual", TIEMPO: "Tiempo máx.", FIN_SEMANA: "Fin de semana", CRUCE: "Cruce EMA contrario", IA_REVISION: "Revisión IA" };
+export const REASON_LABELS = { TP: "Take Profit", SL: "Stop Loss", TRAILING: "Trailing", BREAKEVEN: "Breakeven", MANUAL: "Manual", TIEMPO: "Tiempo máx.", FIN_SEMANA: "Fin de semana", CRUCE: "Cruce EMA contrario", TOQUE_EMA: "Toque de EMA 21", IA_REVISION: "Revisión IA" };
 export const SESSION_NAMES = { sydney: "Sídney", tokyo: "Tokio", london: "Londres", newyork: "Nueva York" };
 export const errMsg = (e) => {
   const d = e?.response?.data?.detail;

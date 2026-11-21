@@ -288,9 +288,11 @@ STRATEGY_INFO[EMA_TEST] = {
 
 def ema_test_params(settings) -> dict:
     """Entry params of the test from a Settings / FxSettings object (the confirmed entry replaces the plain ADX filter)."""
+    sl_k = float(getattr(settings, "ema_sl_atr", SAFETY_SL_ATR) or SAFETY_SL_ATR)
+    sl = {"ema_test_sl_atr": sl_k} if sl_k != SAFETY_SL_ATR else {}
     if settings.ema_test_confirm_enabled:
-        return {"ema_test_confirm": {"adx": settings.ema_test_confirm_adx, "dist_atr": settings.ema_test_confirm_dist_atr, "bars": settings.ema_test_confirm_bars}}
-    return {"ema_test_adx_min": settings.ema_test_adx_min} if settings.ema_test_adx_filter else {}
+        return {"ema_test_confirm": {"adx": settings.ema_test_confirm_adx, "dist_atr": settings.ema_test_confirm_dist_atr, "bars": settings.ema_test_confirm_bars, **({"sl_atr": sl_k} if sl else {})}}
+    return {**({"ema_test_adx_min": settings.ema_test_adx_min} if settings.ema_test_adx_filter else {}), **sl}
 
 
 def _ema_test_confirmed(df, i, c: dict) -> Optional[dict]:
@@ -308,10 +310,11 @@ def _ema_test_confirmed(df, i, c: dict) -> Optional[dict]:
     if gap >= c["dist_atr"]:
         return None
     long = bool(up)
-    sl, tp = _atr_levels(a, long, None, SAFETY_SL_ATR, 6.0)
+    sl_k = float(c.get("sl_atr") or SAFETY_SL_ATR)
+    sl, tp = _atr_levels(a, long, None, sl_k, 2 * sl_k)
     reasons = [f"EMA10 cruzó {'al alza' if long else 'a la baja'} la EMA20 hace {i - cross} vela(s) (máx. {int(c['bars'])})",
                f"Entrada confirmada: ADX {adx[i]:.1f} > {c['adx']:g} con las EMAs a {gap:.2f}×ATR (máx. {c['dist_atr']:g}×ATR)",
-               f"SL de seguridad {SAFETY_SL_ATR:g}×ATR · salida en el siguiente cruce contrario"]
+               f"SL de seguridad {sl_k:g}×ATR · salida en el siguiente cruce contrario"]
     return {**_signal("long" if long else "short", a, sl, tp, EMA_TEST, reasons, 3, int(a["ts"])), "exit_mode": "cross"}
 
 
@@ -331,9 +334,10 @@ def ema_test(df, i, htf=None, params=None, m=None) -> Optional[dict]:
     adx = float(a["adx"]) if "adx" in a else 0.0
     if adx_min and adx < adx_min:
         return None  # sideways filter: ignore the cross (the exit on the opposite cross still applies to open positions)
-    sl, tp = _atr_levels(a, long, None, SAFETY_SL_ATR, 6.0)  # SL = safety net only (executed); TP virtual (never executed)
+    sl_k = float((params or {}).get("ema_test_sl_atr") or SAFETY_SL_ATR)
+    sl, tp = _atr_levels(a, long, None, sl_k, 2 * sl_k)  # SL = safety net only (executed); TP virtual (never executed)
     reasons = [f"EMA10 cruza {'al alza' if long else 'a la baja'} la EMA20 al cierre de la vela",
-               (f"Filtro de lateral: ADX {adx:.1f} ≥ {adx_min:g} · " if adx_min else "Test experimental · ") + f"SL de seguridad {SAFETY_SL_ATR:g}×ATR · salida y giro en el siguiente cruce contrario"]
+               (f"Filtro de lateral: ADX {adx:.1f} ≥ {adx_min:g} · " if adx_min else "Test experimental · ") + f"SL de seguridad {sl_k:g}×ATR · salida y giro en el siguiente cruce contrario"]
     return {**_signal(side, a, sl, tp, EMA_TEST, reasons, 3, int(a["ts"])), "exit_mode": "cross"}
 
 
@@ -343,6 +347,7 @@ TEST_ONLY = {EMA_TEST}  # never part of «all»: only via its own toggle
 EXIT_ON_CROSS = {"ema_cross", EMA_TEST}
 CROSS_ONLY = {EMA_TEST}  # no SL/TP at all: the opposite cross is the only exit
 EXIT_REASON = "CRUCE"
+TOUCH_REASON = "TOQUE_EMA"  # optional exit: a closed candle touches the EMA21 while the position is open
 
 
 def exit_signal(strategy: str, side: str, ema10: float, ema20: float) -> bool:

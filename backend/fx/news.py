@@ -74,7 +74,7 @@ class FxNewsAgent:
         await asyncio.sleep(20)
         while True:
             try:
-                if self.cfg and self.cfg.news_enabled and time.time() >= self._retry_at:
+                if self.cfg and self.cfg.news_enabled and not self.engine.profile.ema_only and time.time() >= self._retry_at:
                     if not self.latest or _age_min(self.latest["updated_at"]) >= self.interval_min():
                         await self.refresh()
                     if self.cfg.news_trading_enabled:

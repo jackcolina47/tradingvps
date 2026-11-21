@@ -1,7 +1,7 @@
 """Broker profiles for the FX engine instances (HotForex/HFM and Pepperstone share the same engine via MetaApi): names, collections,
 MT servers, symbol suffixes, provisioning keywords and trading costs (spread factor + commission per lot)."""
 from dataclasses import dataclass, field
-from fx.symbols import SPECS
+from fx.symbols import SPECS, AVAILABLE, PEPPER_SYMBOLS, is_crypto
 
 
 @dataclass(frozen=True)
@@ -12,12 +12,12 @@ class Costs:
     label: str = ""
 
     def spread(self, symbol: str) -> float:
-        return SPECS[symbol]["spread"] * self.spread_factor
+        return SPECS[symbol]["spread"] * (1.0 if is_crypto(symbol) else self.spread_factor)
 
     def side_cost(self, symbol: str, lots: float, tickers: dict) -> float:
         """Cost of ONE side (entry or exit) in USD: half spread + half the round-turn commission."""
         from fx.risk import usd_per_unit
-        return self.spread(symbol) / 2 * usd_per_unit(symbol, lots, tickers) + self.commission_lot_usd / 2 * lots
+        return self.spread(symbol) / 2 * usd_per_unit(symbol, lots, tickers) + (0.0 if is_crypto(symbol) else self.commission_lot_usd / 2 * lots)  # crypto CFDs: spread only
 
 
 @dataclass(frozen=True)
@@ -42,6 +42,8 @@ class BrokerProfile:
     default_account_type: str
     weekly_prefix: str = field(default="")
     dual_pair: bool = False   # a pair may hold 1 normal-strategy position + 1 «Test cruce EMA» position at the same time
+    ema_only: bool = False    # one fixed strategy («Cruce EMA 10 y 20 Personalizado»): no other strategies, no AI in the entry/management flow
+    symbols: tuple = tuple(AVAILABLE)
     rules_only: bool = False  # entries gated only by risk limits + learned rules (no AI approval), with automatic learning on closed trades
 
     def costs(self, account_type: str = "") -> Costs:
@@ -52,7 +54,7 @@ class BrokerProfile:
         at = account_type if account_type in self.account_types else self.default_account_type
         return {"key": self.key, "name": self.bot_name, "broker": self.broker, "broker_long": self.broker_long, "panel": self.panel,
                 "server_hint": self.server_hint, "servers": self.servers, "suffixes": [{"suffix": k, "label": v} for k, v in self.suffixes.items()],
-                "account_types": [{"key": k, **v} for k, v in self.account_types.items()], "account_type": at, "default_account_type": self.default_account_type, "rules_only": self.rules_only}
+                "account_types": [{"key": k, **v} for k, v in self.account_types.items()], "account_type": at, "default_account_type": self.default_account_type, "rules_only": self.rules_only, "ema_only": self.ema_only}
 
 
 HFM = BrokerProfile(
@@ -66,7 +68,7 @@ HFM = BrokerProfile(
 )
 
 PEPPERSTONE = BrokerProfile(
-    key="pepperstone", prefix="pep_", api_prefix="/api/pepper", panel="pepper", ai_kind="pep", bot_name="Pepperstone AI trading", tg_name="Pepperstone AI", tg_icon="🌶",
+    ema_only=True, symbols=tuple(PEPPER_SYMBOLS), key="pepperstone", prefix="pep_", api_prefix="/api/pepper", panel="pepper", ai_kind="pep", bot_name="Pepperstone AI trading", tg_name="Pepperstone AI", tg_icon="🌶",
     broker="Pepperstone", broker_long="Pepperstone", metaapi_name="pepperstone-ai-trading", keywords=("Pepperstone",),
     suffixes={"": "Standard / Razor (sin sufijo)"},
     suffix_hint="el símbolo cotiza pero no es operable en esta cuenta: en Pepperstone los símbolos no llevan sufijo (EURUSD, XAUUSD); revisa el nombre exacto en MetaTrader",

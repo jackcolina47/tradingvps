@@ -5,10 +5,11 @@ from market import candle_scan_loop
 from datetime import datetime, timezone, timedelta
 from models import Signal, now_iso
 from indicators import trend_label, htf_trend, snapshot
-from strategies import evaluate, exit_signal, ema_test, ema_test_params, atr_params, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST
+from strategies import evaluate, exit_signal, ema_test, ema_test_params, atr_params, EXIT_ON_CROSS, EXIT_REASON, TOUCH_REASON, EMA_TEST
 from fx.models import FxSettings
 from fx.market import HTF, market_open, market_status, in_sessions, session_names, closing_soon, friday_stage
-from fx.symbols import SPECS, pips
+from fx.symbols import SPECS, pips, is_crypto
+from fx.market import TF_SECONDS
 from fx import filters
 from fx import regime as fx_regime
 from fx.strategies_slow import fix_signal, fix_window
@@ -35,13 +36,16 @@ class SignalsMixin:
         return build_fx_df(klines, atr_period)
 
     async def scan_once(self, settings: FxSettings, normal: bool = True):
-        if not market_open():
+        ema_only, closed = self.profile.ema_only, not market_open()
+        if closed:
             if not self._closed_logged:
                 self._closed_logged = True
                 nxt = market_status()["next_change"]
-                await self.log("SCAN", f"Mercado forex cerrado · sin escaneos hasta {nxt[:16].replace('T', ' ')} UTC")
-            return
-        self._closed_logged = False
+                await self.log("SCAN", f"Mercado forex cerrado · {'solo se escanean las cripto' if ema_only else 'sin escaneos'} hasta {nxt[:16].replace('T', ' ')} UTC")
+            if not ema_only:
+                return
+        else:
+            self._closed_logged = False
         self.scanning = True
         found = 0
         htf_tf = HTF[settings.timeframe]
@@ -50,6 +54,8 @@ class SignalsMixin:
         open_test = {d["symbol"] for d in await self.db.positions.find({"exit_mode": "cross"}, {"symbol": 1}).to_list(100)}
         try:
             for symbol in list(dict.fromkeys([*settings.symbols, *test_syms, *open_test])):
+                if closed and not is_crypto(symbol):
+                    continue
                 try:
                     params = settings.symbol_params.get(symbol) or {}
                     df = self._df(await self.market.fetch_klines(symbol, settings.timeframe, 300, cache_sec=0 if normal else 60), int(params.get("atr_period", 14)))
@@ -59,7 +65,8 @@ class SignalsMixin:
                     if settings.htf_filter and symbol in settings.symbols:
                         htf = htf_trend(self._df(await self.market.fetch_klines(symbol, htf_tf, 200, cache_sec=300)))
                     if self.running:
-                        await self._exit_on_cross(symbol, df, i)
+                        await self._exit_on_cross(symbol, df, i, settings)
+                    tsig = None
                     if symbol in test_syms:
                         tsig = ema_test(df, i, params=ema_test_params(settings))
                         if tsig and self.running:
@@ -67,7 +74,7 @@ class SignalsMixin:
                             await self._handle_test_signal(symbol, tsig, settings)
                     if symbol not in settings.symbols:
                         continue  # test-only pair: no regular strategies
-                    sig = evaluate(df, i, settings.strategy, htf, {**params, **atr_params(settings)}, settings.signal_mode, settings.disabled_strategies)
+                    sig = tsig if ema_only else evaluate(df, i, settings.strategy, htf, {**params, **atr_params(settings)}, settings.signal_mode, settings.disabled_strategies)
                     vol_pct = filters.vol_percentile(df["atr"].values, i)
                     self.analysis[symbol] = {
                         "trend": trend_label(row), "rsi": round(float(row["rsi"]), 1), "macd_hist": float(row["macd_hist"]),
@@ -75,13 +82,13 @@ class SignalsMixin:
                         "vol_pct": vol_pct, "vol_regime": filters.vol_label(vol_pct, settings), "season_bias": filters.seasonality_bias(symbol),
                         "signal": sig["side"] if sig else None, "signal_strategy": sig["strategy"] if sig else None, "updated_at": now_iso(),
                     }
-                    if sig and self.running and normal:
+                    if sig and self.running and normal and not ema_only:
                         found += 1
                         await self._handle_signal(symbol, sig, settings, df, htf, htf_tf)
                 except Exception as e:
                     logger.exception(f"scan {symbol}")
                     await self.log("ERROR", f"{symbol}: {e}")
-            if normal and self.running and "fix_reversion" not in settings.disabled_strategies and settings.strategy in ("all", "fix_reversion"):
+            if normal and self.running and not ema_only and "fix_reversion" not in settings.disabled_strategies and settings.strategy in ("all", "fix_reversion"):
                 found += await self._scan_slow(settings)
             self.last_scan = now_iso()
             if self.running and normal:
@@ -89,13 +96,19 @@ class SignalsMixin:
         finally:
             self.scanning = False
 
-    async def _exit_on_cross(self, symbol: str, df, i: int):
-        """Strategy exits decided at candle close (ema_cross: the EMAs crossed back against the position)."""
+    async def _exit_on_cross(self, symbol: str, df, i: int, settings: FxSettings = None):
+        """Strategy exits decided at candle close (ema_cross: the EMAs crossed back against the position; optional: the closed candle touched the EMA21)."""
         row = df.iloc[i]
-        async for d in self.db.positions.find({"symbol": symbol, "strategy": {"$in": list(EXIT_ON_CROSS)}}, {"_id": 1, "side": 1, "strategy": 1}):
-            if exit_signal(d["strategy"], d["side"], float(row["ema10"]), float(row["ema20"])):
+        closed_ms = int(row["ts"]) + TF_SECONDS[settings.timeframe] * 1000 if settings else 0
+        async for d in self.db.positions.find({"symbol": symbol, "strategy": {"$in": list(EXIT_ON_CROSS)}}, {"_id": 1, "side": 1, "strategy": 1, "exit_mode": 1, "opened_at": 1}):
+            touch = (settings and settings.ema_touch_exit_enabled and d.get("exit_mode") == "cross" and float(row["low"]) <= float(row["ema21"]) <= float(row["high"])
+                     and closed_ms > datetime.fromisoformat(d["opened_at"]).timestamp() * 1000)  # only candles that closed after the entry
+            if touch and not exit_signal(d["strategy"], d["side"], float(row["ema10"]), float(row["ema20"])):
+                await self.log("INFO", f"{symbol}: la vela cerró tocando la EMA21 ({float(row['ema21']):.6g}) con la posición {d['side'].upper()} abierta · cierre por la regla «toque de EMA21»")
+                await self.close_position(str(d["_id"]), None, TOUCH_REASON)
+            elif exit_signal(d["strategy"], d["side"], float(row["ema10"]), float(row["ema20"])):
                 await self.log("INFO", f"{symbol}: la EMA10 volvió a cruzar la EMA20 en contra de la posición {d['side'].upper()} · cierre por regla de la estrategia"
-                               + (" (test cruce EMA: se invierte si el test sigue activo)" if d["strategy"] == EMA_TEST else ""))
+                               + (" (test cruce EMA: se invierte si el test sigue activo)" if d["strategy"] == EMA_TEST and not self.profile.ema_only else ""))
                 await self.close_position(str(d["_id"]), None, EXIT_REASON)
 
     async def _handle_test_signal(self, symbol: str, sig: dict, settings: FxSettings):
@@ -107,21 +120,24 @@ class SignalsMixin:
         self.signal_keys.add(key)
         signal = Signal(symbol=symbol, side=sig["side"], strategy=EMA_TEST, timeframe=settings.timeframe, price=sig["price"], sl=sig["sl"], tp=sig["tp"],
                         score=sig["score"], reasons=sig["reasons"], indicators=sig["indicators"], key=key, ai_decision="SIN_IA",
-                        ai_reasoning="Test cruce EMA 10/20: entrada directa por cruce, inmune a la aprobación de la IA", context={"exit_mode": "cross"})
+                        ai_reasoning=f"{self.strat_name}: entrada directa por cruce, sin IA", context={"exit_mode": "cross"})
         acc = await self.account_summary()
         open_docs = await self.db.positions.find({}, {"symbol": 1, "exit_mode": 1}).to_list(100)
-        block = ("límite de pérdida diaria alcanzado" if acc["daily_paused"] else "ya existe una posición del test abierta en el par" if self._pair_taken(open_docs, symbol, True)
-                 else "viernes desde las 12:00 de Nueva York: sin nuevas entradas" if settings.close_before_weekend and friday_stage()
+        only = self.profile.ema_only
+        block = ("límite de pérdida diaria alcanzado" if acc["daily_paused"] else "ya existe una posición abierta en el par" if self._pair_taken(open_docs, symbol, True)
+                 else f"máximo de posiciones alcanzado ({settings.max_positions})" if only and len(open_docs) >= settings.max_positions
+                 else "viernes desde las 12:00 de Nueva York: sin nuevas entradas" if settings.close_before_weekend and friday_stage() and not is_crypto(symbol)
+                 else f"fuera de las sesiones permitidas ({session_names(settings.sessions_allowed)})" if only and not is_crypto(symbol) and not in_sessions(settings.sessions_allowed)
                  else f"cuenta {self.bk} sin conexión con MetaApi" if self.live and self.hfm["down_since"]
                  else f"par no operable en {self.bk} con el sufijo de símbolos configurado" if self.live and self.cfg and symbol in (self.cfg.hfm_symbols_bad or [])
-                 else await ai_advisor.balance_block())
+                 else None if only else await ai_advisor.balance_block())
         if block:
             signal.ai_decision, signal.note = "BLOQUEADA", f"Bloqueada por riesgo: {block}"
             await self.db.signals.insert_one(signal.to_mongo())
-            await self.log("RISK", f"{symbol}: cruce EMA (test) no operado · {block}")
+            await self.log("RISK", f"{symbol}: cruce EMA no operado · {block}")
             return
         res = await self.db.signals.insert_one(signal.to_mongo())
-        await self.log("SIGNAL", f"{symbol} {sig['side'].upper()} · Test cruce EMA 10/20 · {sig['reasons'][0]}")
+        await self.log("SIGNAL", f"{symbol} {sig['side'].upper()} · {self.strat_name} · {sig['reasons'][0]}")
         pos, reason = await self.open_position(symbol, sig, settings, str(res.inserted_id), exit_mode="cross")
         await self.db.signals.update_one({"_id": res.inserted_id}, {"$set": {"executed": True} if pos else {"note": f"No ejecutada: {reason}"}})
 
@@ -345,8 +361,8 @@ class SignalsMixin:
     # ---------- news trading ----------
     async def news_trade(self, symbol: str, side: str, confidence: int, reasoning: str, event: dict, cfg) -> dict:
         settings = await self.get_settings()
-        if not self.running:
-            return {"status": "OMITIDA", "reason": "bot detenido"}
+        if not self.running or self.profile.ema_only:
+            return {"status": "OMITIDA", "reason": "bot detenido" if not self.running else "este bot solo opera el cruce de EMAs"}
         if symbol not in settings.symbols:
             return {"status": "OMITIDA", "reason": "par no activo en ajustes"}
         acc = await self.account_summary()

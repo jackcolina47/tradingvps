@@ -14,6 +14,7 @@ import notify
 from fx.models import FxSettings
 from fx.market import FxMarket, market_open, closing_soon, friday_stage
 from fx import risk
+from fx.symbols import is_crypto
 from fx import filters
 from fx.live import FxLiveBroker, is_our_link
 from fx.shadow import monitor_shadows
@@ -27,6 +28,8 @@ from fx.engine_account import AccountMixin
 from fx.engine_positions import PositionsMixin
 from fx.engine_signals import SignalsMixin
 from fx.broker import HFM, BrokerProfile
+
+EMA_MAIN_NAME = "Cruce EMA 10 y 20 Personalizado"
 from fx import review as fx_review
 from fx import wfcheck as fx_wfcheck
 
@@ -105,6 +108,10 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
         """Settings section label (Ajustes → HotForex / Pepperstone)."""
         return getattr(self, "profile", HFM).broker_long
 
+    @property
+    def strat_name(self) -> str:
+        return EMA_MAIN_NAME if self.profile.ema_only else "Test cruce EMA 10/20"
+
     def new_broker(self) -> FxLiveBroker:
         c = self.cfg
         return FxLiveBroker(c.metaapi_token, c.metaapi_account_id, c.metaapi_region, c.metaapi_base_url, c.mt_symbol_suffix, c.mt_symbol_map, self.profile.suffixes)
@@ -134,7 +141,12 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
             await self.broker.aclose()
 
     async def get_settings(self) -> FxSettings:
-        return FxSettings.model_validate(await self.db.settings.find_one({"_id": "main"}))
+        s = FxSettings.model_validate(await self.db.settings.find_one({"_id": "main"}))
+        if self.profile.ema_only:  # single fixed strategy on every active pair; nothing AI-driven in the trading flow
+            syms = [x for x in s.symbols if x in self.profile.symbols] or list(self.profile.symbols)
+            s = s.model_copy(update=dict(symbols=syms, ema_test_enabled=True, ema_test_symbols=syms, ema_test_adx_filter=False, ai_enabled=False, ai_funnel_enabled=False,
+                                         ai_position_review_enabled=False, rules_auto_learn=False, htf_filter=False))
+        return s
 
     async def update_settings(self, patch: dict, source: str = "manual", summary: str = "", extra: dict = None) -> FxSettings:
         current = (await self.get_settings()).model_dump()
@@ -184,7 +196,7 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
         now = datetime.now(timezone.utc)
         if settings.close_before_weekend and market_open() and friday_stage() == "flat" and self._weekend_flat_day != today():
             self._weekend_flat_day = today()
-            ids = [str(d["_id"]) async for d in self.db.positions.find({}, {"_id": 1})]
+            ids = [str(d["_id"]) async for d in self.db.positions.find({}, {"_id": 1, "symbol": 1}) if not is_crypto(d["symbol"])]
             if ids:
                 await self.log("RISK", f"Cierre de fin de semana · {len(ids)} posiciones cerradas (viernes 15:30 de Nueva York)")
                 for pid in ids:
@@ -211,7 +223,7 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
             t = tickers.get(p.symbol)
             if not t:
                 continue
-            await self._manage_paper_position(p, t["price"], rules, now, rollover)
+            await self._manage_paper_position(p, t["price"], rules, now, rollover and not is_crypto(p.symbol))
         if ex:
             for pid, xp in ex.items():
                 if pid in local_ids:

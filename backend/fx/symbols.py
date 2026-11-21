@@ -12,8 +12,30 @@ SPECS = {
     "EURJPY": dict(name="Euro / Yen", yahoo="EURJPY=X", group="Cruces", contract=100000, pip=0.01, digits=3, base="EUR", quote="JPY", spread=0.020),
     "GBPJPY": dict(name="Libra / Yen", yahoo="GBPJPY=X", group="Cruces", contract=100000, pip=0.01, digits=3, base="GBP", quote="JPY", spread=0.030),
     "EURCHF": dict(name="Euro / Franco", yahoo="EURCHF=X", group="Cruces", contract=100000, pip=0.0001, digits=5, base="EUR", quote="CHF", spread=0.00020),
+    "AUDCAD": dict(name="Dólar australiano / Dólar canadiense", yahoo="AUDCAD=X", group="Cruces", contract=100000, pip=0.0001, digits=5, base="AUD", quote="CAD", spread=0.00022),
+    "AUDNZD": dict(name="Dólar australiano / Dólar neozelandés", yahoo="AUDNZD=X", group="Cruces", contract=100000, pip=0.0001, digits=5, base="AUD", quote="NZD", spread=0.00025),
 }
-AVAILABLE = list(SPECS)
+AVAILABLE = [s for s in SPECS if s not in ("AUDCAD", "AUDNZD")]  # HotForex list
+CRYPTO_SPREAD_PCT = 0.001  # paper estimate of a crypto CFD spread (0.1 % of price), refreshed with every ticker
+
+
+def _crypto(coin: str, name: str, contract: int, digits: int, price: float) -> dict:
+    """Crypto CFD vs USD: candles and prices from the USDT perpetual of the crypto bot. `contract` = coins per lot (paper estimate; REAL uses the broker's)."""
+    return dict(name=f"{name} / Dólar", yahoo=None, crypto=f"{coin}USDT", group="Cripto", contract=contract, pip=10 ** -(digits - 1), digits=digits, base=coin, quote="USD",
+                spread=round(price * CRYPTO_SPREAD_PCT, digits))
+
+
+SPECS.update({f"{c}USD": _crypto(c, n, k, d, p) for c, n, k, d, p in (
+    ("ADA", "Cardano", 1000, 4, 0.5), ("AVAX", "Avalanche", 10, 3, 20), ("BNB", "BNB", 1, 2, 600), ("DOGE", "Dogecoin", 1000, 5, 0.15), ("HYPE", "Hyperliquid", 10, 3, 30),
+    ("LINK", "Chainlink", 10, 3, 15), ("ONDO", "Ondo", 1000, 4, 0.8), ("SOL", "Solana", 10, 2, 150), ("SUI", "Sui", 100, 4, 3), ("XRP", "XRP", 100, 4, 2),
+    ("NEAR", "NEAR Protocol", 100, 3, 4), ("LTC", "Litecoin", 10, 2, 90), ("ARB", "Arbitrum", 1000, 4, 0.5), ("UNI", "Uniswap", 100, 3, 8))})
+CRYPTO = [s for s in SPECS if SPECS[s].get("crypto")]
+# Pepperstone: no JPY / CHF pairs, plus AUD crosses and crypto CFDs
+PEPPER_SYMBOLS = [s for s in SPECS if not {"JPY", "CHF"} & {SPECS[s]["base"], SPECS[s]["quote"]}]
+
+
+def is_crypto(symbol: str) -> bool:
+    return bool(SPECS.get(symbol, {}).get("crypto"))
 CONVERSION = ["EURUSD", "GBPUSD", "USDJPY", "USDCHF", "USDCAD"]
 DEFAULT_SYMBOLS = AVAILABLE
 CURRENCIES = ["USD", "EUR", "GBP", "CHF", "CAD", "NZD", "AUD", "JPY"]

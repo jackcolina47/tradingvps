@@ -22,9 +22,9 @@ const BOTS = [
   {
     key: "pepper", path: "/pepperstone", icon: Flame, accent: "teal", overview: "/pepper/overview",
     title: <>Pepperstone <span className="text-teal-300">AI</span> trading</>,
-    subtitle: "Forex y metales · Pepperstone vía MetaApi (MT4 / MT5)",
-    desc: "Instancia independiente del motor forex para Pepperstone: cuenta Razor (spread crudo + comisión) o Standard, símbolos sin sufijo, sus propios ajustes, plan, revisión IA y Telegram.",
-    tags: ["XAUUSD · XAGUSD · EURUSD…", "Razor / Standard", "Yahoo Finance · Pepperstone"],
+    subtitle: "Forex, metales y cripto CFD · Pepperstone vía MetaApi (MT4 / MT5)",
+    desc: "Una sola estrategia: Cruce EMA 10 y 20 Personalizado, con salida en el cruce contrario y SL por ATR. Sin IA en las entradas. Forex sin JPY ni CHF, metales y 14 criptomonedas CFD.",
+    tags: ["Cruce EMA 10 y 20", "Forex · Metales · Cripto", "Razor / Standard"],
   },
   {
     key: "lab", path: "/lab", icon: FlaskConical, accent: "fuchsia",

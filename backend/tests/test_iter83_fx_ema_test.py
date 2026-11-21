@@ -122,7 +122,7 @@ class TestSettings:
 
 # ---------- engine: open on cross (immune to AI, sessions and slots) ----------
 class TestOpenOnCross:
-    @pytest.mark.parametrize("profile", [HFM, PEPPER])
+    @pytest.mark.parametrize("profile", [HFM])  # Pepperstone is EMA-only since iter101: sessions and «Máx. posiciones» apply there (tests/test_iter101)
     def test_long_opens_without_ai(self, monkeypatch, profile):
         async def body(e, db):
             await e.scan_once(_settings())

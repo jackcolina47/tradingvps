@@ -6,6 +6,7 @@ This module keeps the bot/dashboard/account/positions/news/config endpoints; the
 """
 import time
 import logging
+from datetime import datetime
 from fastapi import HTTPException, Request, Query
 from bson import ObjectId
 
@@ -22,7 +23,7 @@ from deps import store as gstore, protected_router, ai_usage
 from routers.shared_routes import add_shared_routes
 from fx.models import FxSettingsUpdate, FxProfileRequest, FX_TIMEFRAMES, FX_STRATEGY_KEYS, FX_SLOW_KEYS
 from fx.config import FxConfigUpdate
-from fx.symbols import SPECS, AVAILABLE, CURRENCIES, CURRENCY_NAMES, pips
+from fx.symbols import SPECS, CURRENCIES, CURRENCY_NAMES, pips
 from fx.market import TF_SECONDS, market_status, SESSIONS
 from fx.engine import FX_STRATEGY_INFO
 from fx.profiles import PROFILES, detect_profile, profile_patch
@@ -34,6 +35,8 @@ logger = logging.getLogger(__name__)
 
 def register(router, engine, store, news):
     SESSION_LIST = [{"id": s[0], "name": s[1]} for s in SESSIONS]
+
+    SYMBOLS = list(engine.profile.symbols)
 
     def _status() -> dict:
         return {"running": engine.running, "scanning": engine.scanning, "provider": "yahoo", "last_scan": engine.last_scan,
@@ -50,10 +53,12 @@ def register(router, engine, store, news):
 
     @router.get("/meta")
     async def meta():
-        return {"symbols": AVAILABLE, "symbol_info": {s: {k: v for k, v in SPECS[s].items() if k in ("name", "group", "digits", "pip")} for s in AVAILABLE},
-                "timeframes": FX_TIMEFRAMES, "strategies": FX_STRATEGY_KEYS + [EMA_TEST], "strategy_keys": FX_STRATEGY_KEYS[1:], "long_horizon_keys": list(FX_SLOW_KEYS),
-                "strategy_info": FX_STRATEGY_INFO, "signal_modes": SIGNAL_MODES, "mode_info": MODE_INFO,
-                "profiles": PROFILES, "currencies": CURRENCIES, "currency_names": CURRENCY_NAMES, "sessions": SESSION_LIST}
+        only = engine.profile.ema_only
+        return {"symbols": SYMBOLS, "symbol_info": {s: {k: v for k, v in SPECS[s].items() if k in ("name", "group", "digits", "pip")} for s in SYMBOLS},
+                "timeframes": FX_TIMEFRAMES, "strategies": [EMA_TEST] if only else FX_STRATEGY_KEYS + [EMA_TEST], "strategy_keys": [] if only else FX_STRATEGY_KEYS[1:],
+                "long_horizon_keys": [] if only else list(FX_SLOW_KEYS), "ema_only": only,
+                "strategy_info": FX_STRATEGY_INFO, "signal_modes": [] if only else SIGNAL_MODES, "mode_info": {} if only else MODE_INFO,
+                "profiles": None if only else PROFILES, "currencies": CURRENCIES, "currency_names": CURRENCY_NAMES, "sessions": SESSION_LIST}
 
     @router.post("/profile")
     async def set_profile(req: FxProfileRequest):
@@ -126,7 +131,7 @@ def register(router, engine, store, news):
 
     @router.get("/klines")
     async def klines(symbol: str, tf: str = "1h", limit: int = chart.DEFAULT_LIMIT, before: int | None = Query(None, ge=1)):
-        if symbol not in AVAILABLE or tf not in CHART_TIMEFRAMES:
+        if symbol not in SYMBOLS or tf not in CHART_TIMEFRAMES:
             raise HTTPException(400, "Símbolo o temporalidad inválida")
         limit = chart.clamp(limit)
         rows, source = await _chart_rows(symbol, tf, limit + chart.WARMUP, before)
@@ -179,6 +184,28 @@ def register(router, engine, store, news):
     @router.get("/positions")
     async def list_positions():
         return [Position.from_mongo(d).model_dump() async for d in engine.db.positions.find().sort("_id", -1)]
+
+    @router.get("/positions/{pos_id}/candles")
+    async def position_candles(pos_id: str):
+        """Chart of an open position: last candles of the bot timeframe with EMA 9 / EMA 21, entry and current SL."""
+        doc = await engine.db.positions.find_one({"_id": ObjectId(pos_id)}) if ObjectId.is_valid(pos_id) else None
+        if not doc:
+            raise HTTPException(404, "Posición no encontrada")
+        p = Position.from_mongo(doc)
+        tf = (await engine.get_settings()).timeframe
+        try:
+            df = engine._df(await engine.market.fetch_klines(p.symbol, tf, 300, cache_sec=30)).iloc[-170:]
+        except Exception as e:
+            raise HTTPException(502, f"No se pudieron cargar las velas: {e}")
+        step = TF_SECONDS[tf]
+        t = [int(x) // 1000 for x in df["ts"].values]
+        opened = int(datetime.fromisoformat(p.opened_at).timestamp())
+        line = lambda col: [{"time": a, "value": float(b)} for a, b in zip(t, df[col].values) if b == b]  # noqa: E731
+        return {"symbol": p.symbol, "side": p.side, "tf": tf, "digits": SPECS[p.symbol]["digits"], "entry": p.entry_price, "sl": p.sl, "opened_at": p.opened_at,
+                "opened": opened - opened % step,
+                "candles": [{"time": a, "open": float(o), "high": float(h), "low": float(lo), "close": float(c)}
+                            for a, o, h, lo, c in zip(t, df["open"].values, df["high"].values, df["low"].values, df["close"].values)],
+                "ema9": line("ema9"), "ema21": line("ema21")}
 
     @router.post("/positions/{pos_id}/close")
     async def close_pos(pos_id: str):

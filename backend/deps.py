@@ -30,7 +30,8 @@ from fx.news import FxNewsAgent  # noqa: E402
 from fx.market import FxMarket  # noqa: E402
 from fx.broker import HFM, PEPPERSTONE  # noqa: E402
 
-fx_market = FxMarket()  # one Yahoo Finance client shared by every MetaApi/MetaTrader bot (same symbols, half the requests)
+fx_market = FxMarket()
+fx_market.crypto = engine.market  # one Yahoo Finance client shared by every MetaApi/MetaTrader bot (same symbols, half the requests)
 
 
 def _fx_bot(profile):

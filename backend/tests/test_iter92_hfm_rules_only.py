@@ -88,25 +88,6 @@ def test_hfm_rule_blocks_and_adjusts(monkeypatch):
     asyncio.run(run())
 
 
-def test_pepperstone_still_uses_ai(monkeypatch):
-    async def run():
-        e, db = await mk(PEPPERSTONE, "c")
-        called = []
-
-        async def final(fn, *a, **k):
-            called.append(1)
-            return {"decision": "RECHAZADA", "confidence": 80, "risk": "ALTO", "reasoning": "no", "model": "m", "ms": 1}
-        monkeypatch.setattr(ai_funnel, "final_eval", final)
-        s = await e.get_settings()
-        s.ai_funnel_enabled, s.price_action_block, s.seasonality_bias, s.vol_filter_enabled, s.usd_regime_filter, s.fomc_rule = (False,) * 6
-        await e._handle_signal("EURUSD", dict(SIG), s, DF, 1, "4h")
-        n = await e.db.positions.count_documents({})
-        doc = await e.db.signals.find_one({})
-        await db.client.drop_database(db.name)
-        assert called and n == 0, (doc["ai_decision"], doc.get("note"))
-    asyncio.run(run())
-
-
 def test_learning_only_hfm(monkeypatch):
     async def run():
         seen = []
@@ -149,7 +130,7 @@ def test_fail_safe_when_ai_down(monkeypatch):
         monkeypatch.setattr(ai_funnel, "rules_check", down)
         monkeypatch.setattr(ai_funnel, "final_eval", down)
         out = {}
-        for prof, nm in ((HFM, "h"), (PEPPERSTONE, "i")):
+        for prof, nm in ((HFM, "h"),):  # Pepperstone no longer has an AI entry flow (iter101)
             e, db = await mk(prof, nm)
             await ai_rules.add(e.db, ai_rules.RuleIn(text="Regla cualquiera de prueba"))
             s = await e.get_settings()
@@ -159,5 +140,4 @@ def test_fail_safe_when_ai_down(monkeypatch):
             out[prof.key] = (await e.db.positions.count_documents({}), doc["ai_decision"], doc.get("note") or "")
             await db.client.drop_database(db.name)
         assert out["hfm"][0] == 0 and out["hfm"][1] == "BLOQUEADA" and "fail-safe activo" in out["hfm"][2], out
-        assert out["pepperstone"][0] == 0 and out["pepperstone"][1] == "ERROR", out
     asyncio.run(run())
