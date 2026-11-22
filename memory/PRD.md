@@ -687,3 +687,6 @@
 - Ajustes `ema_partial_on/pct/at_atr`, `ema_trail_on/atr`, `ema_be_on/be_atr` (solo > 0, sin tope; % ≤ 100). `risk.ema_exits` + `PositionsMixin._ema_exits` (paper y REAL) + backtest (`ema_only`). El parcial ya no mueve el stop. Motivo de cierre SL / BREAKEVEN / TRAILING según dónde esté el stop.
 - Migración `2026-11-22-pepper-exits`: si el ajuste antiguo estaba activo → parcial 50 % + breakeven al mismo múltiplo. HotForex/Bybit conservan el ajuste antiguo.
 - Verificado: test unitario + backtests por API. UI solo compilada; REAL sin probar.
+
+## Iteración 114 · Pepperstone: cripto renombradas a XXXUSDT
+- `fx/symbols.py` (claves `…USDT`, quote interno USD) + migración `2026-11-22-pepper-crypto-usdt` (renombra en ajustes, posiciones, historial y señales). En REAL el símbolo enviado al bróker es `XXXUSDT`+sufijo: sin verificar que Pepperstone los nombre así.

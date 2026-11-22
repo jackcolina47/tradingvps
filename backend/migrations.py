@@ -42,7 +42,22 @@ async def _pepper_exits(engine, db):
                                                                     "ema_test_partial_enabled": False}})
 
 
-MIGRATIONS = {"2026-10-20-activo": _activo, "2026-10-22-hfm-alert-180": _hfm_alert_180, "2026-10-27-ema-cross-off": _ema_cross_off, "2026-11-21-pepper-ema-only": _pepper_ema_only, "2026-11-22-pepper-exits": _pepper_exits}
+async def _pepper_crypto_usdt(engine, db):
+    """Pepperstone crypto pairs renamed XXXUSD → XXXUSDT everywhere they are stored (settings, positions, history, signals). Nothing is deleted."""
+    from fx.symbols import CRYPTO
+    ren = {s[:-1]: s for s in CRYPTO}
+    s = await db.pep_settings.find_one({"_id": "main"}) or {}
+    upd = {k: [ren.get(x, x) for x in s[k]] for k in ("symbols", "ema_test_symbols") if isinstance(s.get(k), list)}
+    if isinstance(s.get("symbol_params"), dict):
+        upd["symbol_params"] = {ren.get(k, k): v for k, v in s["symbol_params"].items()}
+    if upd:
+        await db.pep_settings.update_one({"_id": "main"}, {"$set": upd})
+    for col in ("positions", "trades", "signals", "shadow_positions", "shadow_trades", "pending_orders"):
+        for old, new in ren.items():
+            await db[f"pep_{col}"].update_many({"symbol": old}, {"$set": {"symbol": new}})
+
+
+MIGRATIONS = {"2026-10-20-activo": _activo, "2026-10-22-hfm-alert-180": _hfm_alert_180, "2026-10-27-ema-cross-off": _ema_cross_off, "2026-11-21-pepper-ema-only": _pepper_ema_only, "2026-11-22-pepper-exits": _pepper_exits, "2026-11-22-pepper-crypto-usdt": _pepper_crypto_usdt}
 
 
 async def run(engine, db):

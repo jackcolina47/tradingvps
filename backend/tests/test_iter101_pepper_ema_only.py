@@ -30,7 +30,7 @@ def sig(symbol_price=0.5, atr=0.01, side="long", ts=1):
 
 class FakeMarket:
     def __init__(self):
-        self.tickers = {"ADAUSD": {"price": 0.5}, "SOLUSD": {"price": 150.0}, "EURUSD": {"price": 1.1}, "XRPUSD": {"price": 2.0}}
+        self.tickers = {"ADAUSDT": {"price": 0.5}, "SOLUSDT": {"price": 150.0}, "EURUSD": {"price": 1.1}, "XRPUSDT": {"price": 2.0}}
 
     async def fetch_tickers(self, *a, **k):
         return self.tickers
@@ -61,7 +61,7 @@ def quiet(monkeypatch):
 def test_symbol_lists():
     assert not [s for s in PEPPER_SYMBOLS if "JPY" in s or "CHF" in s]
     assert {"AUDCAD", "AUDNZD", "XAUUSD", "EURUSD"} <= set(PEPPER_SYMBOLS)
-    assert sorted(CRYPTO) == sorted(f"{c}USD" for c in "ADA AVAX BNB DOGE HYPE LINK ONDO SOL SUI XRP NEAR LTC ARB UNI".split()) and set(CRYPTO) <= set(PEPPER_SYMBOLS)
+    assert sorted(CRYPTO) == sorted(f"{c}USDT" for c in "ADA AVAX BNB DOGE HYPE LINK ONDO SOL SUI XRP NEAR LTC ARB UNI".split()) and set(CRYPTO) <= set(PEPPER_SYMBOLS)
     assert len(AVAILABLE) == 12 and not set(AVAILABLE) & set(CRYPTO) and "USDJPY" in AVAILABLE  # HotForex untouched
     assert tuple(HFM.symbols) == tuple(AVAILABLE) and PEPPERSTONE.ema_only and not HFM.ema_only
 
@@ -69,10 +69,10 @@ def test_symbol_lists():
 def test_settings_forced():
     async def run():
         e, db = await mk("a", ai_enabled=True, ema_test_adx_filter=True, htf_filter=True)
-        await e.db.settings.update_one({"_id": "main"}, {"$set": {"symbols": ["USDJPY", "EURUSD", "ADAUSD"]}})
+        await e.db.settings.update_one({"_id": "main"}, {"$set": {"symbols": ["USDJPY", "EURUSD", "ADAUSDT"]}})
         s = await e.get_settings()
         await db.client.drop_database(db.name)
-        assert s.symbols == ["EURUSD", "ADAUSD"] == s.ema_test_symbols and s.ema_test_enabled
+        assert s.symbols == ["EURUSD", "ADAUSDT"] == s.ema_test_symbols and s.ema_test_enabled
         assert not (s.ai_enabled or s.ema_test_adx_filter or s.htf_filter or s.ai_position_review_enabled or s.rules_auto_learn)
     asyncio.run(run())
 
@@ -82,12 +82,12 @@ def test_crypto_opens_on_friday_block_and_forex_does_not(monkeypatch):
         monkeypatch.setattr(engine_signals, "friday_stage", lambda: "block")
         e, db = await mk("b")
         s = await e.get_settings()
-        await e._handle_test_signal("ADAUSD", sig(), s)
+        await e._handle_test_signal("ADAUSDT", sig(), s)
         await e._handle_test_signal("EURUSD", sig(1.1, 0.001, ts=2), s)
         pos = await e.db.positions.find({}).to_list(10)
         notes = {d["symbol"]: d.get("note") or "" async for d in e.db.signals.find({})}
         await db.client.drop_database(db.name)
-        assert [p["symbol"] for p in pos] == ["ADAUSD"] and pos[0]["exit_mode"] == "cross" and "viernes" in notes["EURUSD"]
+        assert [p["symbol"] for p in pos] == ["ADAUSDT"] and pos[0]["exit_mode"] == "cross" and "viernes" in notes["EURUSD"]
         # exact 1 % risk: 10 000 × 1 % = 100 USD over a 0.03 stop with 1 000 ADA per lot → 3.33 lots
         assert pos[0]["qty"] == pytest.approx(3.33) and pos[0]["sl"] == pytest.approx(0.47)
     asyncio.run(run())
@@ -97,10 +97,10 @@ def test_max_positions_now_applies():
     async def run():
         e, db = await mk("c", max_positions=1)
         s = await e.get_settings()
-        await e._handle_test_signal("ADAUSD", sig(), s)
-        await e._handle_test_signal("SOLUSD", sig(150.0, 2.0, ts=2), s)
+        await e._handle_test_signal("ADAUSDT", sig(), s)
+        await e._handle_test_signal("SOLUSDT", sig(150.0, 2.0, ts=2), s)
         n = await e.db.positions.count_documents({})
-        note = (await e.db.signals.find_one({"symbol": "SOLUSD"}))["note"]
+        note = (await e.db.signals.find_one({"symbol": "SOLUSDT"}))["note"]
         await db.client.drop_database(db.name)
         assert n == 1 and "máximo de posiciones" in note
     asyncio.run(run())
@@ -116,14 +116,14 @@ def test_touch_exit():
         for on in (False, True):
             e, db = await mk(f"d{int(on)}", ema_touch_exit_enabled=on, timeframe="1h")
             s = await e.get_settings()
-            await e._handle_test_signal("ADAUSD", sig(), s)
+            await e._handle_test_signal("ADAUSDT", sig(), s)
             opened = datetime.fromtimestamp(10 * H / 1000 + 60, tz=timezone.utc)  # entry 1 min into the 10:00 candle
             await e.db.positions.update_one({}, {"$set": {"opened_at": opened.isoformat()}})
-            await e._exit_on_cross("ADAUSD", _row_df(0.505, 0.53, 0.51, ts=9 * H), 0, s)   # candle closed before the entry → ignored
+            await e._exit_on_cross("ADAUSDT", _row_df(0.505, 0.53, 0.51, ts=9 * H), 0, s)   # candle closed before the entry → ignored
             before = await e.db.positions.count_documents({})
-            await e._exit_on_cross("ADAUSD", _row_df(0.515, 0.53, 0.51), 0, s)             # closed after the entry but no touch
+            await e._exit_on_cross("ADAUSDT", _row_df(0.515, 0.53, 0.51), 0, s)             # closed after the entry but no touch
             mid = await e.db.positions.count_documents({})
-            await e._exit_on_cross("ADAUSD", _row_df(0.505, 0.53, 0.51), 0, s)             # touch
+            await e._exit_on_cross("ADAUSDT", _row_df(0.505, 0.53, 0.51), 0, s)             # touch
             t = await e.db.trades.find_one({})
             out[on] = (before, mid, await e.db.positions.count_documents({}), (t or {}).get("reason"))
             await db.client.drop_database(db.name)
@@ -153,11 +153,11 @@ def test_backtest_touch_exit_and_crypto_costs():
     sigs = {i: s for i in range(60, len(df) - 1) if (s := STRATEGIES[EMA_TEST](df, i, None, None, None))}
 
     def run(touch):
-        return simulate(df, sigs, 1.0, 100, {**risk.DEFAULT_RULES, "ema_touch_exit_enabled": touch}, initial=10000.0, symbol="ADAUSD", weekend_flat=False, costs=PEPPERSTONE.costs())
+        return simulate(df, sigs, 1.0, 100, {**risk.DEFAULT_RULES, "ema_touch_exit_enabled": touch}, initial=10000.0, symbol="ADAUSDT", weekend_flat=False, costs=PEPPERSTONE.costs())
     a, b = run(False), run(True)
     assert a["trades"] and not any(t["reason"] == TOUCH_REASON for t in a["trades"]) and any(t["reason"] == TOUCH_REASON for t in b["trades"])
     c = PEPPERSTONE.costs("razor")
-    assert c.side_cost("ADAUSD", 1.0, {}) == pytest.approx(SPECS["ADAUSD"]["spread"] / 2 * 1000) and c.side_cost("EURUSD", 1.0, {}) > 3.5
+    assert c.side_cost("ADAUSDT", 1.0, {}) == pytest.approx(SPECS["ADAUSDT"]["spread"] / 2 * 1000) and c.side_cost("EURUSD", 1.0, {}) > 3.5
 
 
 def test_touch_close_has_its_own_telegram_message():
@@ -171,7 +171,7 @@ def test_touch_close_has_its_own_telegram_message():
         async def tg(msg, kind):
             sent.append(msg)
         e.tg = tg
-        p = NS(live=False, side="long", symbol="SOLUSD", entry_price=70.0)
+        p = NS(live=False, side="long", symbol="SOLUSDT", entry_price=70.0)
         from fx.engine_positions import PositionsMixin as M
         await M._announce_close(e, p, NS(pnl=-1.25, pnl_pct=-10.0, exit_price=69.0), "TOQUE_EMA")
         await M._announce_close(e, p, NS(pnl=2.5, pnl_pct=20.0, exit_price=72.0), "CRUCE")

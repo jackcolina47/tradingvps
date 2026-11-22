@@ -21,11 +21,11 @@ CRYPTO_SPREAD_PCT = 0.001  # paper estimate of a crypto CFD spread (0.1 % of pri
 
 def _crypto(coin: str, name: str, contract: int, digits: int, price: float) -> dict:
     """Crypto CFD vs USD: candles and prices from the USDT perpetual of the crypto bot. `contract` = coins per lot (paper estimate; REAL uses the broker's)."""
-    return dict(name=f"{name} / Dólar", yahoo=None, crypto=f"{coin}USDT", group="Cripto", contract=contract, pip=10 ** -(digits - 1), digits=digits, base=coin, quote="USD",
+    return dict(name=f"{name} / Tether", yahoo=None, crypto=f"{coin}USDT", group="Cripto", contract=contract, pip=10 ** -(digits - 1), digits=digits, base=coin, quote="USD",
                 spread=round(price * CRYPTO_SPREAD_PCT, digits))
 
 
-SPECS.update({f"{c}USD": _crypto(c, n, k, d, p) for c, n, k, d, p in (
+SPECS.update({f"{c}USDT": _crypto(c, n, k, d, p) for c, n, k, d, p in (
     ("ADA", "Cardano", 1000, 4, 0.5), ("AVAX", "Avalanche", 10, 3, 20), ("BNB", "BNB", 1, 2, 600), ("DOGE", "Dogecoin", 1000, 5, 0.15), ("HYPE", "Hyperliquid", 10, 3, 30),
     ("LINK", "Chainlink", 10, 3, 15), ("ONDO", "Ondo", 1000, 4, 0.8), ("SOL", "Solana", 10, 2, 150), ("SUI", "Sui", 100, 4, 3), ("XRP", "XRP", 100, 4, 2),
     ("NEAR", "NEAR Protocol", 100, 3, 4), ("LTC", "Litecoin", 10, 2, 90), ("ARB", "Arbitrum", 1000, 4, 0.5), ("UNI", "Uniswap", 100, 3, 8))})

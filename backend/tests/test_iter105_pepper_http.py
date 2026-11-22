@@ -9,8 +9,8 @@ load_dotenv("/app/frontend/.env")
 BASE = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
 PWD = "BlackCat2233@"
 
-CRYPTO = ["ADAUSD", "AVAXUSD", "BNBUSD", "DOGEUSD", "HYPEUSD", "LINKUSD", "ONDOUSD",
-          "SOLUSD", "SUIUSD", "XRPUSD", "NEARUSD", "LTCUSD", "ARBUSD", "UNIUSD"]
+CRYPTO = ["ADAUSDT", "AVAXUSDT", "BNBUSDT", "DOGEUSDT", "HYPEUSDT", "LINKUSDT", "ONDOUSDT",
+          "SOLUSDT", "SUIUSDT", "XRPUSDT", "NEARUSDT", "LTCUSDT", "ARBUSDT", "UNIUSDT"]
 
 
 @pytest.fixture(scope="module")
@@ -54,7 +54,7 @@ def test_fx_meta_unchanged(s):
 
 # --- KLINES -------------------------------------------------------------------
 def test_pepper_klines_crypto_ok(s):
-    r = s.get(f"{BASE}/api/pepper/klines", params={"symbol": "ADAUSD", "tf": "1h"}, timeout=30)
+    r = s.get(f"{BASE}/api/pepper/klines", params={"symbol": "ADAUSDT", "tf": "1h"}, timeout=30)
     assert r.status_code == 200
     assert len(r.json()["candles"]) > 10
 
@@ -70,7 +70,7 @@ def test_fx_klines_jpy_ok(s):
 
 
 def test_fx_klines_crypto_rejected(s):
-    r = s.get(f"{BASE}/api/fx/klines", params={"symbol": "ADAUSD", "tf": "1h"}, timeout=20)
+    r = s.get(f"{BASE}/api/fx/klines", params={"symbol": "ADAUSDT", "tf": "1h"}, timeout=20)
     assert r.status_code == 400
 
 
@@ -112,7 +112,7 @@ def test_settings_jpy_filtered(s):
 
 
 # --- BACKTEST -----------------------------------------------------------------
-@pytest.mark.parametrize("sym", ["SOLUSD", "EURUSD"])
+@pytest.mark.parametrize("sym", ["SOLUSDT", "EURUSD"])
 def test_backtest(s, sym):
     payload = {"symbol": sym, "strategy": "all", "timeframe": "1h", "risk_per_trade": 1, "leverage": 100}
     r = s.post(f"{BASE}/api/pepper/backtest", json=payload, timeout=120)
