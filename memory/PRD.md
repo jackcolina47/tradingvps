@@ -681,6 +681,10 @@ Petición explícita del usuario (sustituye a «bloquear contra 4H sin gastar IA
 - `fx/engine_signals.py`: propiedades `funnel_rich` y `funnel_late_atr` (0.35) activas solo si `profile.panel == "fx"` (HotForex). Pepperstone sin cambios (el usuario pidió solo fx).
 - `funnel._deep`: antes de `funnel_open`, si ask (BUY) / bid (SELL) corrió > 0,35 ATR a favor desde el cierre de la vela señal → Signal pasa a `TARDIA`, sin abrir; se reintenta en el siguiente disparo. UI: etiqueta «Descartada · entrada tardía».
 
+## Iteración 113 (2026-11) — Pepperstone con el mismo blindaje + sombras de entradas tardías
+- `funnel_rich = True` y `funnel_late_atr = 0.35` ahora para toda la clase FX (HotForex y Pepperstone).
+- Entrada tardía → además de Signal `TARDIA` abre sombra kind `TARDIA` (una por vela, `engine.funnel_late_keys`) al precio tardío; aparece en Rendimiento → Operaciones sombra → «Por motivo del descarte» (ops, acierto, evitó, se perdió, PnL). Recuento de descartes en «señales por decisión».
+
 ### Pendiente
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.

@@ -528,6 +528,11 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
             await engine.db.signals.update_one({"_id": ObjectId(sid)}, {"$set": {"ai_decision": "TARDIA", "note": f"No ejecutada · {why}"}})
             _note(engine, symbol, 2, "PASS", why, res["confidence"])
             await engine.log("RISK", f"{symbol}: {res['decision']} aprobada pero descartada · {why} ({m['close']:.6g} → {px:.6g})")
+            seen = engine.__dict__.setdefault("funnel_late_keys", set())
+            if candle_key not in seen:   # one shadow per candle: what the late fill would have done
+                seen.add(candle_key)
+                await engine.funnel_shadow(sid, symbol, sig, settings, "TARDIA", state["acc"], res["confidence"])
+                return 1
             return 0
     ok, reason = await engine.funnel_open(symbol, sig, settings, sid, state["acc"])
     if ok:

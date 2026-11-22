@@ -44,7 +44,7 @@ async def _run(monkeypatch, ran_atr, late=0.35, decision="BUY"):
 @pytest.mark.parametrize("decision", ["BUY", "SELL"])
 async def test_late_entry_discarded(monkeypatch, decision):
     eng = await _run(monkeypatch, 0.5, decision=decision)
-    assert eng.opened == [] and eng.shadows == []
+    assert eng.opened == [] and len(eng.shadows) == 1 and "TARDIA" in str(eng.shadows[0])
     doc = eng.db.signals.docs[0]
     assert doc["ai_decision"] == "TARDIA" and "tardía" in doc["note"]
 
@@ -65,7 +65,7 @@ async def test_engine_without_filter_opens(monkeypatch):
     assert len((await _run(monkeypatch, 0.9, late=None)).opened) == 1
 
 
-def test_only_hotforex_is_rich():
+def test_both_fx_bots_are_rich():
     from deps import FX_BOTS
     flags = {e.profile.panel: (e.funnel_rich, e.funnel_late_atr) for e, _ in FX_BOTS}
-    assert flags == {"fx": (True, 0.35), "pepper": (False, None)}
+    assert flags == {"fx": (True, 0.35), "pepper": (True, 0.35)}
