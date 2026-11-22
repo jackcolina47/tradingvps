@@ -20,6 +20,17 @@ PLANS = {
 PLAN_COMMON = {"account_month_usd": 2.1, "undeployed_hour_usd": 0.00105}
 
 
+def account_opts(plan: str, quote_interval: float, slots: int, dedicated_ip: bool, acc: dict = None) -> dict:
+    """Performance settings wanted for the account. With `acc` (existing account) → only the ones that differ from what MetaApi has."""
+    g2 = (PLANS.get(plan) or PLANS["g2-high"])["type"] == "cloud-g2"
+    want = {"quoteStreamingIntervalInSeconds": float(quote_interval) if g2 else 2.5, "resourceSlots": int(slots), "allocateDedicatedIp": "ipv4" if dedicated_ip else "none"}
+    if acc is None:
+        return {k: v for k, v in want.items() if v != "none"}
+    have = {"quoteStreamingIntervalInSeconds": float(acc.get("quoteStreamingIntervalInSeconds", 2.5)), "resourceSlots": int(acc.get("resourceSlots") or 1),
+            "allocateDedicatedIp": acc.get("allocateDedicatedIp") or "none"}
+    return {k: v for k, v in want.items() if v != have[k]}
+
+
 def plan_key(acc_type: str, reliability: str) -> str:
     t = "cloud-g2" if (acc_type or "") in ("cloud", "cloud-g2") else "cloud-g1"
     r = "regular" if (reliability or "high") == "regular" and t == "cloud-g1" else "high"
@@ -171,11 +182,11 @@ class MetaApi:
                 return a
         return None
 
-    async def provision(self, login: str, password: str, server: str, platform: str, name: str = "hotforex-ai-trading", plan: str = "g2-high", keywords=("HFM", "HotForex"), tx: str = None, tries: int = 6) -> dict:
+    async def provision(self, login: str, password: str, server: str, platform: str, name: str = "hotforex-ai-trading", plan: str = "g2-high", keywords=("HFM", "HotForex"), tx: str = None, tries: int = 6, opts: dict = None) -> dict:
         """`tx` + `tries=1`: one non-blocking step; returns {"_retry": True, "retry_after": s} while MetaApi is still validating (call again with the same tx)."""
         p = PLANS.get(plan) or PLANS["g2-high"]
         payload = {"login": str(login), "password": password, "name": name, "server": server, "platform": platform, "magic": MAGIC,
-                   "type": p["type"], "reliability": p["reliability"], "region": self.region, "manualTrades": False, "keywords": list(keywords)}
+                   "type": p["type"], "reliability": p["reliability"], "region": self.region, "manualTrades": False, "keywords": list(keywords), **(opts or {})}
         tx = tx or uuid.uuid4().hex[:32]
         for k in range(tries):
             try:
@@ -190,6 +201,10 @@ class MetaApi:
                 return res
             await asyncio.sleep(min(res["retry_after"], 10))
         raise MetaApiError(202, "MetaApi sigue validando la cuenta; vuelve a probar en un minuto")
+
+    async def update_account(self, account_id: str, password: str, name: str, server: str, opts: dict):
+        """Changes account settings in place (PUT needs password, name and server). A redeploy is required for them to take effect."""
+        return await self._call("PUT", f"{self._prov()}/users/current/accounts/{account_id}", json={"password": password, "name": name, "server": server, **opts})
 
     async def deploy(self, account_id: str):
         return await self._call("POST", f"{self._prov()}/users/current/accounts/{account_id}/deploy", json={})

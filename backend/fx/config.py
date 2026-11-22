@@ -27,6 +27,9 @@ class FxConfig(BaseModel):
     metaapi_base_url: str = ""
     metaapi_account_id: str = ""
     metaapi_plan: str = "g2-high"
+    metaapi_quote_interval: float = 0.0   # G2 only: seconds between quotes (0 = every tick; MetaApi default 2.5)
+    metaapi_resource_slots: int = 1       # CPU/RAM slots (extra slots are a paid option)
+    metaapi_dedicated_ip: bool = False    # dedicated IPv4 (paid add-on)
     hfm_account_type: str = ""
     hfm_reliability: str = ""
     hfm_state: str = ""
@@ -81,6 +84,9 @@ class FxConfigUpdate(BaseModel):
     metaapi_region: Optional[str] = None
     metaapi_base_url: Optional[str] = Field(default=None, max_length=200)
     metaapi_plan: Optional[str] = None
+    metaapi_quote_interval: Optional[float] = Field(default=None, ge=0, le=2.5)
+    metaapi_resource_slots: Optional[int] = Field(default=None, ge=1, le=4)
+    metaapi_dedicated_ip: Optional[bool] = None
     hfm_alert_after_sec: Optional[int] = Field(default=None, ge=10, le=3600)
     news_enabled: Optional[bool] = None
     news_interval_min: Optional[int] = Field(default=None, ge=5, le=240)

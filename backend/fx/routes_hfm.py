@@ -6,7 +6,7 @@ from fastapi import HTTPException
 
 from models import ModeRequest, now_iso
 from fx.models import HfmTestRequest
-from fx.metaapi import MetaApi, MetaApiError, PLANS, plan_key
+from fx.metaapi import MetaApi, MetaApiError, PLANS, plan_key, account_opts
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,11 @@ def register(router, engine, store):
         login = (body.mt_login.strip() if body and body.mt_login else c.mt_login)
         server = (body.mt_server.strip() if body and body.mt_server is not None else c.mt_server)
         return MetaApi(token, region, base), use_saved, login, server
+
+    def _opts_text(acc: dict) -> str:
+        q = acc.get("quoteStreamingIntervalInSeconds", 2.5)
+        return (f" Ajustes en MetaApi: cotizaciones {'en cada tick' if not q else f'cada {q:g} s'} · {acc.get('resourceSlots') or 1} slot(s) de recursos · "
+                f"IP dedicada {'IPv4' if (acc.get('allocateDedicatedIp') or 'none') == 'ipv4' else 'no'}.")
 
     def _acc_view(acc: dict) -> dict:
         return {"id": acc.get("_id") or acc.get("id"), "login": acc.get("login"), "server": acc.get("server"), "state": acc.get("state"),
@@ -165,12 +170,16 @@ def register(router, engine, store):
         api.retries = 0  # every step must answer well inside the browser timeout; the panel repeats the step
         try:
             acc = await api.find_account(c.mt_login, c.mt_server)
+            opts = lambda existing=None: account_opts(c.metaapi_plan, c.metaapi_quote_interval, c.metaapi_resource_slots, c.metaapi_dedicated_ip, existing)  # noqa: E731
+            if acc and acc.get("region") and acc["region"] != c.metaapi_region:
+                raise MetaApiError(409, f"En MetaApi ya existe esta cuenta ({acc['_id']}) en la región «{acc['region']}», y aquí has elegido «{c.metaapi_region}». La región no se puede cambiar "
+                                        "sobre una cuenta creada: bórrala en app.metaapi.cloud → Accounts y vuelve a pulsar «Vincular cuenta».")
             if not acc:
                 key = (c.mt_login, c.mt_server, c.mt_platform, c.metaapi_plan, c.metaapi_region)
                 if link_tx.get("key") != key:
                     link_tx.update(key=key, tx=uuid.uuid4().hex[:32])
                 created = await api.provision(c.mt_login, c.mt_password, c.mt_server, c.mt_platform, name=engine.profile.metaapi_name, plan=c.metaapi_plan, keywords=engine.profile.keywords,
-                                              tx=link_tx["tx"], tries=1)
+                                              tx=link_tx["tx"], tries=1, opts=opts())
                 if created.get("_retry"):  # MetaApi is still validating the MT credentials: answer now, the panel keeps asking with the same transaction
                     if not link_tx.get("logged"):
                         link_tx["logged"] = True
@@ -180,9 +189,21 @@ def register(router, engine, store):
                 link_tx.clear()
                 acc = await api.account(created.get("id") or created.get("_id"))
                 await engine.log("INFO", f"Cuenta {engine.bk} {c.mt_login} vinculada en MetaApi ({c.metaapi_region} · {PLANS[c.metaapi_plan]['label']})")
+            elif opts(acc):  # existing account with other performance settings (e.g. MetaApi defaults): apply ours and restart the terminal
+                changed = opts(acc)
+                await api.update_account(acc["_id"], c.mt_password, acc.get("name") or engine.profile.metaapi_name, acc.get("server") or c.mt_server, changed)
+                if acc.get("state") == "DEPLOYED":
+                    await api.redeploy(acc["_id"])
+                acc = await api.account(acc["_id"])
+                applied = ", ".join(f"{k}={v}" for k, v in changed.items())
+                await engine.log("INFO", f"Ajustes de la cuenta {engine.bk} actualizados en MetaApi ({applied}) · terminal reiniciado")
             if acc.get("state") in ("UNDEPLOYED", "CREATED"):
                 await api.deploy(acc["_id"])
                 acc = await api.account(acc["_id"])
+            try:  # other MetaApi accounts with the same MT login: each one is billed and never used by the bot
+                dups = [a for a in await api.list_accounts() if str(a.get("login")) == str(c.mt_login) and a.get("_id") != acc["_id"]]
+            except MetaApiError:
+                dups = []
         except MetaApiError as e:
             link_tx.clear()
             await engine.log("ERROR", f"No se pudo vincular la cuenta {engine.bk}: {e.msg}")
@@ -191,10 +212,6 @@ def register(router, engine, store):
             link_tx.clear()
             await engine.log("ERROR", f"No se pudo vincular la cuenta {engine.bk}: {str(e)[:160]}")
             raise HTTPException(424, f"No se pudo vincular la cuenta: {str(e)[:160]}")
-            try:  # other MetaApi accounts with the same MT login (e.g. a first attempt with a mistyped server): each one is billed and never used by the bot
-                dups = [a for a in await api.list_accounts() if str(a.get("login")) == str(c.mt_login) and a.get("_id") != acc["_id"]]
-            except MetaApiError:
-                dups = []
         finally:
             await api.aclose()
         await store.update({"metaapi_account_id": acc["_id"], "hfm_state": acc.get("state", ""), "hfm_connection": acc.get("connectionStatus", ""), **_plan_patch(acc)})
@@ -207,7 +224,7 @@ def register(router, engine, store):
                         + f". El bot usa {acc['_id']}. Bórralas en app.metaapi.cloud → Accounts para que no se facturen.")
             await engine.log("RISK", dup_hint.strip())
         return {"ok": True, "account": _acc_view(acc), "plan_mismatch": bool(hint), "duplicates": [a["_id"] for a in dups],
-                "hint": (hint or "Despliegue solicitado: la conexión tarda 1-3 minutos. Pulsa «Probar conexión» para ver el estado.") + dup_hint}
+                "hint": (hint or "Despliegue solicitado: la conexión tarda 1-3 minutos. Pulsa «Probar conexión» para ver el estado.") + _opts_text(acc) + dup_hint}
 
     @router.post("/hfm/recreate")
     async def hfm_recreate():
@@ -229,7 +246,8 @@ def register(router, engine, store):
                     pass
                 await api.delete_account(old["_id"])
                 removed = f"{PLANS[plan_key(old.get('type'), old.get('reliability'))]['short']} ({old['_id'][:8]}…)" if old.get("type") else old["_id"][:8] + "…"
-            created = await api.provision(c.mt_login, c.mt_password, c.mt_server, c.mt_platform, name=engine.profile.metaapi_name, plan=c.metaapi_plan, keywords=engine.profile.keywords)
+            created = await api.provision(c.mt_login, c.mt_password, c.mt_server, c.mt_platform, name=engine.profile.metaapi_name, plan=c.metaapi_plan, keywords=engine.profile.keywords,
+                                         opts=account_opts(c.metaapi_plan, c.metaapi_quote_interval, c.metaapi_resource_slots, c.metaapi_dedicated_ip))
             acc = await api.account(created.get("id") or created.get("_id"))
             if acc.get("state") in ("UNDEPLOYED", "CREATED"):
                 await api.deploy(acc["_id"])
@@ -238,10 +256,6 @@ def register(router, engine, store):
             raise HTTPException(424, e.msg)
         except Exception as e:
             raise HTTPException(424, f"No se pudo recrear la cuenta: {str(e)[:160]}")
-            try:  # other MetaApi accounts with the same MT login (e.g. a first attempt with a mistyped server): each one is billed and never used by the bot
-                dups = [a for a in await api.list_accounts() if str(a.get("login")) == str(c.mt_login) and a.get("_id") != acc["_id"]]
-            except MetaApiError:
-                dups = []
         finally:
             await api.aclose()
         await store.update({"metaapi_account_id": acc["_id"], "hfm_state": acc.get("state", ""), "hfm_connection": acc.get("connectionStatus", ""),

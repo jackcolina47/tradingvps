@@ -659,3 +659,10 @@
 - Ajustes `weekend_hold_be_only` y `weekend_hold_fx_only` (ambos ON por defecto, interruptores en Ajustes de HotForex).
 - Viernes 15:30 NY (`FxEngine._weekend_keep` + `risk.weekend_hold`): una posición del test solo queda abierta si es par de divisas (metales se cierran) y su stop está en breakeven o mejor; si gana ≥0.5×ATR sobre breakeven se mueve el stop a breakeven (paper y REAL vía `set_stop`; si falla, se cierra); si no, se cierra.
 - Backtest FX refleja la regla. Tests en `test_iter92_hfm_rules_only.py`. No observado un viernes real ni en REAL.
+
+## Iteración 109 · Ajustes de rendimiento de la cuenta MetaApi (Pepperstone y HotForex)
+- Config por bot: `metaapi_quote_interval` (0 = cada tick, por defecto; solo G2), `metaapi_resource_slots` (1 por defecto; >1 de pago), `metaapi_dedicated_ip` (off; extra de pago). Selectores en `HfmSection.jsx` (`hfm-performance`).
+- `account_opts` + `provision(opts=)`: la cuenta se crea con esos valores; en `/hfm/link`, si la cuenta ya existe con otros valores → `PUT` (`update_account`) + redeploy. Región distinta a la elegida → error claro (no se reutiliza en silencio).
+- Corregido: `/hfm/link` devolvía 500 tras vincular (variable `dups` definida en código inalcanzable desde la iteración 106).
+- `manualTrades` sigue en false (cambia cómo ve el bróker las órdenes y exige magic 0): pendiente de decisión del usuario.
+- Docs MetaApi consultadas: createAccount, updateAccount, enableFeaturesOrApis, resourceSlots, estimate-costs. Precio de la IP dedicada no publicado en texto. Verificado solo con MetaApi simulado.

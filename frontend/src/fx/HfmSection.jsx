@@ -101,6 +101,7 @@ export default function HfmSection({ config, onSave, onRefresh, account }) {
   const [form, setForm] = useState({ metaapi_token: "", mt_login: config.mt_login || "", mt_password: "", mt_server: config.mt_server || "",
     mt_platform: config.mt_platform || "mt5", metaapi_region: config.metaapi_region || "new-york", mt_symbol_suffix: config.mt_symbol_suffix || "",
     metaapi_base_url: config.metaapi_base_url || "", hfm_alert_after_sec: config.hfm_alert_after_sec ?? 180, metaapi_plan: config.metaapi_plan || "g2-high",
+    metaapi_quote_interval: String(config.metaapi_quote_interval ?? 0), metaapi_resource_slots: String(config.metaapi_resource_slots ?? 1), metaapi_dedicated_ip: config.metaapi_dedicated_ip ? "ipv4" : "none",
     account_type: broker.account_type || "" });
   const [advanced, setAdvanced] = useState(!!config.metaapi_base_url);
   const [busy, setBusy] = useState("");
@@ -116,6 +117,7 @@ export default function HfmSection({ config, onSave, onRefresh, account }) {
     setBusy("save");
     const body = Object.fromEntries(Object.entries(form).filter(([k, v]) => v !== "" || !["metaapi_token", "mt_password", "account_type"].includes(k)));
     body.hfm_alert_after_sec = Math.min(3600, Math.max(10, Number(form.hfm_alert_after_sec) || 180));
+    Object.assign(body, { metaapi_quote_interval: Number(form.metaapi_quote_interval), metaapi_resource_slots: Number(form.metaapi_resource_slots), metaapi_dedicated_ip: form.metaapi_dedicated_ip === "ipv4" });
     const ok = await onSave(body, `Datos de ${bk} guardados · vincula y prueba la conexión`);
     setBusy("");
     if (ok) {
@@ -170,7 +172,7 @@ export default function HfmSection({ config, onSave, onRefresh, account }) {
     setBusy("clear");
     const ok = await onSave({ clear_hfm: true }, `Datos de ${bk} eliminados`);
     setBusy(""); setResult(null); setSymbols(null);
-    if (ok) setForm({ metaapi_token: "", mt_login: "", mt_password: "", mt_server: "", mt_platform: "mt5", metaapi_region: "new-york", mt_symbol_suffix: "", metaapi_base_url: "", hfm_alert_after_sec: config.hfm_alert_after_sec ?? 180, metaapi_plan: "g2-high", account_type: broker.account_type || "" });
+    if (ok) setForm({ metaapi_token: "", mt_login: "", mt_password: "", mt_server: "", mt_platform: "mt5", metaapi_region: "new-york", mt_symbol_suffix: "", metaapi_base_url: "", hfm_alert_after_sec: config.hfm_alert_after_sec ?? 180, metaapi_plan: "g2-high", metaapi_quote_interval: "0", metaapi_resource_slots: "1", metaapi_dedicated_ip: "none", account_type: broker.account_type || "" });
   };
   const acc = result?.account;
   const linked = !!config.metaapi_account_id;
@@ -228,6 +230,18 @@ export default function HfmSection({ config, onSave, onRefresh, account }) {
         )}
       </div>
       <HfmPlanPicker plans={plans} common={config.metaapi_plan_common} value={form.metaapi_plan} onChange={(k) => setForm((f) => ({ ...f, metaapi_plan: k }))} currentPlan={currentPlan} />
+      <div data-testid="hfm-performance" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Field label="Cotizaciones (solo G2)" hint="Cada cuánto envía precios el terminal. MetaApi pone 2,5 s por defecto; «cada tick» es lo más rápido y no tiene coste extra según su documentación.">
+          <Sel value={form.metaapi_quote_interval} onChange={(v) => setForm((f) => ({ ...f, metaapi_quote_interval: v }))} options={["0", "1", "2.5"]} testId="hfm-quote-interval-select"
+            render={(o) => (o === "0" ? "En cada tick" : `Cada ${o.replace(".", ",")} s`)} /></Field>
+        <Field label="Recursos (CPU / RAM)" hint="Slots de recursos del terminal. Más de 1 es de pago y, según MetaApi, no mejora nada con una sola cuenta operando; algunos brókers exigen 2 (el error lo indica).">
+          <Sel value={form.metaapi_resource_slots} onChange={(v) => setForm((f) => ({ ...f, metaapi_resource_slots: v }))} options={["1", "2", "4"]} testId="hfm-resource-slots-select"
+            render={(o) => (o === "1" ? "1 slot (incluido)" : `${o} slots (de pago)`)} /></Field>
+        <Field label="IP dedicada" hint="IPv4 fija para conectar con el bróker. Es un extra de pago de MetaApi, no viene incluida en G2; consulta el precio en su calculadora de costes antes de activarla.">
+          <Sel value={form.metaapi_dedicated_ip} onChange={(v) => setForm((f) => ({ ...f, metaapi_dedicated_ip: v }))} options={["none", "ipv4"]} testId="hfm-dedicated-ip-select"
+            render={(o) => (o === "ipv4" ? "IPv4 dedicada (de pago)" : "No")} /></Field>
+      </div>
+      <p className="font-mono text-[10.5px] text-slate-500">Estos tres ajustes se aplican al pulsar «Guardar» y después «Vincular cuenta»: si la cuenta ya existe en MetaApi se actualiza y el terminal se reinicia.</p>
       {unsavedPlan && <p data-testid="hfm-plan-unsaved" className="font-mono text-[10.5px] text-amber-300">Tipo de cuenta cambiado a {planLabel(form.metaapi_plan)} · pulsa «Guardar» para aplicarlo{linked ? " y después «Recrear con el nuevo tipo»" : ""}.</p>}
       {mismatch && <HfmRecreateNotice currentLabel={planLabel(currentPlan)} wantedLabel={planLabel(config.metaapi_plan)} busy={busy === "recreate"} onRecreate={recreate} />}
       <button data-testid="hfm-advanced-toggle" onClick={() => setAdvanced((v) => !v)} className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-slate-500 hover:text-slate-300">
