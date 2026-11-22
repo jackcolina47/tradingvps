@@ -42,6 +42,8 @@ class FxSettings(BaseModel):
     signal_mode: str = "relaxed"
     disabled_strategies: List[str] = ["supertrend_momentum", "ema_cross"]
     close_before_weekend: bool = True
+    weekend_hold_be_only: bool = True   # HotForex EMA-cross test over the weekend: only trades with the stop at breakeven or better stay open
+    weekend_hold_fx_only: bool = True   # …and only on currency pairs (metals are closed on Friday)
     min_lot_max_risk: float = 4.0
     sessions_allowed: List[str] = []
     risk_profile: int = 2
@@ -235,6 +237,8 @@ class FxSettingsUpdate(BaseModel):
     signal_mode: Optional[str] = None
     disabled_strategies: Optional[List[str]] = None
     close_before_weekend: Optional[bool] = None
+    weekend_hold_be_only: Optional[bool] = None
+    weekend_hold_fx_only: Optional[bool] = None
     min_lot_max_risk: Optional[float] = Field(default=None, ge=0, le=10)
     sessions_allowed: Optional[List[str]] = None
     plan_scenario: Optional[str] = None

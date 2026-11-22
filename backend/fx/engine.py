@@ -10,6 +10,7 @@ import time
 import asyncio
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
+from bson import ObjectId
 from models import Position, LogEntry
 import notify
 from fx.models import FxSettings
@@ -201,6 +202,24 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
                 logger.exception(f"monitor error: {e}")
             await asyncio.sleep(5)
 
+    async def _weekend_keep(self, pid: str, tickers: dict, settings) -> bool:
+        """Friday close, EMA-cross test trade: keep it only on currency pairs and with the stop at breakeven or better (moved there now if the profit allows)."""
+        p = Position.from_mongo(await self.db.positions.find_one({"_id": ObjectId(pid)}))
+        price = (tickers.get(p.symbol) or {}).get("price") or p.mark_price or p.entry_price
+        be = self._ema_be(p)
+        keep, new_sl, why = risk.weekend_hold(risk.trade_rules(settings), p.symbol, p.side, p.sl, be, p.atr, price)
+        if keep and new_sl is not None:
+            try:
+                if p.live:
+                    await self.broker.set_stop(p.symbol, p.order_id, new_sl, None)
+                await self.db.positions.update_one({"_id": ObjectId(pid)}, {"$set": {"sl": new_sl, "breakeven": True}})
+                await self.log("RISK", f"{p.symbol}: stop {'REAL ' if p.live else ''}movido a breakeven ({new_sl}) para pasar el fin de semana abierta")
+            except Exception as e:
+                keep, why = False, f"no se pudo mover el stop a breakeven en {self.bk} ({str(e)[:80]})"
+        if not keep:
+            await self.log("RISK", f"{p.symbol}: la posición del test de cruce de EMAs se cierra el viernes · {why}")
+        return keep
+
     async def _monitor_once(self):
         settings = await self.get_settings()
         tickers = await self.market.fetch_tickers(settings.symbols)
@@ -209,7 +228,7 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
             self._weekend_flat_day = today()
             keep = not self.profile.ema_only  # HotForex: the EMA-cross test trades stay open over the weekend (they leave on the opposite cross or their SL)
             docs = [d async for d in self.db.positions.find({}, {"_id": 1, "symbol": 1, "strategy": 1, "exit_mode": 1}) if not is_crypto(d["symbol"])]
-            held = [d for d in docs if keep and d.get("strategy") == EMA_TEST and d.get("exit_mode") == "cross"]
+            held = [d for d in docs if keep and d.get("strategy") == EMA_TEST and d.get("exit_mode") == "cross" and await self._weekend_keep(str(d["_id"]), tickers, settings)]
             ids = [str(d["_id"]) for d in docs if d not in held]
             if held:
                 await self.log("RISK", f"Fin de semana · {len(held)} posición(es) del test de cruce de EMAs se mantienen abiertas ({', '.join(d['symbol'] for d in held)}): "

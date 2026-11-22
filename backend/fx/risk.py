@@ -117,7 +117,23 @@ def update_trailing(side: str, entry: float, sl: float, initial_sl: float, atr: 
 
 DEFAULT_RULES = {"trailing_enabled": True, "breakeven_enabled": True, "be_start_r": 1.0, "trail_start_r": 1.5, "trail_atr_mult": 1.0,
                  "partial_tp_enabled": False, "partial_tp_r": 1.5, "partial_tp_pct": 50,
-                 "ema_test_partial_enabled": False, "ema_test_partial_atr": 1.5, "ema_touch_exit_enabled": False}
+                 "ema_test_partial_enabled": False, "ema_test_partial_atr": 1.5, "ema_touch_exit_enabled": False,
+                 "weekend_hold_be_only": True, "weekend_hold_fx_only": True}
+
+
+WEEKEND_BE_ROOM_ATR = 0.5  # profit (in ATR, beyond breakeven) needed on Friday to move the stop to breakeven and keep the trade over the weekend
+
+
+def weekend_hold(rules: dict, symbol: str, side: str, sl: float, be: float, atr: float, price: float) -> tuple:
+    """EMA-cross test trade at the Friday close → (keep open?, stop to set or None, reason when closed)."""
+    d = 1 if side == "long" else -1
+    if rules["weekend_hold_fx_only"] and SPECS[symbol]["group"] == "Metales":
+        return False, None, "metal: propenso a huecos de apertura"
+    if not rules["weekend_hold_be_only"] or (sl - be) * d >= 0:
+        return True, None, ""
+    if (price - be) * d >= WEEKEND_BE_ROOM_ATR * atr:
+        return True, be, ""
+    return False, None, f"sin ganancia suficiente para dejar el stop en breakeven (hacen falta {WEEKEND_BE_ROOM_ATR:g}×ATR)"
 
 
 def trade_rules(settings) -> dict:

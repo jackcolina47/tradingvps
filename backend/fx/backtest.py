@@ -110,7 +110,13 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
                                                                 rules["be_start_r"], rules["trail_start_r"], rules["trail_atr_mult"],
                                                                 be_enabled=rules["breakeven_enabled"], trail_enabled=use_trailing)
         weekend = before_weekend(i)
-        if pos and weekend and not (cross_weekend_hold and pos["strategy"] in CROSS_ONLY):
+        if pos and weekend and cross_weekend_hold and pos["strategy"] in CROSS_ONLY:
+            be = pos["entry"] + (spread if pos["side"] == "long" else -spread)
+            keep, new_sl, _ = risk.weekend_hold(rules, symbol, pos["side"], pos["sl"], be, pos["atr"], closes[i])
+            if keep and new_sl is not None:
+                pos["sl"], pos["be"] = new_sl, True
+            weekend = not keep
+        if pos and weekend:
             close(closes[i], "FIN_SEMANA", i)
             weekend_closed += 1
         if not pos and not weekend and i in signals:

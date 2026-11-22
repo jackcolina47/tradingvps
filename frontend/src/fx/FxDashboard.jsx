@@ -76,7 +76,11 @@ const SESSION_CHIPS = (meta) => [{ k: "sessions_allowed", label: "Sesiones para 
   hint: "El bot solo abre nuevas entradas cuando alguna de las sesiones marcadas está abierta (Londres y Nueva York concentran la liquidez). Sin selección opera en todo el horario forex. Las posiciones abiertas se gestionan igual en cualquier sesión. El backtest aplica el mismo filtro." }];
 const fmtLev = (v) => `1:${v}`;
 const EMA_HIDE = ["scan_interval_sec", "ai_enabled", "ai_funnel_enabled", "ai_min_confidence", "min_rr", "breakeven_enabled", "trailing_enabled", "htf_filter"];
-const HFM_TOGGLES = EXTRA_TOGGLES.map((t) => (t.k === "close_before_weekend" ? { ...t, hint: `${t.hint}. Excepción: las posiciones del Test cruce EMA 9/21 no se cierran y pasan el fin de semana abiertas con su SL` } : t));
+const HFM_TOGGLES = EXTRA_TOGGLES.flatMap((t) => (t.k !== "close_before_weekend" ? [t] : [
+  { ...t, hint: `${t.hint}. Excepción: las posiciones del Test cruce EMA 9/21 pueden pasar el fin de semana abiertas según las dos reglas siguientes` },
+  { k: "weekend_hold_be_only", label: "Fin de semana · solo test EMA con stop en breakeven", hint: "El viernes a las 15:30 NY, una posición del test de cruce solo queda abierta si su stop ya está en la entrada o mejor. Si aún no lo está pero gana al menos 0.5×ATR, el bot mueve el stop a breakeven y la mantiene; si no, la cierra. Apagado: se mantienen todas con su SL original" },
+  { k: "weekend_hold_fx_only", label: "Fin de semana · solo test EMA en divisas", hint: "Las posiciones del test de cruce en oro y plata se cierran el viernes (sus huecos de apertura suelen ser mayores); solo las de pares de divisas pueden quedar abiertas. Apagado: los metales también pueden quedar abiertos" },
+]));
 const EMA_TOGGLES = EXTRA_TOGGLES.filter((t) => ["close_before_weekend", "rollover_guard"].includes(t.k))
   .map((t) => ({ ...t, hint: `${t.hint} · no se aplica a las criptomonedas, que operan 24/7` }));
 const EMA_BT_INTRO = (brand) => (s) => `Cruce EMA 9 y 21 Personalizado sobre las últimas 1.000 velas con los ajustes guardados (SL ${s.ema_sl_atr}×ATR, entrada confirmada, parcial + breakeven y toque de EMA 21 si están activos): ${s.risk_per_trade}% por operación, 1:${s.leverage}, ${brand.costsNote}. Las criptomonedas usan las velas del perpetuo USDT y no aplican cierre de fin de semana.`;

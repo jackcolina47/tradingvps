@@ -654,3 +654,8 @@
 ## Iteración 107 · HotForex: el test de cruce de EMAs no se cierra el fin de semana
 - `FxEngine._monitor_once`: el cierre del viernes 15:30 NY excluye en HotForex las posiciones `ema_test` con `exit_mode="cross"` (se registra en el log). El bloqueo de entradas desde las 12:00 NY sigue igual. Pepperstone sin cambios.
 - Backtest FX: `cross_weekend_hold` (HotForex) refleja lo mismo. Test en `test_iter92_hfm_rules_only.py`.
+
+## Iteración 108 · HotForex: protección de fin de semana del test de cruce
+- Ajustes `weekend_hold_be_only` y `weekend_hold_fx_only` (ambos ON por defecto, interruptores en Ajustes de HotForex).
+- Viernes 15:30 NY (`FxEngine._weekend_keep` + `risk.weekend_hold`): una posición del test solo queda abierta si es par de divisas (metales se cierran) y su stop está en breakeven o mejor; si gana ≥0.5×ATR sobre breakeven se mueve el stop a breakeven (paper y REAL vía `set_stop`; si falla, se cierra); si no, se cierra.
+- Backtest FX refleja la regla. Tests en `test_iter92_hfm_rules_only.py`. No observado un viernes real ni en REAL.

@@ -174,7 +174,9 @@ def test_weekend_flat_keeps_ema_test_positions_on_hfm_only(monkeypatch):
             raise Stop()
         async def gs():
             return NS(close_before_weekend=True, symbols=["EURUSD"])
-        e = NS(get_settings=gs, profile=profile, market=NS(fetch_tickers=fetch), db=NS(positions=NS(find=lambda *a, **k: Cur(docs))), _weekend_flat_day=None, close_position=close, log=log, new_broker=boom,
+        async def wk(pid, tickers, settings):
+            return True
+        e = NS(_weekend_keep=wk, get_settings=gs, profile=profile, market=NS(fetch_tickers=fetch), db=NS(positions=NS(find=lambda *a, **k: Cur(docs))), _weekend_flat_day=None, close_position=close, log=log, new_broker=boom,
                live=True)
         monkeypatch.setattr(fe, "market_open", lambda: True)
         monkeypatch.setattr(fe, "friday_stage", lambda: "flat")
@@ -187,3 +189,43 @@ def test_weekend_flat_keeps_ema_test_positions_on_hfm_only(monkeypatch):
     assert closed == [("2", "FIN_SEMANA")] and any("se mantienen abiertas" in m for m in logs), (closed, logs)
     closed, _ = asyncio.run(run(PEPPERSTONE))
     assert [c[0] for c in closed] == ["1", "2"]
+
+
+def test_weekend_hold_rules():
+    from fx import risk
+    R = risk.DEFAULT_RULES
+    assert risk.weekend_hold(R, "XAUUSD", "long", 1, 2, 1, 9)[0] is False                                   # metals are closed
+    assert risk.weekend_hold(R, "EURUSD", "long", 1.1002, 1.1001, 0.002, 1.10)[:2] == (True, None)           # stop already at breakeven or better
+    assert risk.weekend_hold(R, "EURUSD", "long", 1.09, 1.1001, 0.002, 1.1012)[:2] == (True, 1.1001)         # +0.5 ATR: stop moved to breakeven
+    assert risk.weekend_hold(R, "EURUSD", "long", 1.09, 1.1001, 0.002, 1.1005)[0] is False                   # not enough profit → closed
+    assert risk.weekend_hold(R, "EURUSD", "short", 1.11, 1.0999, 0.002, 1.0985)[:2] == (True, 1.0999)
+    assert risk.weekend_hold({**R, "weekend_hold_be_only": False, "weekend_hold_fx_only": False}, "XAUUSD", "long", 1, 2, 1, 1.5)[:2] == (True, None)
+
+
+def test_weekend_keep_moves_stop_to_breakeven(monkeypatch):
+    import fx.engine as fe
+    from bson import ObjectId
+    from types import SimpleNamespace as NS
+    from models import Position, now_iso
+
+    async def run(price):
+        pid = ObjectId()
+        doc = {"_id": pid, **Position(symbol="EURUSD", side="long", entry_price=1.1, qty=0.1, sl=1.094, tp=1.112, initial_sl=1.094, atr=0.002, margin=10, leverage=100, fees=0, mark_price=1.1, strategy="ema_test",
+                                      exit_mode="cross", opened_at=now_iso()).to_mongo()}
+        sets, logs = [], []
+
+        async def find_one(q):
+            return doc
+
+        async def update_one(q, u):
+            sets.append(u["$set"])
+
+        async def log(level, msg):
+            logs.append(msg)
+        e = NS(db=NS(positions=NS(find_one=find_one, update_one=update_one)), log=log, bk="HFM", _ema_be=fe.FxEngine._ema_be)
+        keep = await fe.FxEngine._weekend_keep(e, str(pid), {"EURUSD": {"price": price}}, NS(weekend_hold_be_only=True, weekend_hold_fx_only=True))
+        return keep, sets, logs
+    keep, sets, _ = asyncio.run(run(1.1030))
+    assert keep and sets and sets[0]["breakeven"] is True and 1.1 < sets[0]["sl"] < 1.1005
+    keep, sets, logs = asyncio.run(run(1.1004))
+    assert not keep and not sets and "se cierra el viernes" in logs[0]
