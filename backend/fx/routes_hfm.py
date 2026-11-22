@@ -1,6 +1,7 @@
 """/api/fx/* · HFM account via MetaApi: connection test, link/recreate/redeploy, symbol suffix & tradability checks, paper ↔ REAL mode switch."""
 import logging
 import uuid
+from datetime import datetime, timezone
 from fastapi import HTTPException
 
 from models import ModeRequest, now_iso
@@ -33,6 +34,55 @@ def register(router, engine, store):
                 "connection": acc.get("connectionStatus"), "region": acc.get("region"), "platform": acc.get("platform") or acc.get("version"),
                 "type": acc.get("type") or "", "reliability": acc.get("reliability") or "", "plan": plan_key(acc.get("type"), acc.get("reliability"))}
 
+    CAUSES = {
+        "DISCONNECTED": "El terminal de MetaApi está arrancado pero todavía no ha entrado en el bróker. Durante los primeros 5 minutos es normal. Si sigue así más tiempo, "
+                        "lo habitual es: contraseña incorrecta o cambiada, plataforma equivocada (MT4 / MT5), nombre de servidor que no corresponde a esta cuenta, "
+                        "o cuenta demo caducada.",
+        "DISCONNECTED_FROM_BROKER": "El terminal de MetaApi no consigue iniciar sesión en el bróker (o el bróker lo desconectó). Casi siempre es la contraseña, el login o el servidor; "
+                                    "también una cuenta demo caducada o deshabilitada. Volver a desplegar no lo arregla: hay que corregir los datos.",
+    }
+
+    async def _diagnose(api, acc: dict, accounts: list, login: str) -> dict:
+        """Why a linked account is not connected: what MetaApi reports, what does not match the saved data, and what to do. MetaApi gives no explicit reason field."""
+        c = store.cfg
+        conn, state = acc.get("connectionStatus") or "", acc.get("state") or ""
+        checks = [{"ok": True, "text": "Token de MetaApi válido"},
+                  {"ok": state == "DEPLOYED", "text": f"Estado en MetaApi: {state or '—'}" + ("" if state == "DEPLOYED" else " · el terminal aún no está arrancado (DEPLOYING tarda 1-3 min; UNDEPLOYED: pulsa «Vincular cuenta»)")},
+                  {"ok": conn == "CONNECTED", "text": f"Conexión con el bróker: {conn or '—'}"}]
+        age = None
+        try:
+            age = (datetime.now(timezone.utc) - datetime.fromisoformat(str(acc["createdAt"]).replace("Z", "+00:00"))).total_seconds() / 60
+            checks.append({"ok": True, "text": f"Cuenta creada en MetaApi hace {age:.0f} min" if age < 180 else f"Cuenta creada en MetaApi hace {age / 60:.0f} h"})
+        except (KeyError, ValueError, TypeError):
+            pass
+        plat = str(acc.get("platform") or "").lower()
+        if plat and plat != c.mt_platform:
+            checks.append({"ok": False, "text": f"Plataforma distinta: en MetaApi la cuenta es {plat.upper()} y en el panel tienes {c.mt_platform.upper()}"})
+        if acc.get("region") and acc["region"] != c.metaapi_region:
+            checks.append({"ok": False, "text": f"Región distinta: la cuenta está en «{acc['region']}» y en el panel tienes «{c.metaapi_region}» (el bot usa la de la cuenta)"})
+        if c.metaapi_account_id and c.metaapi_account_id != acc["_id"]:
+            checks.append({"ok": False, "text": f"El bot tenía guardada otra cuenta de MetaApi ({c.metaapi_account_id}); ahora usa {acc['_id']}"})
+        dups = [a for a in accounts if str(a.get("login")) == str(login) and a.get("_id") != acc["_id"]]
+        for a in dups:
+            checks.append({"ok": False, "text": f"Cuenta duplicada en MetaApi con el mismo login: {a['_id']} · servidor {a.get('server') or '?'} · {a.get('state')} / {a.get('connectionStatus')} "
+                                                "· el bot NO la usa; bórrala en app.metaapi.cloud → Accounts (se factura y puede competir por la misma sesión)"})
+        answer = None
+        if state == "DEPLOYED" and conn != "CONNECTED":
+            try:  # what the terminal itself answers right now
+                await api.account_info(acc["_id"], acc.get("region") or api.region)
+            except MetaApiError as e:
+                answer = e.msg[:260]
+        cause = CAUSES.get(conn) if state == "DEPLOYED" else None
+        if cause and conn == "DISCONNECTED" and age is not None and age < 5:
+            cause = f"La cuenta se creó hace {age:.0f} min: es pronto. Espera hasta 5 minutos y vuelve a pulsar «Probar conexión»."
+        steps = [f"Abre MetaTrader ({c.mt_platform.upper()}) en tu móvil o PC con el login {login}, la misma contraseña y el servidor «{acc.get('server')}». Si ahí no entra, el dato equivocado es ese.",
+                 "Si la contraseña, el servidor o la plataforma estaban mal: borra esta cuenta en app.metaapi.cloud → Accounts, corrige el dato aquí, pulsa «Guardar» y después «Vincular cuenta» (el panel no modifica una cuenta ya creada en MetaApi).",
+                 "Usa la contraseña maestra (trading), no la de inversor (solo lectura).",
+                 "En app.metaapi.cloud → Accounts → tu cuenta puedes ver el estado y los avisos que da MetaApi."]
+        if dups:
+            steps.insert(0, "Borra primero la(s) cuenta(s) duplicada(s) en app.metaapi.cloud y vuelve a probar.")
+        return {"checks": checks, "cause": cause, "metaapi_answer": answer, "steps": steps, "account_id": acc["_id"]}
+
     def _plan_patch(acc: dict) -> dict:
         return {"hfm_account_type": acc.get("type") or "", "hfm_reliability": acc.get("reliability") or ""}
 
@@ -57,6 +107,9 @@ def register(router, engine, store):
                 if acc.get("state") == "DEPLOYED" and acc.get("connectionStatus") == "CONNECTED":
                     out["info"] = await api.account_info(acc["_id"], acc.get("region") or api.region, refresh=True)
                     out["positions"] = await api.positions(acc["_id"], acc.get("region") or api.region)
+                else:
+                    api.retries = 0
+                    out["diagnosis"] = await _diagnose(api, acc, accounts, login)
         except MetaApiError as e:
             raise HTTPException(424, e.msg)
         except Exception as e:

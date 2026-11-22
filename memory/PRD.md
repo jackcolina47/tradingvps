@@ -645,3 +645,8 @@
 - Ahora `/hfm/link` responde al instante `{pending, retry_after, hint}` reutilizando el mismo transaction-id (`link_tx`), y `HfmSection.jsx` reintenta solo hasta ~5 min mostrando el estado; error claro si no termina.
 - Verificado con un MetaApi simulado (202 ×3 → 201). Pendiente: confirmación del usuario con su cuenta demo.
 - Iter 105b: el usuario (VPS) recibió «timeout of 45000ms exceeded» al vincular → cada paso de `/hfm/link` ahora es de un solo intento con lectura de 15 s (`api.retries = 0`); un ReadTimeout del POST de alta se trata como «validando» (mismo transaction-id) y un fallo de conexión da error inmediato. Se registra en el log del bot. Verificado con MetaApi simulado lento (40 s). Pendiente confirmación del usuario.
+
+## Iteración 106 · Diagnóstico de conexión MetaApi (Pepperstone y HotForex)
+- `/hfm/link` avisa de cuentas duplicadas en MetaApi con el mismo login (no borra nada).
+- `/hfm/test` devuelve `diagnosis` cuando la cuenta existe pero no está conectada: comprobaciones (estado, conexión, antigüedad, plataforma/región distintas, duplicadas), respuesta del terminal, causa más probable y pasos. Panel «Diagnóstico de conexión» en `HfmSection.jsx` (`hfm-diagnosis`).
+- MetaApi no da un campo con el motivo exacto: la causa es orientativa. Verificado solo con MetaApi simulado; pendiente con la cuenta real del usuario.

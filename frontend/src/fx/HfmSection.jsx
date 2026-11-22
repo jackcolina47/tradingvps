@@ -274,6 +274,19 @@ export default function HfmSection({ config, onSave, onRefresh, account }) {
             <p>Bróker {result.info.broker} · {result.info.currency} · balance <span className="num text-slate-100">{result.info.balance}</span> · equidad <span className="num text-slate-100">{result.info.equity}</span> · margen libre {result.info.freeMargin} · apalancamiento 1:{result.info.leverage} · {result.positions?.length || 0} posiciones abiertas · trading <span className={result.info.tradeAllowed === false ? "text-rose-300" : "text-emerald-400"}>{result.info.tradeAllowed === false ? "NO permitido" : "permitido"}</span></p>
           )}
           {result?.hint && <p className="text-amber-300">{result.hint}</p>}
+          {result?.diagnosis && (
+            <div data-testid="hfm-diagnosis" className="mt-2 space-y-1.5 rounded-sm border border-amber-500/30 bg-amber-500/5 p-2.5">
+              <p className="font-display text-[12px] font-semibold uppercase tracking-wide text-amber-200">Diagnóstico de conexión</p>
+              {result.diagnosis.checks.map((c, i) => (
+                <p key={i} data-testid={`hfm-diagnosis-check-${i}`} className="break-words"><span className={c.ok ? "text-emerald-400" : "text-rose-400"}>{c.ok ? "✓" : "✗"}</span> {c.text}</p>
+              ))}
+              {result.diagnosis.metaapi_answer && <p data-testid="hfm-diagnosis-answer" className="break-words text-slate-400">Respuesta del terminal de MetaApi: <span className="text-slate-200">{result.diagnosis.metaapi_answer}</span></p>}
+              {result.diagnosis.cause && <p data-testid="hfm-diagnosis-cause" className="text-amber-200">Causa más probable: {result.diagnosis.cause}</p>}
+              <p className="pt-1 text-slate-400">Qué hacer:</p>
+              <ol className="list-decimal space-y-1 pl-5 text-slate-300">{result.diagnosis.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
+              <p className="break-all text-slate-500">ID de la cuenta que usa el bot en MetaApi: {result.diagnosis.account_id}</p>
+            </div>
+          )}
           {result?.suffix?.hint && <p data-testid="hfm-suffix-detected" className={result.suffix.suffix === null || result.suffix.suffix === undefined ? "text-amber-300" : "text-sky-300"}>{result.suffix.hint}</p>}
           {!result && config.hfm_verified_at && <p>Última verificación {fmtDateTime(config.hfm_verified_at)} · {config.hfm_broker || bk} · equidad {config.hfm_verified_equity} {config.hfm_currency} · apalancamiento 1:{config.hfm_leverage}{config.hfm_trade_allowed === false ? " · SIN permiso de trading" : ""}{config.hfm_current_plan ? ` · tipo ${planLabel(config.hfm_current_plan)}` : ""}</p>}
         </div>
