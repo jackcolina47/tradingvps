@@ -1,5 +1,6 @@
 """/api/fx/* · HFM account via MetaApi: connection test, link/recreate/redeploy, symbol suffix & tradability checks, paper ↔ REAL mode switch."""
 import logging
+import uuid
 from fastapi import HTTPException
 
 from models import ModeRequest, now_iso
@@ -100,6 +101,8 @@ def register(router, engine, store):
         finally:
             await broker.aclose()
 
+    link_tx = {}  # provisioning transaction in progress (MetaApi answers 202 until it has validated the MT account)
+
     @router.post("/hfm/link")
     async def hfm_link():
         c = store.cfg
@@ -109,15 +112,25 @@ def register(router, engine, store):
         try:
             acc = await api.find_account(c.mt_login, c.mt_server)
             if not acc:
-                created = await api.provision(c.mt_login, c.mt_password, c.mt_server, c.mt_platform, name=engine.profile.metaapi_name, plan=c.metaapi_plan, keywords=engine.profile.keywords)
+                key = (c.mt_login, c.mt_server, c.mt_platform, c.metaapi_plan, c.metaapi_region)
+                if link_tx.get("key") != key:
+                    link_tx.update(key=key, tx=uuid.uuid4().hex[:32])
+                created = await api.provision(c.mt_login, c.mt_password, c.mt_server, c.mt_platform, name=engine.profile.metaapi_name, plan=c.metaapi_plan, keywords=engine.profile.keywords,
+                                              tx=link_tx["tx"], tries=1)
+                if created.get("_retry"):  # MetaApi is still validating the MT credentials: answer now, the panel keeps asking with the same transaction
+                    return {"ok": True, "pending": True, "retry_after": max(2, min(int(created["retry_after"]), 10)),
+                            "hint": "MetaApi está validando el login, la contraseña y el servidor con el bróker. Suele tardar entre 10 segundos y 2 minutos."}
+                link_tx.clear()
                 acc = await api.account(created.get("id") or created.get("_id"))
                 await engine.log("INFO", f"Cuenta {engine.bk} {c.mt_login} vinculada en MetaApi ({c.metaapi_region} · {PLANS[c.metaapi_plan]['label']})")
             if acc.get("state") in ("UNDEPLOYED", "CREATED"):
                 await api.deploy(acc["_id"])
                 acc = await api.account(acc["_id"])
         except MetaApiError as e:
+            link_tx.clear()
             raise HTTPException(424, e.msg)
         except Exception as e:
+            link_tx.clear()
             raise HTTPException(424, f"No se pudo vincular la cuenta: {str(e)[:160]}")
         finally:
             await api.aclose()

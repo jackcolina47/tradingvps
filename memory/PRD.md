@@ -639,3 +639,8 @@
 - Frontend: `setDisplayTz/tzOpts/tzOffsetSec` en `lib/api.js`; todas las horas del panel, gráficos (`toLocal`), CSV y rendimiento usan esa zona solo en Pepperstone (resto de bots: hora del dispositivo, se resetea en `setApiBase`).
 - Backend: `FxEngine.local_time`; los mensajes de Telegram de Pepperstone llevan pie «🕒 dd/mm HH:MM UTC|BST|GMT».
 - Verificado: API (validación y guardado), conversión BST/GMT en backend, desplegable en pantalla. Telegram real no comprobado.
+
+## Iteración 105 · «Vincular cuenta» ya no se queda cargando (Pepperstone y HotForex)
+- Causa probable (no confirmada con la cuenta real del usuario): MetaApi responde 202 mientras valida la cuenta MT y `/hfm/link` esperaba en bloque hasta ~3 min (más que el timeout del navegador/proxy).
+- Ahora `/hfm/link` responde al instante `{pending, retry_after, hint}` reutilizando el mismo transaction-id (`link_tx`), y `HfmSection.jsx` reintenta solo hasta ~5 min mostrando el estado; error claro si no termina.
+- Verificado con un MetaApi simulado (202 ×3 → 201). Pendiente: confirmación del usuario con su cuenta demo.

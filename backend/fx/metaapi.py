@@ -169,15 +169,18 @@ class MetaApi:
                 return a
         return None
 
-    async def provision(self, login: str, password: str, server: str, platform: str, name: str = "hotforex-ai-trading", plan: str = "g2-high", keywords=("HFM", "HotForex")) -> dict:
+    async def provision(self, login: str, password: str, server: str, platform: str, name: str = "hotforex-ai-trading", plan: str = "g2-high", keywords=("HFM", "HotForex"), tx: str = None, tries: int = 6) -> dict:
+        """`tx` + `tries=1`: one non-blocking step; returns {"_retry": True, "retry_after": s} while MetaApi is still validating (call again with the same tx)."""
         p = PLANS.get(plan) or PLANS["g2-high"]
         payload = {"login": str(login), "password": password, "name": name, "server": server, "platform": platform, "magic": MAGIC,
                    "type": p["type"], "reliability": p["reliability"], "region": self.region, "manualTrades": False, "keywords": list(keywords)}
-        tx = uuid.uuid4().hex[:32]
-        for _ in range(6):
+        tx = tx or uuid.uuid4().hex[:32]
+        for k in range(tries):
             res = await self._call("POST", f"{self._prov()}/users/current/accounts", json=payload, tx=tx)
             if not (isinstance(res, dict) and res.get("_retry")):
                 return res or {}
+            if k == tries - 1 and tries == 1:
+                return res
             await asyncio.sleep(min(res["retry_after"], 10))
         raise MetaApiError(202, "MetaApi sigue validando la cuenta; vuelve a probar en un minuto")
 
