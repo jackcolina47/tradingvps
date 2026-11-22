@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, Sparkles, RefreshCw, BookmarkPlus } from "lucide-react";
 import { toast } from "sonner";
-import { http, errMsg } from "@/lib/api";
+import { http, errMsg, tzOpts } from "@/lib/api";
 
 const VERDICT = {
   BUENA: "border-emerald-500/50 bg-emerald-500/10 text-emerald-300",
@@ -85,7 +85,7 @@ export default function TradeAiReview({ trade, autoRun = false, onReviewed }) {
               </button>
             </div>
           )}
-          <p className="text-[10px] text-slate-600">{review.model} · {new Date(review.at).toLocaleString("es-ES")}</p>
+          <p className="text-[10px] text-slate-600">{review.model} · {new Date(review.at).toLocaleString("es-ES", tzOpts())}</p>
         </div>
       )}
     </div>

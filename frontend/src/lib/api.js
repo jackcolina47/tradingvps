@@ -31,6 +31,7 @@ export const BOT_API = { fx: "/api/fx", pepper: "/api/pepper", lab: "/api/lab", 
 export const EMA_MAIN_NAME = "Cruce EMA 9 y 21 Personalizado";
 export const setApiBase = (bot) => {
   http.defaults.baseURL = BOT_API[bot] ? `${BACKEND}${BOT_API[bot]}` : API;
+  DISPLAY_TZ = null;
   STRATEGY_LABELS.ema_test = bot === "pepper" ? EMA_MAIN_NAME : "Test cruce EMA 9/21";  // Pepperstone: the EMA cross is the bot's only, main strategy
 };
 // Global features (chat, backups, VPS package) always talk to /api, whichever dashboard is open. Use relative paths ("/chat").
@@ -51,11 +52,23 @@ export const fmtPrice = (v, digits) => {
   return num(n, d);
 };
 export const fmtQty = (v) => (v == null ? "—" : Number(v).toPrecision(4));
+let DISPLAY_TZ = null;  // null = device timezone; Pepperstone sets "UTC" or "Europe/London" (BST/GMT switch automatically)
+export const setDisplayTz = (tz) => { DISPLAY_TZ = tz || null; };
+export const tzOpts = () => (DISPLAY_TZ ? { timeZone: DISPLAY_TZ } : {});
+export const tzLabel = (date = new Date()) => (DISPLAY_TZ === "UTC" ? "UTC" : DISPLAY_TZ ? (tzOffsetSec(date.getTime() / 1000) ? "BST" : "GMT") : "");
+export function tzOffsetSec(tsSec) {
+  const d = new Date(tsSec * 1000);
+  if (!DISPLAY_TZ) return -d.getTimezoneOffset() * 60;
+  if (DISPLAY_TZ === "UTC") return 0;
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: DISPLAY_TZ, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric" })
+    .formatToParts(d).map((x) => [x.type, Number(x.value)]));
+  return Math.round((Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - d.getTime()) / 1000);
+}
 export const fmtTime = (iso) =>
-  iso ? new Date(iso).toLocaleTimeString("es-ES", { hour12: false }) : "—";
+  iso ? new Date(iso).toLocaleTimeString("es-ES", { hour12: false, ...tzOpts() }) : "—";
 export const fmtDateTime = (iso) =>
   iso
-    ? new Date(iso).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })
+    ? new Date(iso).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false, ...tzOpts() })
     : "—";
 export const pnlClass = (v) => (v > 0 ? "text-emerald-400" : v < 0 ? "text-rose-400" : "text-slate-400");
 

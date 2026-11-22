@@ -9,6 +9,7 @@ Core = lifecycle, config, settings and the monitor loop; the rest lives in mixin
 import time
 import asyncio
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from models import Position, LogEntry
 import notify
 from fx.models import FxSettings
@@ -108,6 +109,8 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
         """Settings section label (Ajustes → HotForex / Pepperstone)."""
         return getattr(self, "profile", HFM).broker_long
 
+    _display_tz = "utc"
+
     @property
     def strat_name(self) -> str:
         return EMA_MAIN_NAME if self.profile.ema_only else "Test cruce EMA 9/21"
@@ -116,8 +119,14 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
         c = self.cfg
         return FxLiveBroker(c.metaapi_token, c.metaapi_account_id, c.metaapi_region, c.metaapi_base_url, c.mt_symbol_suffix, c.mt_symbol_map, self.profile.suffixes)
 
+    def local_time(self, dt: datetime = None, fmt: str = "%d/%m %H:%M") -> str:
+        """Time in the display timezone chosen for this bot (UTC, or London: BST/GMT switch on their own)."""
+        loc = (dt or datetime.now(timezone.utc)).astimezone(ZoneInfo("Europe/London") if self._display_tz == "bst" else timezone.utc)
+        return f"{loc.strftime(fmt)} {loc.tzname()}"
+
     async def tg(self, text: str, kind: str):
-        await notify.notify(f"{self.profile.tg_icon} <b>{self.profile.tg_name}</b>\n{text}", kind, bot=self.profile.key)
+        stamp = f"\n🕒 {self.local_time()}" if self.profile.ema_only else ""
+        await notify.notify(f"{self.profile.tg_icon} <b>{self.profile.tg_name}</b>\n{text}{stamp}", kind, bot=self.profile.key)
 
     async def init(self):
         await self.market.detect()
@@ -144,6 +153,7 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
         s = FxSettings.model_validate(await self.db.settings.find_one({"_id": "main"}))
         if self.profile.ema_only:  # single fixed strategy on every active pair; nothing AI-driven in the trading flow
             syms = [x for x in s.symbols if x in self.profile.symbols] or list(self.profile.symbols)
+            self._display_tz = s.display_tz
             s = s.model_copy(update=dict(symbols=syms, ema_test_enabled=True, ema_test_symbols=syms, ema_test_adx_filter=False, ai_enabled=False, ai_funnel_enabled=False,
                                          ai_position_review_enabled=False, rules_auto_learn=False, htf_filter=False))
         return s

@@ -81,6 +81,7 @@ class FxSettings(BaseModel):
     ema_test_confirm_dist_atr: float = 0.5
     ema_test_confirm_bars: int = 20
     ema_sl_atr: float = 3.0
+    display_tz: str = "utc"  # Pepperstone only: "utc" | "bst" (London time: BST in summer, GMT in winter)
     ema_touch_exit_enabled: bool = False
     bot_running: bool = False
 
@@ -272,6 +273,7 @@ class FxSettingsUpdate(BaseModel):
     ema_test_confirm_dist_atr: Optional[float] = Field(default=None, ge=0.1, le=3.0)
     ema_test_confirm_bars: Optional[int] = Field(default=None, ge=1, le=100)
     ema_sl_atr: Optional[float] = Field(default=None, ge=0.5, le=10)
+    display_tz: Optional[str] = Field(default=None, pattern="^(utc|bst)$")
     ema_touch_exit_enabled: Optional[bool] = None
 
 

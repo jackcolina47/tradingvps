@@ -3,7 +3,7 @@ import { Loader2, Power } from "lucide-react";
 import { toast } from "sonner";
 import { Empty } from "./Panel";
 import { TH, TD } from "./PositionsTable";
-import { http, fmtSignedUsd, fmtUsd, pnlClass, STRATEGY_LABELS, STRATEGY_KEYS, REASON_LABELS, HORIZON_LABELS, ENTRY_LABELS, activeStrategies } from "@/lib/api";
+import { http, tzOffsetSec, fmtSignedUsd, fmtUsd, pnlClass, STRATEGY_LABELS, STRATEGY_KEYS, REASON_LABELS, HORIZON_LABELS, ENTRY_LABELS, activeStrategies } from "@/lib/api";
 import ShadowStats from "./performance/ShadowStats";
 import ExcursionStats from "./performance/ExcursionStats";
 import DailyPnl from "./performance/DailyPnl";
@@ -48,7 +48,7 @@ export default function Performance({ tradeCount, settings, onSave, strategyKeys
   const [data, setData] = useState(null);
   const [error, setError] = useState(false);
   useEffect(() => {
-    http.get(`/performance?tz=${-new Date().getTimezoneOffset()}`).then((r) => { setData(r.data); setError(false); }).catch(() => setError(true));
+    http.get(`/performance?tz=${tzOffsetSec(Date.now() / 1000) / 60}`).then((r) => { setData(r.data); setError(false); }).catch(() => setError(true));
   }, [tradeCount]);
 
   if (error && !data) return <Empty testId="performance-error" text="No se pudo cargar el rendimiento. Reintentando en el próximo refresco." />;

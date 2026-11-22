@@ -633,3 +633,9 @@
 - La estrategia normal `ema_cross` («Cruce EMA 10/20») NO cambió.
 - Renombrado: «Test cruce EMA 9/21» y, en Pepperstone, «Cruce EMA 9 y 21 Personalizado».
 - Tests EMA actualizados (iter55/80/86/101). Quedan fallos antiguos en iter79/iter80 (fixtures obsoletos: `engine.tg`, `shadow_be`, df sin ema9), no relacionados.
+
+## Iteración 104 · Zona horaria de Pepperstone (UTC / BST)
+- `FxSettings.display_tz` ("utc" por defecto | "bst" = hora de Londres, BST/GMT automático). Desplegable «Zona horaria» en Ajustes de Pepperstone.
+- Frontend: `setDisplayTz/tzOpts/tzOffsetSec` en `lib/api.js`; todas las horas del panel, gráficos (`toLocal`), CSV y rendimiento usan esa zona solo en Pepperstone (resto de bots: hora del dispositivo, se resetea en `setApiBase`).
+- Backend: `FxEngine.local_time`; los mensajes de Telegram de Pepperstone llevan pie «🕒 dd/mm HH:MM UTC|BST|GMT».
+- Verificado: API (validación y guardado), conversión BST/GMT en backend, desplegable en pantalla. Telegram real no comprobado.

@@ -1,11 +1,11 @@
-import { REASON_LABELS, STRATEGY_LABELS } from "@/lib/api";
+import { REASON_LABELS, STRATEGY_LABELS, tzOpts } from "@/lib/api";
 
 const esc = (v) => {
   const s = v == null ? "" : String(v).replace(/\r?\n/g, " ");
   return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 const num = (v) => (v == null || v === "" ? "" : String(v).replace(".", ","));
-const dt = (iso) => (iso ? new Date(iso).toLocaleString("es-ES", { hour12: false }) : "");
+const dt = (iso) => (iso ? new Date(iso).toLocaleString("es-ES", { hour12: false, ...tzOpts() }) : "");
 
 const COLUMNS = [
   ["Apertura", (t) => dt(t.opened_at)], ["Cierre", (t) => dt(t.closed_at)], ["Símbolo", (t) => t.symbol], ["Lado", (t) => (t.side === "long" ? "LONG" : "SHORT")],

@@ -1,7 +1,7 @@
 import { ShieldCheck, Sparkles } from "lucide-react";
 import { Area, ComposedChart, Line, ResponsiveContainer, Tooltip, YAxis } from "recharts";
 import { Panel } from "./Panel";
-import { fmtUsd, STRATEGY_LABELS, MODE_LABELS, activeStrategies } from "@/lib/api";
+import { fmtUsd, STRATEGY_LABELS, MODE_LABELS, activeStrategies, tzOpts } from "@/lib/api";
 
 const Stat = ({ label, value, testId }) => (
   <div className="rounded-sm border border-[#1E293B] bg-[#07090E]/60 px-3 py-2">
@@ -90,7 +90,7 @@ export default function BotPanel({ settings: s, meta, account, equity, profileAc
                 </defs>
                 <YAxis hide domain={["dataMin - 5", "dataMax + 5"]} />
                 <Tooltip contentStyle={{ background: "#0D111A", border: "1px solid #1E293B", fontFamily: "IBM Plex Mono", fontSize: 11 }}
-                  labelFormatter={(l) => new Date(l).toLocaleString("es-ES")} formatter={(v, name) => [fmtUsd(v), SERIES[name] || name]} />
+                  labelFormatter={(l) => new Date(l).toLocaleString("es-ES", tzOpts())} formatter={(v, name) => [fmtUsd(v), SERIES[name] || name]} />
                 <Area type="monotone" dataKey="v" stroke="#F7A600" strokeWidth={1.5} fill="url(#eqFill)" isAnimationActive={false} />
                 {hasFlows && <Line data-testid="equity-adjusted-line" type="monotone" dataKey="a" stroke="#38BDF8" strokeWidth={1.2} strokeDasharray="4 3" dot={false} isAnimationActive={false} />}
               </ComposedChart>

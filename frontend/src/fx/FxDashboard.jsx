@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Layers, Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { http, errMsg, setApiBase, SESSION_NAMES, fmtTime } from "@/lib/api";
+import { http, errMsg, setApiBase, setDisplayTz, SESSION_NAMES, fmtTime } from "@/lib/api";
 import { usePolling } from "@/hooks/usePolling";
 import Header from "@/components/bot/Header";
 import KpiStrip from "@/components/bot/KpiStrip";
@@ -92,6 +92,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState("panel");
   const { data, refresh } = usePolling(() => http.get("/dashboard").then((r) => r.data), 4000);
+  if (emaOnly) setDisplayTz(data?.settings?.display_tz === "bst" ? "Europe/London" : "UTC");
 
   useEffect(() => {
     document.title = `${brand.name} · Panel de control`;

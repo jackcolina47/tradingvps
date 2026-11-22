@@ -5,7 +5,7 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "rec
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { SideBadge } from "./Panel";
-import { http, errMsg, fmtUsd, fmtSignedUsd, fmtPrice, fmtDateTime, pnlClass, STRATEGY_LABELS, REASON_LABELS, SESSION_NAMES } from "@/lib/api";
+import { http, errMsg, fmtUsd, fmtSignedUsd, fmtPrice, fmtDateTime, pnlClass, STRATEGY_LABELS, REASON_LABELS, SESSION_NAMES, tzOpts } from "@/lib/api";
 
 const Field = ({ label, value, onChange, options, testId, render = (o) => o }) => (
   <div className="min-w-[140px] flex-1">
@@ -28,7 +28,7 @@ const Metric = ({ label, value, tone, testId }) => (
 
 const DEFAULT_INTRO = (settings) => `Evalúa la estrategia sobre las últimas 1.000 velas reales (sin filtro IA ni TF superior) con el capital inicial de tu cuenta, lotes mínimos de Bybit y el mismo plan de riesgo: ${settings.risk_per_trade}% por operación, ${settings.leverage}x, comisiones 0.055% y trailing stop.`;
 const LP_INTRO = (settings, tf, fx) => `Estrategia de largo plazo: se evalúa en su propia temporalidad (${tf}) con todo el histórico disponible${fx ? " (≈1 año de velas horarias de Yahoo: unos 12 fines de mes)" : tf === "1d" ? " (hasta 1.500 velas diarias, ≈4 años)" : " (1.000 velas de 4h, ≈6 meses)"}, sin filtro IA, con el capital inicial de tu cuenta, ${fx ? "lotes de 0.01 y el spread (y comisión) de tu bróker" : "lotes mínimos de Bybit y comisiones 0.055%"} y tu plan de riesgo: ${settings.risk_per_trade}% por operación, ${fx ? `1:${settings.leverage}` : `${settings.leverage}x`}, trailing stop${fx ? " y cierre por tiempo al mediodía siguiente de Londres" : ""}.`;
-const fmtDateYear = (iso) => (iso ? new Date(iso).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }) : "—");
+const fmtDateYear = (iso) => (iso ? new Date(iso).toLocaleString("es-ES", { ...tzOpts(), day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }) : "—");
 
 const SessionStats = ({ stats }) => (
   <div data-testid="backtest-sessions" className="rounded-sm border border-[#1E293B]">

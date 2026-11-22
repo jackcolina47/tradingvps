@@ -41,7 +41,7 @@ class SignalsMixin:
             if not self._closed_logged:
                 self._closed_logged = True
                 nxt = market_status()["next_change"]
-                await self.log("SCAN", f"Mercado forex cerrado · {'solo se escanean las cripto' if ema_only else 'sin escaneos'} hasta {nxt[:16].replace('T', ' ')} UTC")
+                await self.log("SCAN", f"Mercado forex cerrado · {'solo se escanean las cripto' if ema_only else 'sin escaneos'} hasta " + (self.local_time(datetime.fromisoformat(nxt)) if ema_only else f"{nxt[:16].replace('T', ' ')} UTC"))
             if not ema_only:
                 return
         else:

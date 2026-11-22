@@ -8,10 +8,11 @@ import TradeAiReview from "./TradeAiReview";
 import {
   http, errMsg, fmtPrice, fmtQty, fmtSignedUsd, fmtPct, pnlClass,
   REASON_LABELS, STRATEGY_LABELS, HORIZON_LABELS, ENTRY_LABELS, fmtPips, PIPS_HINT,
+  tzOpts,
 } from "@/lib/api";
 
 const fmtFull = (iso) =>
-  iso ? new Date(iso).toLocaleString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) : "—";
+  iso ? new Date(iso).toLocaleString("es-ES", { ...tzOpts(), day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) : "—";
 const fmtDuration = (min) => {
   if (min == null) return "—";
   const m = Math.round(min);

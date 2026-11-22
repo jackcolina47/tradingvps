@@ -2,10 +2,11 @@ import { useEffect, useRef } from "react";
 import {
   createChart, CandlestickSeries, BarSeries, LineSeries, HistogramSeries, createSeriesMarkers, ColorType, CrosshairMode, LineStyle,
 } from "lightweight-charts";
+import { tzOffsetSec } from "@/lib/api";
 
 const lineOpts = (color, width = 1) => ({ color, lineWidth: width, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
 // lightweight-charts draws UTC: shift every timestamp by the browser offset so axis + crosshair read in local time (DST-aware per candle)
-export const toLocal = (t) => t - new Date(t * 1000).getTimezoneOffset() * 60;
+export const toLocal = (t) => t + tzOffsetSec(t);  // chart axis in the display timezone (device, or the one chosen in Pepperstone)
 
 export function shift(points, daily) {
   if (daily) return points; // daily candles are dates (00:00 UTC): keep them as calendar days

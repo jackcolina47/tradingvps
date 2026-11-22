@@ -120,7 +120,10 @@ export default function SettingsPanel({ settings, meta, profileActive, onSave, o
         <Sel label="Temporalidad" value={form.timeframe} onChange={(v) => set("timeframe", v)} options={meta?.timeframes || []} testId="settings-timeframe-select" />
         {!testOnly && !emaOnly && <Sel label="Criterios de entrada" value={form.signal_mode} onChange={(v) => set("signal_mode", v)} options={meta?.signal_modes || []}
           render={(o) => MODE_LABELS[o]} testId="settings-signal-mode-select" />}
+        {emaOnly && <Sel label="Zona horaria" value={form.display_tz || "utc"} onChange={(v) => set("display_tz", v)} options={["utc", "bst"]}
+          render={(o) => (o === "utc" ? "UTC" : "BST · hora de Londres")} testId="settings-display-tz-select" />}
       </div>
+      {emaOnly && <p data-testid="settings-display-tz-hint" className="-mt-2 text-[11px] text-slate-500">Zona horaria de todas las horas del panel y de los mensajes de Telegram de este bot. «BST · hora de Londres» cambia sola entre BST (UTC+1, verano) y GMT (UTC+0, invierno). Las velas se siguen calculando en UTC.</p>}
       {meta?.mode_info?.[form.signal_mode] && <p data-testid="settings-signal-mode-hint" className="-mt-2 text-[11px] text-slate-500">{meta.mode_info[form.signal_mode].desc}</p>}
       {!testOnly && <>
       <div className={emaOnly ? "hidden" : ""}>
