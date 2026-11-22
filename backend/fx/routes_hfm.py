@@ -138,13 +138,23 @@ def register(router, engine, store):
             link_tx.clear()
             await engine.log("ERROR", f"No se pudo vincular la cuenta {engine.bk}: {str(e)[:160]}")
             raise HTTPException(424, f"No se pudo vincular la cuenta: {str(e)[:160]}")
+            try:  # other MetaApi accounts with the same MT login (e.g. a first attempt with a mistyped server): each one is billed and never used by the bot
+                dups = [a for a in await api.list_accounts() if str(a.get("login")) == str(c.mt_login) and a.get("_id") != acc["_id"]]
+            except MetaApiError:
+                dups = []
         finally:
             await api.aclose()
         await store.update({"metaapi_account_id": acc["_id"], "hfm_state": acc.get("state", ""), "hfm_connection": acc.get("connectionStatus", ""), **_plan_patch(acc)})
         _chart_backoff_reset()
         hint = _plan_hint(acc)
-        return {"ok": True, "account": _acc_view(acc), "plan_mismatch": bool(hint),
-                "hint": hint or "Despliegue solicitado: la conexión tarda 1-3 minutos. Pulsa «Probar conexión» para ver el estado."}
+        dup_hint = ""
+        if dups:
+            dup_hint = (f" ⚠️ En MetaApi hay {len(dups)} cuenta(s) más con el login {c.mt_login} que el bot NO usa: "
+                        + ", ".join(f"{a['_id']} (servidor {a.get('server') or '?'})" for a in dups)
+                        + f". El bot usa {acc['_id']}. Bórralas en app.metaapi.cloud → Accounts para que no se facturen.")
+            await engine.log("RISK", dup_hint.strip())
+        return {"ok": True, "account": _acc_view(acc), "plan_mismatch": bool(hint), "duplicates": [a["_id"] for a in dups],
+                "hint": (hint or "Despliegue solicitado: la conexión tarda 1-3 minutos. Pulsa «Probar conexión» para ver el estado.") + dup_hint}
 
     @router.post("/hfm/recreate")
     async def hfm_recreate():
@@ -175,6 +185,10 @@ def register(router, engine, store):
             raise HTTPException(424, e.msg)
         except Exception as e:
             raise HTTPException(424, f"No se pudo recrear la cuenta: {str(e)[:160]}")
+            try:  # other MetaApi accounts with the same MT login (e.g. a first attempt with a mistyped server): each one is billed and never used by the bot
+                dups = [a for a in await api.list_accounts() if str(a.get("login")) == str(c.mt_login) and a.get("_id") != acc["_id"]]
+            except MetaApiError:
+                dups = []
         finally:
             await api.aclose()
         await store.update({"metaapi_account_id": acc["_id"], "hfm_state": acc.get("state", ""), "hfm_connection": acc.get("connectionStatus", ""),
