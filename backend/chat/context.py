@@ -8,7 +8,7 @@ from fx.profiles import PROFILES as FX_PROFILES, detect_profile as fx_detect_pro
 from fx.market import market_status
 from deps import engine, store, news, FX_BOTS, ai_usage
 
-PANEL_LABEL = {"crypto": "Bybit (cripto)", "fx": "HotForex (forex/metales)", "pepper": "Pepperstone (forex/metales)"}
+PANEL_LABEL = {"crypto": "Bybit (cripto)", "fx": "HotForex (forex/metales)", "pepper": "Pepperstone (forex/metales/cripto CFD · estrategia única: Cruce EMA 9 y 21 Personalizado, sin IA en entradas ni gestión; salida por cruce contrario, SL N×ATR y, opcionales, toque de EMA 21, cierre parcial, trailing y breakeven)"}
 
 logger = logging.getLogger("chat.context")
 SKIP_SETTINGS = {"bot_running", "symbol_params"}
