@@ -662,6 +662,13 @@ Petición explícita del usuario (sustituye a «bloquear contra 4H sin gastar IA
 - `_deep`: si el lado va contra `bias` → SL normal (fijo ATR), TP = el de la IA (nunca más lejos que el normal), exige R:R ≥ `COUNTER_MIN_RR` 1,5; si no hay TP o no llega → Signal `CONTRA_4H` sin abrir. `context.funnel.counter_trend`, source `contra`.
 - Tested: pytest (nuevo test de contratendencia). Sin testing agent. Efecto esperado: más operaciones y más gasto de IA potente.
 
+## Iteración 109 (2026-11) — Bybit: contexto para reglas aprendidas + ejecución blindada (solo Bybit, `engine.funnel_rich`)
+- `funnel._rich` / `metrics(..., rich)` / `_row_txt`: EMA9, EMA21, `cruce_emas_rapidas`, `pendiente_adx` (vela cerrada vs 2 anteriores, ±0,3), último swing high/low de 20 velas con distancia en ATR, `regimen_<tf>: RANGO / CHOPPY` (≥3 cruces de EMA20 en 15 velas). Lo ven Paso 1 y Paso 2.
+- `stage0`: descarta sobreextensión (RSI < 32 y dist EMA20 < −2 ATR → suelo; RSI > 68 y > +2 ATR → techo). MIN_ADX 18 sin cambios.
+- `levels(buffer_atr)`: SL de la IA aceptado se aleja 0,25×ATR (R:R mínimo se comprueba con el stop final); el tamaño al 1 % se calcula después. Solo actúa con «SL/TP por ATR» apagado.
+- `maker._discard`: orden límite no llenada en `maker_wait_bars` velas (o Cancelled/Rejected en Bybit) → cancelada y entrada descartada; ya no hay `market_fallback` por espera. Queda a mercado solo si Bybit rechaza la orden al colocarla (queue_entry).
+- Tested: pytest (stage0/levels nuevos), render de `_row_txt`, sizing 1 % con stop con buffer, expiración maker en paper con BD temporal. Sin testing agent; maker REAL no probado.
+
 ### Pendiente
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.

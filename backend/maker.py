@@ -1,5 +1,5 @@
 """Maker (post-only limit) entries: an approved signal waits up to `maker_wait_bars` candles at the best price (fee 0.02 % instead of
-0.055 %); if it is not filled it goes to market. Paper mode simulates the fill (price must trade through the limit)."""
+0.055 %); if it is not filled the order is cancelled and the entry discarded (never a blind market order). Paper mode simulates the fill (price must trade through the limit)."""
 import logging
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
@@ -46,7 +46,7 @@ async def queue_entry(engine, symbol: str, sig: dict, settings, signal_id: str, 
             return await engine.open_position(symbol, sig, settings, signal_id, risk_factor, risk_reason, horizon=horizon, entry_type="market_fallback")
     await engine.db.pending_entries.insert_one(doc)
     await engine.db.signals.update_one({"_id": ObjectId(signal_id)}, {"$set": {"note": f"Orden límite maker en espera @ {limit:.6g} (hasta {settings.maker_wait_bars} velas)"}})
-    await engine.log("ORDER", f"{symbol}: orden LÍMITE maker {side.upper()} @ {limit:.6g} · espera máx. {settings.maker_wait_bars} velas de {tf} · si no se llena pasa a mercado")
+    await engine.log("ORDER", f"{symbol}: orden LÍMITE maker {side.upper()} @ {limit:.6g} · espera máx. {settings.maker_wait_bars} velas de {tf} · si no se llena se cancela")
     return doc
 
 
@@ -62,6 +62,13 @@ async def _finish(engine, d: dict, fill: dict = None, entry_type: str = "maker")
     return pos
 
 
+async def _discard(engine, d: dict, why: str):
+    """Unfilled limit order: the entry is dropped, never chased at market."""
+    await engine.db.pending_entries.delete_one({"_id": d["_id"]})
+    await engine.db.signals.update_one({"_id": ObjectId(d["signal_id"])}, {"$set": {"note": f"No ejecutada: {why}"}})
+    await engine.log("ORDER", f"{d['symbol']}: {why} · entrada descartada (sin orden a mercado)")
+
+
 async def monitor_pending(engine, tickers: dict):
     now = datetime.now(timezone.utc)
     async for d in engine.db.pending_entries.find():
@@ -75,8 +82,7 @@ async def monitor_pending(engine, tickers: dict):
             if paper_filled(d["side"], d["limit_price"], t["price"]):
                 await _finish(engine, d, {"entry": d["limit_price"]}, "maker")
             elif now >= datetime.fromisoformat(d["expires_at"]):
-                await engine.log("ORDER", f"{d['symbol']}: orden límite no llenada en {d['wait_bars']} velas · entrada a mercado")
-                await _finish(engine, d, None, "market_fallback")
+                await _discard(engine, d, f"orden límite no llenada en {d['wait_bars']} velas, cancelada")
         except Exception as e:
             logger.exception(f"pending entry {d.get('symbol')}: {e}")
 
@@ -90,8 +96,7 @@ async def _monitor_live(engine, d: dict, now):
         await _finish(engine, d, {"entry": o["avg_price"], "qty": o["exec_qty"], "fee": o["fee"], "order_id": d["order_id"], "link_id": d["link_id"]}, "maker")
         return
     if status in ("Cancelled", "Rejected", "Deactivated") and not o.get("exec_qty"):
-        await engine.log("ORDER", f"{d['symbol']}: orden límite {status} en Bybit · entrada a mercado")
-        await _finish(engine, d, None, "market_fallback")
+        await _discard(engine, d, f"orden límite {status} en Bybit")
         return
     if now >= datetime.fromisoformat(d["expires_at"]):
         try:
@@ -103,8 +108,7 @@ async def _monitor_live(engine, d: dict, now):
             await engine.log("ORDER", f"{d['symbol']}: orden límite llenada parcialmente ({o['exec_qty']}) · resto cancelado")
             await _finish(engine, d, {"entry": o["avg_price"], "qty": o["exec_qty"], "fee": o["fee"], "order_id": d["order_id"], "link_id": d["link_id"]}, "maker")
         else:
-            await engine.log("ORDER", f"{d['symbol']}: orden límite no llenada en {d['wait_bars']} velas · entrada a mercado")
-            await _finish(engine, d, None, "market_fallback")
+            await _discard(engine, d, f"orden límite no llenada en {d['wait_bars']} velas, cancelada")
 
 
 async def cancel_all(engine, reason: str = "bot detenido", symbols: list = None):

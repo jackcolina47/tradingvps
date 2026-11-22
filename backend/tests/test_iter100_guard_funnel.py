@@ -149,6 +149,19 @@ class TestStage0:
     def test_adx_and_volume_ok_passes(self):
         assert funnel.stage0(self._m(adx=18, activity=0.8, activity_kind="volumen")) is None
 
+    def test_overextended_only_for_rich(self):
+        floor = dict(adx=25, activity=2.0, activity_kind="volumen", rsi=30, dist_ema20_atr=-2.4)
+        assert funnel.stage0(self._m(**floor)) is None
+        assert "suelo" in funnel.stage0(self._m(rich=True, **floor))
+        assert "techo" in funnel.stage0(self._m(rich=True, **{**floor, "rsi": 70, "dist_ema20_atr": 2.1}))
+        assert funnel.stage0(self._m(rich=True, **{**floor, "rsi": 30, "dist_ema20_atr": -1.5})) is None
+
+    def test_ai_stop_buffer(self):
+        s = type("S", (), {"atr_levels_enabled": False, "atr_sl_mult": 2.0, "atr_tp_mult": 4.0})()
+        assert funnel.levels("long", 100.0, 1.0, s, 99.0, 103.0, buffer_atr=0.25) == (98.75, 103.0, "ia")
+        assert funnel.levels("short", 100.0, 1.0, s, 101.0, 97.0, buffer_atr=0.25) == (101.25, 97.0, "ia")
+        assert funnel.levels("long", 100.0, 1.0, s, 99.0, 103.0) == (99.0, 103.0, "ia")
+
     def test_next_trigger(self):
         base = 1_800_000_000 // 900 * 900
         assert funnel.next_trigger(base + 3) == base + 8

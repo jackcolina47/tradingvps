@@ -23,6 +23,9 @@ INFO = {STRATEGY: {"name": "Embudo IA", "rules": "Filtro técnico sin IA → mod
                    "basis": "Análisis discrecional de un trader profesional (tendencia, EMAs, momentum, volumen, oferta y demanda) con dimensionamiento por riesgo fijo."}}
 TRIGGER_MIN, TRIGGER_DELAY_SEC = 15, 8   # the funnel fires at :00/:15/:30/:45 + 8 s, once the exchange has closed the candle
 MIN_ADX, MIN_VOLUME = 18, 0.8
+OVEREXT_RSI, OVEREXT_ATR = (32, 68), 2.0   # late entries: RSI beyond these and price further than 2 ATR from the EMA20 (rich engines)
+SL_BUFFER_ATR = 0.25                        # safety margin added behind an AI stop (rich engines)
+SWING_BARS, RANGE_BARS, RANGE_CROSSES = 20, 15, 3
 
 
 def next_trigger(now: float = None) -> float:
@@ -71,7 +74,26 @@ def zones(df: pd.DataFrame, i: int, atr: float, price: float, k: int = 3, lookba
     return {"demand": nearest(lows, True), "supply": nearest(highs, False)} if atr > 0 else {"demand": None, "supply": None}
 
 
-def metrics(df: pd.DataFrame, i: int, has_volume: bool, price: float) -> dict:
+def _rich(df: pd.DataFrame, i: int, atr: float, price: float) -> dict:
+    """Extra context for the learned rules: fast EMAs, ADX slope, last swings and range regime."""
+    close, adx, hi, lo = df["close"], df["adx"].values, df["high"].values, df["low"].values
+    e9, e21 = float(close.ewm(span=9, adjust=False).mean().iloc[i]), float(close.ewm(span=21, adjust=False).mean().iloc[i])
+    prev = (float(adx[i - 1]), float(adx[i - 2]))
+    slope = "SUBIENDO" if adx[i] > max(prev) + 0.3 else "BAJANDO" if adx[i] < min(prev) - 0.3 else "PLANA"
+    start = max(2, i - SWING_BARS + 1)
+    highs = [j for j in range(start, i - 1) if hi[j] >= hi[j - 2:j + 3].max()]
+    lows = [j for j in range(start, i - 1) if lo[j] <= lo[j - 2:j + 3].min()]
+    sh = float(hi[highs[-1]]) if highs else float(hi[start:i + 1].max())
+    sl = float(lo[lows[-1]]) if lows else float(lo[start:i + 1].min())
+    above = (close.iloc[i - RANGE_BARS + 1:i + 1] > df["ema20"].iloc[i - RANGE_BARS + 1:i + 1]).values
+    crosses = int((above[1:] != above[:-1]).sum())
+    return {"rich": True, "ema9": round(e9, 8), "ema21": round(e21, 8), "fast_cross": "ALCISTA" if e9 > e21 else "BAJISTA", "adx_slope": slope,
+            "swing_high": round(sh, 8), "swing_high_atr": round((sh - price) / atr, 2) if atr else 0,
+            "swing_low": round(sl, 8), "swing_low_atr": round((price - sl) / atr, 2) if atr else 0,
+            "ema20_crosses": crosses, "regime": "RANGO / CHOPPY" if crosses >= RANGE_CROSSES else None}
+
+
+def metrics(df: pd.DataFrame, i: int, has_volume: bool, price: float, rich: bool = False) -> dict:
     """Everything the models see about a pair; `i` = last closed candle. Without real/tick volume the candle range replaces it."""
     row = df.iloc[i]
     atr = float(row["atr"])
@@ -84,7 +106,8 @@ def metrics(df: pd.DataFrame, i: int, has_volume: bool, price: float) -> dict:
             "rsi": round(float(row["rsi"]), 1), "macd_hist": round(float(row["macd_hist"]), 8), "macd_rising": bool(row["macd_hist"] > df["macd_hist"].iloc[i - 1]),
             "adx": round(float(row["adx"]), 1), "atr": round(atr, 8), "atr_pct": round(atr / price * 100, 3) if price else 0,
             "activity": round(activity, 2), "activity_kind": "volumen" if has_volume else "rango",
-            "dist_ema20_atr": round((price - e20) / atr, 2) if atr else 0, "demand": z["demand"], "supply": z["supply"], "candle_ts": int(row["ts"])}
+            "dist_ema20_atr": round((price - e20) / atr, 2) if atr else 0, "demand": z["demand"], "supply": z["supply"], "candle_ts": int(row["ts"]),
+            **(_rich(df, i, atr, price) if rich else {})}
 
 
 def stage0(m: dict) -> str | None:
@@ -95,17 +118,23 @@ def stage0(m: dict) -> str | None:
         return f"sin tendencia (ADX {m['adx']} < {MIN_ADX})"
     if m["activity_kind"] == "volumen" and m["activity"] < MIN_VOLUME:   # forex on Yahoo data has no reliable volume: ADX only
         return f"volumen débil ({m['activity']}× < {MIN_VOLUME}×)"
+    if m.get("rich"):   # late entry: no AI call
+        if m["rsi"] < OVEREXT_RSI[0] and m["dist_ema20_atr"] < -OVEREXT_ATR:
+            return f"sobreextendido en suelo (RSI/ATR) · RSI {m['rsi']}, precio a {m['dist_ema20_atr']} ATR de EMA20"
+        if m["rsi"] > OVEREXT_RSI[1] and m["dist_ema20_atr"] > OVEREXT_ATR:
+            return f"sobreextendido en techo (RSI/ATR) · RSI {m['rsi']}, precio a +{m['dist_ema20_atr']} ATR de EMA20"
     return None
 
 
-def levels(side: str, price: float, atr: float, settings, ai_sl=None, ai_tp=None, digits: int = None) -> tuple:
-    """(sl, tp, source). Fixed toggle ON → sl_mult×ATR / tp_mult×ATR. OFF → the AI's levels when sane, otherwise the same ATR multiples."""
+def levels(side: str, price: float, atr: float, settings, ai_sl=None, ai_tp=None, digits: int = None, buffer_atr: float = 0.0) -> tuple:
+    """(sl, tp, source). Fixed toggle ON → sl_mult×ATR / tp_mult×ATR. OFF → the AI's levels when sane, otherwise the same ATR multiples.
+    `buffer_atr` moves an accepted AI stop that many ATR further away (the position size is computed afterwards from the final stop)."""
     d = 1 if side == "long" else -1
     sl, tp, source = price - d * settings.atr_sl_mult * atr, price + d * settings.atr_tp_mult * atr, "atr"
     if not settings.atr_levels_enabled and ai_sl and ai_tp:
         risk, reward = (price - ai_sl) * d, (ai_tp - price) * d
-        if SL_ATR_BAND[0] * atr <= risk <= SL_ATR_BAND[1] * atr and reward >= MIN_RR * risk:
-            sl, tp, source = float(ai_sl), float(ai_tp), "ia"
+        if SL_ATR_BAND[0] * atr <= risk <= SL_ATR_BAND[1] * atr and reward >= MIN_RR * (risk + buffer_atr * atr):
+            sl, tp, source = float(ai_sl) - d * buffer_atr * atr, float(ai_tp), "ia"
     if digits is not None:
         sl, tp = round(sl, digits), round(tp, digits)
     return sl, tp, source
@@ -146,6 +175,11 @@ def _row_txt(symbol: str, m: dict) -> str:
     return (f"{symbol}: precio {m['price']:.6g} | tendencia {m['trend']} (EMA20 {m['ema20']:.6g}, EMA50 {m['ema50']:.6g}, EMA200 {m['ema200']:.6g}; precio a {m['dist_ema20_atr']:+} ATR de EMA20) | "
             f"RSI {m['rsi']} | MACD hist {m['macd_hist']:.4g} {'subiendo' if m['macd_rising'] else 'bajando'} | ADX {m['adx']} | ATR {m['atr_pct']}% | "
             f"{m['activity_kind']} {m['activity']}× | demanda {_zone_txt(m['demand'])} | oferta {_zone_txt(m['supply'])}"
+            + (f"\n   EMA9 {m['ema9']:.6g}, EMA21 {m['ema21']:.6g} · cruce_emas_rapidas: {m['fast_cross']} ({'EMA9 > EMA21' if m['fast_cross'] == 'ALCISTA' else 'EMA9 < EMA21'}) | "
+               f"pendiente_adx: {m['adx_slope']} | último swing high ({SWING_BARS} velas) {m['swing_high']:.6g} (a {m['swing_high_atr']:+} ATR) · "
+               f"último swing low {m['swing_low']:.6g} (a {m['swing_low_atr']:+} ATR)"
+               + (f" | regimen_{m.get('tf', 'tf')}: {m['regime']} ({m['ema20_crosses']} cruces de EMA20 en {RANGE_BARS} velas): exige extremos claros de oferta/demanda" if m["regime"] else "")
+               if m.get("rich") else "")
             + (f"\n   {_mtf_txt(m)}" if m.get("mtf") else ""))
 
 
@@ -292,7 +326,8 @@ async def run(engine, settings) -> int:
             df, has_volume = await engine.funnel_frame(symbol, tf)
             i = len(df) - 2
             price = engine.market.tickers.get(symbol, {}).get("price") or float(df["close"].iloc[-1])
-            m = metrics(df, i, has_volume, price)
+            m = metrics(df, i, has_volume, price, getattr(engine, "funnel_rich", False))
+            m["tf"] = tf
             rows[symbol], frames[symbol] = m, (df, i, has_volume)
             prev = engine.analysis.get(symbol, {})
             engine.analysis[symbol] = {**engine.funnel_analysis(symbol, m), "trend": {"MIXTA": "NEUTRAL"}.get(m["trend"], m["trend"]), "rsi": m["rsi"], "macd_hist": m["macd_hist"],
@@ -413,7 +448,7 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
         return 0
     side = "long" if res["decision"] == "BUY" else "short"
     price = engine.market.tickers.get(symbol, {}).get("price") or m["price"]
-    sl, tp, source = levels(side, price, m["atr"], settings, res["sl"], res["tp"], engine.funnel_digits(symbol))
+    sl, tp, source = levels(side, price, m["atr"], settings, res["sl"], res["tp"], engine.funnel_digits(symbol), SL_BUFFER_ATR if m.get("rich") else 0.0)
     counter = m.get("bias") not in (None, side)
     if counter:   # against the 4H trend: the stop stays, the target is the AI's (before the first 4H/1H obstacle), never further than the normal one
         d = 1 if side == "long" else -1

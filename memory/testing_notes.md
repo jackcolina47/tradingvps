@@ -39,3 +39,4 @@
 - NO volver a lanzar `pytest tests` completo con `-n 4`: 148 fallos espurios por pisarse entre sí y dejó Bybit en modo REAL (testnet), símbolos reseteados a 6, `symbol_params` vacío y Pepperstone arrancado. Restaurado a mano (paper, 11 pares, params ZEC/HYPE, pepper parado).
 - `test_iter50_fx_candle_alignment` depende de Yahoo (falla en la pausa diaria de metales 21–22 h UTC): no es regresión.
 - La Emergent key solo admite 1 petición simultánea (`429 concurrent_request_limit`, 124 veces en el log): `ai_advisor._serialized` serializa todas las llamadas LLM (semáforo global) y reintenta con backoff 2/5/10 s.
+- tests/test_iter101_cleanup_retry.py::TestSettingsPut::test_risk_atr_toggles escribe en los ajustes reales por HTTP; si se corta la conexión deja atr_levels/breakeven/trailing/partial_tp en False. Tras ejecutar la suite, comprobar y restaurar a True en los 3 bots.
