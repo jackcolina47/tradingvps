@@ -24,12 +24,12 @@ async def _ema_cross_off(engine, db):
 
 
 async def _pepper_ema_only(engine, db):
-    """Pepperstone becomes a single-strategy bot («Cruce EMA 10 y 20 Personalizado»). Nothing is deleted here: the bot is left stopped with the new pair list and
+    """Pepperstone becomes a single-strategy bot («Cruce EMA 9 y 21 Personalizado»). Nothing is deleted here: the bot is left stopped with the new pair list and
     the user wipes history/positions with the «Reiniciar» button (explicit action). Positions of the old strategies keep their SL/TP until then."""
     from fx.symbols import PEPPER_SYMBOLS
     await db.pep_settings.update_one({"_id": "main"}, {"$set": {"symbols": list(PEPPER_SYMBOLS), "strategy": "all", "bot_running": False, "ema_test_enabled": True,
                                                                 "ema_test_symbols": list(PEPPER_SYMBOLS), "ema_test_adx_filter": False, "ai_enabled": False}})
-    await db.pep_logs.insert_one({"level": "INFO", "ts": now_iso(), "message": "Pepperstone pasa a una sola estrategia (Cruce EMA 10 y 20 Personalizado) · bot detenido · "
+    await db.pep_logs.insert_one({"level": "INFO", "ts": now_iso(), "message": "Pepperstone pasa a una sola estrategia (Cruce EMA 9 y 21 Personalizado) · bot detenido · "
                                   "pulsa «Reiniciar» para empezar de cero (borra posiciones paper, historial y señales)"})
 
 

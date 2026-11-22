@@ -278,8 +278,8 @@ EMA_TEST = "ema_test"
 EMA_TEST_TAG = "Cruce EMAs Especial"
 SAFETY_SL_ATR = 3.0  # wide emergency stop: only a violent move against the position closes it before the opposite cross
 STRATEGY_INFO[EMA_TEST] = {
-    "name": "Test cruce EMA 10/20",
-    "rules": "EXPERIMENTAL · Cruce puro de EMA10/EMA20 al cierre de la vela: al alza abre largo, a la baja abre corto. Sin TP: la posición se cierra "
+    "name": "Test cruce EMA 9/21",
+    "rules": "EXPERIMENTAL · Cruce puro de EMA9/EMA21 al cierre de la vela: al alza abre largo, a la baja abre corto. Sin TP: la posición se cierra "
              "(y se invierte) en el siguiente cruce contrario. Solo un SL de seguridad a 3×ATR contra movimientos violentos entre cierres de vela. "
              "Sin filtros (salvo el ADX opcional), sin IA de aprobación ni revisión. Solo en los pares del test.",
     "basis": "Sistema stop-and-reverse clásico de medias móviles para medir la rentabilidad bruta del cruce antes de añadirle filtros.",
@@ -296,9 +296,9 @@ def ema_test_params(settings) -> dict:
 
 
 def _ema_test_confirmed(df, i, c: dict) -> Optional[dict]:
-    """Confirmed entry: after an EMA10/20 cross, enter on the FIRST candle (within `bars` of the cross) whose ADX exceeds `adx`,
+    """Confirmed entry: after an EMA9/21 cross, enter on the FIRST candle (within `bars` of the cross) whose ADX exceeds `adx`,
     and only if the EMAs are still closer than `dist_atr` × ATR on that candle; otherwise the cross is discarded."""
-    e10, e20, adx = df["ema10"].values, df["ema20"].values, df["adx"].values
+    e10, e20, adx = df["ema9"].values, df["ema21"].values, df["adx"].values
     up = e10[i] > e20[i]
     if e10[i] == e20[i]:
         return None
@@ -312,20 +312,20 @@ def _ema_test_confirmed(df, i, c: dict) -> Optional[dict]:
     long = bool(up)
     sl_k = float(c.get("sl_atr") or SAFETY_SL_ATR)
     sl, tp = _atr_levels(a, long, None, sl_k, 2 * sl_k)
-    reasons = [f"EMA10 cruzó {'al alza' if long else 'a la baja'} la EMA20 hace {i - cross} vela(s) (máx. {int(c['bars'])})",
+    reasons = [f"EMA9 cruzó {'al alza' if long else 'a la baja'} la EMA21 hace {i - cross} vela(s) (máx. {int(c['bars'])})",
                f"Entrada confirmada: ADX {adx[i]:.1f} > {c['adx']:g} con las EMAs a {gap:.2f}×ATR (máx. {c['dist_atr']:g}×ATR)",
                f"SL de seguridad {sl_k:g}×ATR · salida en el siguiente cruce contrario"]
     return {**_signal("long" if long else "short", a, sl, tp, EMA_TEST, reasons, 3, int(a["ts"])), "exit_mode": "cross"}
 
 
 def ema_test(df, i, htf=None, params=None, m=None) -> Optional[dict]:
-    """Raw EMA10/EMA20 cross on the closed candle `i`. The SL/TP returned are VIRTUAL (2×ATR / 6×ATR): used only for position sizing and R metrics, never executed."""
+    """Raw EMA9/EMA21 cross on the closed candle `i`. The SL/TP returned are VIRTUAL (2×ATR / 6×ATR): used only for position sizing and R metrics, never executed."""
     if (params or {}).get("ema_test_confirm"):
         return _ema_test_confirmed(df, i, params["ema_test_confirm"])
     a, b = df.iloc[i], df.iloc[i - 1]
-    if a["ema10"] > a["ema20"] and b["ema10"] <= b["ema20"]:
+    if a["ema9"] > a["ema21"] and b["ema9"] <= b["ema21"]:
         side = "long"
-    elif a["ema10"] < a["ema20"] and b["ema10"] >= b["ema20"]:
+    elif a["ema9"] < a["ema21"] and b["ema9"] >= b["ema21"]:
         side = "short"
     else:
         return None
@@ -336,7 +336,7 @@ def ema_test(df, i, htf=None, params=None, m=None) -> Optional[dict]:
         return None  # sideways filter: ignore the cross (the exit on the opposite cross still applies to open positions)
     sl_k = float((params or {}).get("ema_test_sl_atr") or SAFETY_SL_ATR)
     sl, tp = _atr_levels(a, long, None, sl_k, 2 * sl_k)  # SL = safety net only (executed); TP virtual (never executed)
-    reasons = [f"EMA10 cruza {'al alza' if long else 'a la baja'} la EMA20 al cierre de la vela",
+    reasons = [f"EMA9 cruza {'al alza' if long else 'a la baja'} la EMA21 al cierre de la vela",
                (f"Filtro de lateral: ADX {adx:.1f} ≥ {adx_min:g} · " if adx_min else "Test experimental · ") + f"SL de seguridad {sl_k:g}×ATR · salida y giro en el siguiente cruce contrario"]
     return {**_signal(side, a, sl, tp, EMA_TEST, reasons, 3, int(a["ts"])), "exit_mode": "cross"}
 
@@ -350,11 +350,13 @@ EXIT_REASON = "CRUCE"
 TOUCH_REASON = "TOQUE_EMA"  # optional exit: a closed candle touches the EMA21 while the position is open
 
 
-def exit_signal(strategy: str, side: str, ema10: float, ema20: float) -> bool:
-    """Strategy-specific exit at candle close: ema_cross leaves as soon as the fast EMA is back on the wrong side of the slow one."""
+def exit_signal(strategy: str, side: str, r) -> bool:
+    """Strategy-specific exit at candle close: the fast EMA is back on the wrong side of the slow one (ema_test: EMA9/EMA21 · ema_cross: EMA10/EMA20). `r` = candle row."""
     if strategy not in EXIT_ON_CROSS:
         return False
-    return ema10 < ema20 if side == "long" else ema10 > ema20
+    fast, slow = (float(r["ema9"]), float(r["ema21"])) if strategy == EMA_TEST else (float(r["ema10"]), float(r["ema20"]))
+    return fast < slow if side == "long" else fast > slow
+
 
 
 def active_strategies(strategy: str, disabled=()) -> list:

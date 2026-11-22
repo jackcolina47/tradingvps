@@ -106,8 +106,8 @@ def test_max_positions_now_applies():
     asyncio.run(run())
 
 
-def _row_df(low, high, ema21, ema10=0.52, ema20=0.51, ts=10 * H):
-    return pd.DataFrame([{"ts": ts, "low": low, "high": high, "ema21": ema21, "ema10": ema10, "ema20": ema20}])
+def _row_df(low, high, ema21, ema9=None, ts=10 * H):  # default: EMA9 above EMA21 (no opposite cross for a long)
+    return pd.DataFrame([{"ts": ts, "low": low, "high": high, "ema21": ema21, "ema9": ema21 + 0.01 if ema9 is None else ema9}] * 2)
 
 
 def test_touch_exit():

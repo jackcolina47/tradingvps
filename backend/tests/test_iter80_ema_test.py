@@ -91,8 +91,8 @@ class TestStrategyUnit:
     def test_registry(self):
         assert "ema_test" not in st.active_strategies("all")
         assert st.active_strategies("ema_test") == ["ema_test"]
-        assert st.exit_signal("ema_test", "long", 1.0, 2.0) is True
-        assert st.exit_signal("ema_test", "short", 1.0, 2.0) is False
+        assert st.exit_signal("ema_test", "long", {"ema9": 1.0, "ema21": 2.0}) is True
+        assert st.exit_signal("ema_test", "short", {"ema9": 1.0, "ema21": 2.0}) is False
         assert "ema_test" in st.STRATEGY_INFO and "ema_test" in st.EXIT_ON_CROSS and "ema_test" in st.CROSS_ONLY
 
 

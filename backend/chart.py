@@ -53,7 +53,7 @@ async def build(db, symbol: str, tf: str, rows: list, step: int, limit: int, bef
     def line(col):  # NaN → whitespace point, so every series stays index-aligned with the candles
         return [{"time": t, "value": round(float(v), 8)} if v == v else {"time": t} for t, v in zip(times, df[col].tolist())]
 
-    df = df.assign(gap=((df["ema10"] - df["ema20"]) / df["atr"].where(df["atr"] > 0)).fillna(0.0), adx=df["adx"].fillna(0.0))  # EMA10−EMA20 in ATR units (test cruce EMA)
+    df = df.assign(gap=((df["ema9"] - df["ema21"]) / df["atr"].where(df["atr"] > 0)).fillna(0.0), adx=df["adx"].fillna(0.0))  # EMA9−EMA21 in ATR units (test cruce EMA)
     candles = [{"time": t, "open": o, "high": h, "low": lo, "close": c} for t, o, h, lo, c in zip(times, df["open"], df["high"], df["low"], df["close"])]
     volume = [{"time": t, "value": v, "color": "rgba(16,185,129,0.35)" if c >= o else "rgba(239,68,68,0.35)"}
               for t, v, o, c in zip(times, df["volume"], df["open"], df["close"])]

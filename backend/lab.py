@@ -1,4 +1,4 @@
-"""Bybit Lab: paper-only clone of the crypto engine for strategy research. It trades ONLY the «Test cruce EMA 10/20» mode, has its own
+"""Bybit Lab: paper-only clone of the crypto engine for strategy research. It trades ONLY the «Test cruce EMA 9/21» mode, has its own
 collections (lab_*) and shares the market data of the main Bybit bot. No REAL mode, no AI, no news, no regular strategies."""
 import asyncio
 import time

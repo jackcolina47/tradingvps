@@ -627,3 +627,9 @@
 - Telegram: mensaje propio al cerrar por `TOQUE_EMA` («toque de la EMA 21», Ganó/Perdió X USD) en `_announce_close`.
 - Orden manual en bots `ema_only`: `tp` opcional, abre con `exit_mode="cross"` (solo SL), respeta «Máx. posiciones»; sale por cruce contrario real (evento de cruce tras la entrada) o por toque de EMA 21 si está activo. Diálogo sin campos de TP (`trade.noTp`). Bybit/HotForex siguen exigiendo TP.
 - Verificado: tests iter101 (mensaje Telegram) + API (orden SOLUSD sin TP → exit_mode cross). Cierre por cruce de una manual no observado en vivo.
+
+## Iteración 103 · EMAs unificadas a 9/21 (todos los bots)
+- El test de cruce (`ema_test`, entrada cruda y confirmada, salida por cruce, cierre manual por cruce, backtests y línea «Dist. EMA» del gráfico) usa EMA9/EMA21 en Bybit, Lab, Lab 4H, HotForex y Pepperstone. `exit_signal(strategy, side, row)` elige columnas por estrategia.
+- La estrategia normal `ema_cross` («Cruce EMA 10/20») NO cambió.
+- Renombrado: «Test cruce EMA 9/21» y, en Pepperstone, «Cruce EMA 9 y 21 Personalizado».
+- Tests EMA actualizados (iter55/80/86/101). Quedan fallos antiguos en iter79/iter80 (fixtures obsoletos: `engine.tg`, `shadow_be`, df sin ema9), no relacionados.

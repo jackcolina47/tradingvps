@@ -28,10 +28,10 @@ const withAuth = (client) => {
 // One shared client: the active bot (crypto → /api, HotForex → /api/fx, Pepperstone → /api/pepper) switches the base URL so every panel is reusable.
 export const http = withAuth(axios.create({ baseURL: API, timeout: 90000 }));
 export const BOT_API = { fx: "/api/fx", pepper: "/api/pepper", lab: "/api/lab", lab4h: "/api/lab4h" };
-export const EMA_MAIN_NAME = "Cruce EMA 10 y 20 Personalizado";
+export const EMA_MAIN_NAME = "Cruce EMA 9 y 21 Personalizado";
 export const setApiBase = (bot) => {
   http.defaults.baseURL = BOT_API[bot] ? `${BACKEND}${BOT_API[bot]}` : API;
-  STRATEGY_LABELS.ema_test = bot === "pepper" ? EMA_MAIN_NAME : "Test cruce EMA 10/20";  // Pepperstone: the EMA cross is the bot's only, main strategy
+  STRATEGY_LABELS.ema_test = bot === "pepper" ? EMA_MAIN_NAME : "Test cruce EMA 9/21";  // Pepperstone: the EMA cross is the bot's only, main strategy
 };
 // Global features (chat, backups, VPS package) always talk to /api, whichever dashboard is open. Use relative paths ("/chat").
 // (In the VPS build REACT_APP_BACKEND_URL is "" so API is relative and could not be used as an absolute URL with `http`.)
@@ -70,7 +70,7 @@ export const STRATEGY_LABELS = {
   supertrend_momentum: "Supertrend + momentum",
   ema_pullback: "Pullback EMA21",
   ema_cross: "Cruce EMA 10/20",
-  ema_test: "Test cruce EMA 10/20", manual: "Manual",
+  ema_test: "Test cruce EMA 9/21", manual: "Manual",
   multi_horizon: "Tendencia Multi-Horizonte",
   double_divergence: "Divergencia doble RSI+MACD",
   fix_reversion: "Reversión fin de mes (fix)",

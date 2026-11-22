@@ -101,28 +101,28 @@ class SignalsMixin:
         row = df.iloc[i]
         closed_ms = int(row["ts"]) + TF_SECONDS[settings.timeframe] * 1000 if settings else 0
         prev = df.iloc[i - 1]
-        f, s, pf, ps = float(row["ema10"]), float(row["ema20"]), float(prev["ema10"]), float(prev["ema20"])
+        f, s, pf, ps = float(row["ema9"]), float(row["ema21"]), float(prev["ema9"]), float(prev["ema21"])
         async for d in self.db.positions.find({"symbol": symbol, "$or": [{"strategy": {"$in": list(EXIT_ON_CROSS)}}, {"strategy": "manual", "exit_mode": "cross"}]},
                                               {"_id": 1, "side": 1, "strategy": 1, "exit_mode": 1, "opened_at": 1}):
             if d["strategy"] == "manual":  # manual order: leaves on a real cross against it (it may have been opened against the current EMA alignment)
                 if settings and closed_ms > datetime.fromisoformat(d["opened_at"]).timestamp() * 1000 and ((f < s and pf >= ps) if d["side"] == "long" else (f > s and pf <= ps)):
-                    await self.log("INFO", f"{symbol}: EMA10 cruzó {'por debajo' if d['side'] == 'long' else 'por encima'} de EMA20 · cierre de la posición manual {d['side'].upper()} por cruce contrario")
+                    await self.log("INFO", f"{symbol}: EMA9 cruzó {'por debajo' if d['side'] == 'long' else 'por encima'} de EMA21 · cierre de la posición manual {d['side'].upper()} por cruce contrario")
                     await self.close_position(str(d["_id"]), None, EXIT_REASON)
                     continue
                 if not (settings and settings.ema_touch_exit_enabled):
                     continue
             touch = (settings and settings.ema_touch_exit_enabled and d.get("exit_mode") == "cross" and float(row["low"]) <= float(row["ema21"]) <= float(row["high"])
                      and closed_ms > datetime.fromisoformat(d["opened_at"]).timestamp() * 1000)  # only candles that closed after the entry
-            if touch and not exit_signal(d["strategy"], d["side"], float(row["ema10"]), float(row["ema20"])):
+            if touch and not exit_signal(d["strategy"], d["side"], row):
                 await self.log("INFO", f"{symbol}: la vela cerró tocando la EMA21 ({float(row['ema21']):.6g}) con la posición {d['side'].upper()} abierta · cierre por la regla «toque de EMA21»")
                 await self.close_position(str(d["_id"]), None, TOUCH_REASON)
-            elif exit_signal(d["strategy"], d["side"], float(row["ema10"]), float(row["ema20"])):
-                await self.log("INFO", f"{symbol}: la EMA10 volvió a cruzar la EMA20 en contra de la posición {d['side'].upper()} · cierre por regla de la estrategia"
+            elif exit_signal(d["strategy"], d["side"], row):
+                await self.log("INFO", f"{symbol}: las EMAs volvieron a cruzarse en contra de la posición {d['side'].upper()} · cierre por regla de la estrategia"
                                + (" (test cruce EMA: se invierte si el test sigue activo)" if d["strategy"] == EMA_TEST and not self.profile.ema_only else ""))
                 await self.close_position(str(d["_id"]), None, EXIT_REASON)
 
     async def _handle_test_signal(self, symbol: str, sig: dict, settings: FxSettings):
-        """«Test cruce EMA 10/20»: stop-and-reverse on the raw cross. Immune to AI approval, funnel, sessions, market gates and «Máx. posiciones»;
+        """«Test cruce EMA 9/21»: stop-and-reverse on the raw cross. Immune to AI approval, funnel, sessions, market gates and «Máx. posiciones»;
         only the daily-loss limit, one position per pair, the broker link and the weekend close apply. The opposite position was already closed by _exit_on_cross."""
         key = f"{symbol}:{EMA_TEST}:{sig['side']}:{sig['key_ts']}"
         if key in self.signal_keys or await self.db.signals.find_one({"key": key}, {"_id": 1}):

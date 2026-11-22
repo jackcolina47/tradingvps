@@ -21,7 +21,7 @@ export const BRANDS = {
     bot: "pepper", path: "/pepperstone", api: "/api/pepper", name: "Pepperstone AI trading", short: "Pepperstone", broker: "Pepperstone", brokerLong: "Pepperstone", accent: "teal", ctrader: true, emaOnly: true,
     accentText: "text-teal-300", chip: "border-teal-500/40 bg-teal-500/10 text-teal-300", spinner: "text-teal-300",
     costsNote: "spread y comisión según tu tipo de cuenta Pepperstone (Razor o Standard)", serverExample: "Pepperstone-MT5-Live01", icon: Flame,
-    header: { title: <>Pepperstone <span className="text-teal-300">AI</span> trading</>, subtitle: (s) => `Forex · Metales · Cripto · ${s.costs?.label || "Razor"} · Cruce EMA 10 y 20`, icon: Flame,
+    header: { title: <>Pepperstone <span className="text-teal-300">AI</span> trading</>, subtitle: (s) => `Forex · Metales · Cripto · ${s.costs?.label || "Razor"} · Cruce EMA 9 y 21`, icon: Flame,
       liveLabel: liveLabel("Pepperstone"), dataLabel: dataLabel("Pepperstone"), dataTooltip: dataTooltip("Pepperstone"), resetHint: resetHint("Pepperstone") },
   },
 };

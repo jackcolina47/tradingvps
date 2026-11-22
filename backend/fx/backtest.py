@@ -39,7 +39,7 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
     tickers = tickers or {}
     spread = costs.spread(symbol) if costs else SPECS[symbol]["spread"]
     highs, lows, closes, ts = df["high"].values, df["low"].values, df["close"].values, df["ts"].values
-    e10, e20, e21 = df["ema10"].values, df["ema20"].values, df["ema21"].values
+    e10, e20, e9, e21 = df["ema10"].values, df["ema20"].values, df["ema9"].values, df["ema21"].values
     n = len(df)
     end = end or n
     step_ms = float(np.median(np.diff(ts[:200]))) if n > 2 else 0
@@ -81,7 +81,7 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
                 close(price, reason, i)
             elif pos.get("expires_ts") and ts[i] / 1000 >= pos["expires_ts"]:
                 close(closes[i], "TIEMPO", i)
-            elif exit_signal(pos["strategy"], pos["side"], e10[i], e20[i]):
+            elif exit_signal(pos["strategy"], pos["side"], {"ema9": e9[i], "ema21": e21[i], "ema10": e10[i], "ema20": e20[i]}):
                 close(closes[i], EXIT_REASON, i)
             elif cross_only and rules["ema_touch_exit_enabled"] and lows[i] <= e21[i] <= highs[i]:
                 close(closes[i], TOUCH_REASON, i)

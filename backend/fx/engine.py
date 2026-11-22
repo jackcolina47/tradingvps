@@ -29,7 +29,7 @@ from fx.engine_positions import PositionsMixin
 from fx.engine_signals import SignalsMixin
 from fx.broker import HFM, BrokerProfile
 
-EMA_MAIN_NAME = "Cruce EMA 10 y 20 Personalizado"
+EMA_MAIN_NAME = "Cruce EMA 9 y 21 Personalizado"
 from fx import review as fx_review
 from fx import wfcheck as fx_wfcheck
 
@@ -110,7 +110,7 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
 
     @property
     def strat_name(self) -> str:
-        return EMA_MAIN_NAME if self.profile.ema_only else "Test cruce EMA 10/20"
+        return EMA_MAIN_NAME if self.profile.ema_only else "Test cruce EMA 9/21"
 
     def new_broker(self) -> FxLiveBroker:
         c = self.cfg

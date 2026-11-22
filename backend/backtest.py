@@ -39,7 +39,7 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
     rules = trade_rules(trailing)
     use_trailing, use_partial = rules["trailing_enabled"], rules["partial_tp_enabled"]
     highs, lows, closes, ts = df["high"].values, df["low"].values, df["close"].values, df["ts"].values
-    e10, e20 = df["ema10"].values, df["ema20"].values
+    e10, e20, e9, e21 = df["ema10"].values, df["ema20"].values, df["ema9"].values, df["ema21"].values
     balance, peak, max_dd = initial, initial, 0.0
     trades, curve, pos, rejected = [], [], None, 0
     n = len(df)
@@ -70,7 +70,7 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
             price, reason = check_exit(pos["side"], pos["sl"], (float("inf") if pos["side"] == "long" else 0.0) if cross_only else pos["tp"], highs[i], lows[i])
             if price is not None:
                 close(price, reason, i)
-            elif exit_signal(pos["strategy"], pos["side"], e10[i], e20[i]):
+            elif exit_signal(pos["strategy"], pos["side"], {"ema9": e9[i], "ema21": e21[i], "ema10": e10[i], "ema20": e20[i]}):
                 close(closes[i], EXIT_REASON, i)
             elif cross_only:
                 if rules["ema_test_partial_enabled"] and not pos["partial"] and fav >= rules["ema_test_partial_atr"] * pos["atr"]:

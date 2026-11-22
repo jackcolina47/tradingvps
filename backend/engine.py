@@ -737,13 +737,13 @@ class TradingEngine:
         """Strategy exits decided at candle close (ema_cross / ema_test: the EMAs crossed back against the position)."""
         row = df.iloc[i]
         async for d in self.db.positions.find({"symbol": symbol, "strategy": {"$in": list(EXIT_ON_CROSS)}}, {"_id": 1, "side": 1, "strategy": 1}):
-            if exit_signal(d["strategy"], d["side"], float(row["ema10"]), float(row["ema20"])):
-                await self.log("INFO", f"{symbol}: la EMA10 volvió a cruzar la EMA20 en contra de la posición {d['side'].upper()} · cierre por regla de la estrategia"
+            if exit_signal(d["strategy"], d["side"], row):
+                await self.log("INFO", f"{symbol}: las EMAs volvieron a cruzarse en contra de la posición {d['side'].upper()} · cierre por regla de la estrategia"
                                + (" (test cruce EMA: se invierte si el test sigue activo)" if d["strategy"] == EMA_TEST else ""))
                 await self.close_position(str(d["_id"]), None, EXIT_REASON)
 
     async def _handle_test_signal(self, symbol: str, sig: dict, settings: Settings, df):
-        """«Test cruce EMA 10/20»: stop-and-reverse on the raw cross. Immune to AI approval, funnel, market gates and «Máx. posiciones»;
+        """«Test cruce EMA 9/21»: stop-and-reverse on the raw cross. Immune to AI approval, funnel, market gates and «Máx. posiciones»;
         only the daily-loss limit and one position per pair apply. The opposite position was already closed by _exit_on_cross."""
         key = f"{symbol}:{EMA_TEST}:{sig['side']}:{sig['key_ts']}"
         if key in self.signal_keys or await self.db.signals.find_one({"key": key}, {"_id": 1}):
@@ -751,7 +751,7 @@ class TradingEngine:
         self.signal_keys.add(key)
         signal = Signal(symbol=symbol, side=sig["side"], strategy=EMA_TEST, timeframe=settings.timeframe, price=sig["price"], sl=sig["sl"], tp=sig["tp"],
                         score=sig["score"], reasons=sig["reasons"], indicators=sig["indicators"], key=key, ai_decision="SIN_IA",
-                        ai_reasoning="Test cruce EMA 10/20: entrada directa por cruce, inmune a la aprobación de la IA", context={"exit_mode": "cross"})
+                        ai_reasoning="Test cruce EMA 9/21: entrada directa por cruce, inmune a la aprobación de la IA", context={"exit_mode": "cross"})
         acc = await self.account_summary()
         open_syms = [p["symbol"] for p in await self._open_and_pending()]
         block = ("límite de pérdida diaria alcanzado" if acc["daily_paused"] else "ya existe una posición abierta en el par" if symbol in open_syms
@@ -763,7 +763,7 @@ class TradingEngine:
             await self.log("RISK", f"{symbol}: cruce EMA (test) no operado · {block}")
             return
         res = await self.db.signals.insert_one(signal.to_mongo())
-        await self.log("SIGNAL", f"{symbol} {sig['side'].upper()} · Test cruce EMA 10/20 · {sig['reasons'][0]}")
+        await self.log("SIGNAL", f"{symbol} {sig['side'].upper()} · Test cruce EMA 9/21 · {sig['reasons'][0]}")
         await self.open_position(symbol, sig, settings, str(res.inserted_id), exit_mode="cross")
 
     def slow_active(self, settings: Settings) -> list:

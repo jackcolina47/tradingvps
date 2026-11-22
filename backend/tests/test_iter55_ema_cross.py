@@ -66,9 +66,9 @@ def test_indicators_and_signal_rules():
 
 
 def test_exit_rule_and_backtest():
-    assert exit_signal("ema_cross", "long", 1.0, 2.0) and not exit_signal("ema_cross", "long", 2.0, 1.0)
-    assert exit_signal("ema_cross", "short", 2.0, 1.0) and not exit_signal("ema_cross", "short", 1.0, 2.0)
-    assert not exit_signal("trend_ema", "long", 1.0, 2.0)
+    assert exit_signal("ema_cross", "long", {"ema10": 1.0, "ema20": 2.0}) and not exit_signal("ema_cross", "long", {"ema10": 2.0, "ema20": 1.0})
+    assert exit_signal("ema_cross", "short", {"ema10": 2.0, "ema20": 1.0}) and not exit_signal("ema_cross", "short", {"ema10": 1.0, "ema20": 2.0})
+    assert not exit_signal("trend_ema", "long", {"ema10": 1.0, "ema20": 2.0})
     res = run_backtest(_df(), "ema_cross", 1.0, 3, False, 10000.0, "BTCUSDT", None, "minimal", ())
     reasons = {t["reason"] for t in res["trades"]}
     assert res["total_trades"] > 5 and EXIT_REASON in reasons and set(res["strategy_stats"]) == {"ema_cross"}

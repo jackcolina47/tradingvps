@@ -35,7 +35,7 @@ export const SUBS = {
   macd: { label: "MACD 12,26,9", color: "#60A5FA", width: 1, keys: ["macd", "macd_signal"], hist: "macd_hist", levels: [] },
   adx: { label: "ADX 14", color: "#A78BFA", width: 1, keys: ["adx"], levels: [[24, "rgba(247,166,0,0.5)"]] },
   atr: { label: "ATR 14", color: "#FB7185", width: 1, keys: ["atr"], fine: true, levels: [] },
-  gap: { label: "Dist. EMA 10/20 (×ATR)", color: "#2DD4BF", width: 1, keys: ["gap"], levels: [[0.5, "rgba(148,163,184,0.45)"], [0, "rgba(148,163,184,0.25)"], [-0.5, "rgba(148,163,184,0.45)"]] },
+  gap: { label: "Dist. EMA 9/21 (×ATR)", color: "#2DD4BF", width: 1, keys: ["gap"], levels: [[0.5, "rgba(148,163,184,0.45)"], [0, "rgba(148,163,184,0.25)"], [-0.5, "rgba(148,163,184,0.45)"]] },
 };
 export const DEFAULT_STYLE = {
   type: "candles", up: "#10B981", down: "#EF4444",

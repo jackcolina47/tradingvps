@@ -22,8 +22,8 @@ export default function EmaTestSettings({ form, set, meta, main = false }) {
         <div data-testid="ema-main-header" className="flex items-start gap-2">
           <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-fuchsia-300" />
           <span>
-            <span className="block font-display text-[13px] font-semibold uppercase tracking-wide text-fuchsia-200">Cruce EMA 10 y 20 Personalizado <span className="ml-1 rounded-sm bg-fuchsia-500/30 px-1 text-[9px] text-fuchsia-100">ESTRATEGIA ÚNICA</span></span>
-            <span className="block text-[11px] text-slate-400">EMA10 cruza EMA20 al cierre de la vela ({form.timeframe}) → largo al alza, corto a la baja, en todos los «Pares a operar». Sin TP: la operación se cierra en el siguiente cruce contrario (o antes por el SL de seguridad). Sin IA en entradas ni en la gestión.</span>
+            <span className="block font-display text-[13px] font-semibold uppercase tracking-wide text-fuchsia-200">Cruce EMA 9 y 21 Personalizado <span className="ml-1 rounded-sm bg-fuchsia-500/30 px-1 text-[9px] text-fuchsia-100">ESTRATEGIA ÚNICA</span></span>
+            <span className="block text-[11px] text-slate-400">EMA9 cruza EMA21 al cierre de la vela ({form.timeframe}) → largo al alza, corto a la baja, en todos los «Pares a operar». Sin TP: la operación se cierra en el siguiente cruce contrario (o antes por el SL de seguridad). Sin IA en entradas ni en la gestión.</span>
           </span>
         </div>
       ) : <>
@@ -31,8 +31,8 @@ export default function EmaTestSettings({ form, set, meta, main = false }) {
         <span className="flex items-start gap-2">
           <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-fuchsia-300" />
           <span>
-            <span className="block font-display text-[13px] font-semibold uppercase tracking-wide text-fuchsia-200">Test Cruce EMA 10/20 <span className="ml-1 rounded-sm bg-fuchsia-500/30 px-1 text-[9px] text-fuchsia-100">EXPERIMENTAL</span></span>
-            <span className="block text-[11px] text-slate-400">EMA10 cruza EMA20 al cierre de la vela ({form.timeframe}) → largo al alza, corto a la baja. Sin TP ni stop normal (solo SL de seguridad 3×ATR): cierra y se invierte en el siguiente cruce contrario.</span>
+            <span className="block font-display text-[13px] font-semibold uppercase tracking-wide text-fuchsia-200">Test Cruce EMA 9/21 <span className="ml-1 rounded-sm bg-fuchsia-500/30 px-1 text-[9px] text-fuchsia-100">EXPERIMENTAL</span></span>
+            <span className="block text-[11px] text-slate-400">EMA9 cruza EMA21 al cierre de la vela ({form.timeframe}) → largo al alza, corto a la baja. Sin TP ni stop normal (solo SL de seguridad 3×ATR): cierra y se invierte en el siguiente cruce contrario.</span>
           </span>
         </span>
         <Switch data-testid="settings-ema-test-enabled-switch" checked={on} onCheckedChange={(v) => set("ema_test_enabled", v)} className="data-[state=checked]:bg-fuchsia-500" />
@@ -88,7 +88,7 @@ export default function EmaTestSettings({ form, set, meta, main = false }) {
             <p className="font-mono text-[10px] uppercase tracking-wider text-slate-500">ADX mínimo</p>
             <Input data-testid="settings-ema-test-adx-min-input" type="number" step={1} min={5} max={60} value={form.ema_test_adx_min ?? 20}
               onChange={(e) => set("ema_test_adx_min", e.target.value)} className="num h-8 w-24 border-[#1E293B] bg-[#07090E] text-xs" />
-            <p className="text-[11px] text-slate-500">Típico 20–25 (ADX 14). Compruébalo en Backtest con «Test cruce EMA 10/20» antes y después.</p>
+            <p className="text-[11px] text-slate-500">Típico 20–25 (ADX 14). Compruébalo en Backtest con «Test cruce EMA 9/21» antes y después.</p>
           </div>
         )}
       </div>}
@@ -96,7 +96,7 @@ export default function EmaTestSettings({ form, set, meta, main = false }) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="text-sm text-slate-200">Entrada confirmada (ADX + EMAs cercanas)</p>
-            <p className="text-[11px] text-slate-500">Cambia el criterio de entrada: tras un cruce EMA10/20 espera a la primera vela con ADX por encima del umbral y entra en el sentido de la EMA10 solo si en ese momento las EMAs están a menos de la distancia indicada. Si están más lejos, o pasa el plazo de velas sin ADX suficiente, el cruce se descarta. La salida no cambia.{main ? "" : " Con esto encendido el «Filtro de lateral (ADX)» de arriba no se usa."}</p>
+            <p className="text-[11px] text-slate-500">Cambia el criterio de entrada: tras un cruce EMA9/21 espera a la primera vela con ADX por encima del umbral y entra en el sentido de la EMA10 solo si en ese momento las EMAs están a menos de la distancia indicada. Si están más lejos, o pasa el plazo de velas sin ADX suficiente, el cruce se descarta. La salida no cambia.{main ? "" : " Con esto encendido el «Filtro de lateral (ADX)» de arriba no se usa."}</p>
           </div>
           <Switch data-testid="settings-ema-test-confirm-switch" checked={!!form.ema_test_confirm_enabled} onCheckedChange={(v) => set("ema_test_confirm_enabled", v)} className="data-[state=checked]:bg-fuchsia-500" />
         </div>

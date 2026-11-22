@@ -23,22 +23,22 @@ const BOTS = [
     key: "pepper", path: "/pepperstone", icon: Flame, accent: "teal", overview: "/pepper/overview",
     title: <>Pepperstone <span className="text-teal-300">AI</span> trading</>,
     subtitle: "Forex, metales y cripto CFD · Pepperstone vía MetaApi (MT4 / MT5)",
-    desc: "Una sola estrategia: Cruce EMA 10 y 20 Personalizado, con salida en el cruce contrario y SL por ATR. Sin IA en las entradas. Forex sin JPY ni CHF, metales y 14 criptomonedas CFD.",
-    tags: ["Cruce EMA 10 y 20", "Forex · Metales · Cripto", "Razor / Standard"],
+    desc: "Una sola estrategia: Cruce EMA 9 y 21 Personalizado, con salida en el cruce contrario y SL por ATR. Sin IA en las entradas. Forex sin JPY ni CHF, metales y 14 criptomonedas CFD.",
+    tags: ["Cruce EMA 9 y 21", "Forex · Metales · Cripto", "Razor / Standard"],
   },
   {
     key: "lab", path: "/lab", icon: FlaskConical, accent: "fuchsia",
     title: <>Bybit <span className="text-fuchsia-400">Lab</span></>,
     subtitle: "Investigación de estrategias · solo paper",
-    desc: "Clon de Bybit para probar el Test cruce EMA 10/20 sin riesgo: cuenta paper, historial y ajustes propios, backtest y gráfico. Sin IA, sin noticias y sin modo REAL.",
-    tags: ["Test cruce EMA 10/20", "Solo paper", "Datos del bot Bybit"],
+    desc: "Clon de Bybit para probar el Test cruce EMA 9/21 sin riesgo: cuenta paper, historial y ajustes propios, backtest y gráfico. Sin IA, sin noticias y sin modo REAL.",
+    tags: ["Test cruce EMA 9/21", "Solo paper", "Datos del bot Bybit"],
   },
   {
     key: "lab4h", path: "/lab4h", icon: FlaskConical, accent: "fuchsia",
     title: <>Bybit <span className="text-fuchsia-400">Lab 4H</span></>,
     subtitle: "Investigación de estrategias · solo paper · velas de 4 horas",
-    desc: "Segundo laboratorio independiente: mismo Test cruce EMA 10/20 que Bybit Lab pero en 4H por defecto, con su propia cuenta paper, historial y ajustes.",
-    tags: ["Test cruce EMA 10/20", "4H por defecto", "Solo paper"],
+    desc: "Segundo laboratorio independiente: mismo Test cruce EMA 9/21 que Bybit Lab pero en 4H por defecto, con su propia cuenta paper, historial y ajustes.",
+    tags: ["Test cruce EMA 9/21", "4H por defecto", "Solo paper"],
   },
 ];
 const ACCENT = {

@@ -306,7 +306,7 @@ class Position(BaseDocument):
     link_id: Optional[str] = None
     expires_at: Optional[str] = None
     horizon: str = "short"
-    exit_mode: Optional[str] = None  # "cross": no SL/TP, closes on the opposite EMA cross (Test cruce EMA 10/20)
+    exit_mode: Optional[str] = None  # "cross": no SL/TP, closes on the opposite EMA cross (Test cruce EMA 9/21)
     pips: Optional[float] = None
 
     @model_validator(mode="after")
@@ -341,7 +341,7 @@ class Trade(BaseDocument):
     live: bool = False
     period: str = ""
     horizon: str = "short"
-    exit_mode: Optional[str] = None  # "cross": no SL/TP, closes on the opposite EMA cross (Test cruce EMA 10/20)
+    exit_mode: Optional[str] = None  # "cross": no SL/TP, closes on the opposite EMA cross (Test cruce EMA 9/21)
     pips: Optional[float] = None
 
     @model_validator(mode="after")

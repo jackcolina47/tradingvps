@@ -42,7 +42,7 @@ class BrokerProfile:
     default_account_type: str
     weekly_prefix: str = field(default="")
     dual_pair: bool = False   # a pair may hold 1 normal-strategy position + 1 «Test cruce EMA» position at the same time
-    ema_only: bool = False    # one fixed strategy («Cruce EMA 10 y 20 Personalizado»): no other strategies, no AI in the entry/management flow
+    ema_only: bool = False    # one fixed strategy («Cruce EMA 9 y 21 Personalizado»): no other strategies, no AI in the entry/management flow
     symbols: tuple = tuple(AVAILABLE)
     rules_only: bool = False  # entries gated only by risk limits + learned rules (no AI approval), with automatic learning on closed trades
 

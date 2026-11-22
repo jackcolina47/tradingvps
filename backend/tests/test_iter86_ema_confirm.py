@@ -8,7 +8,7 @@ C = {"ema_test_confirm": {"adx": 24, "dist_atr": 0.5, "bars": 20}}
 
 def mk(e10, e20, adx, atr=1.0):
     df = build_df([[i * 1000, 100.0, 101.0, 99.0, 100.0, 1.0] for i in range(len(e10))])
-    df["ema10"], df["ema20"], df["adx"], df["atr"] = [float(x) for x in e10], [float(x) for x in e20], [float(x) for x in adx], atr
+    df["ema9"], df["ema21"], df["adx"], df["atr"] = [float(x) for x in e10], [float(x) for x in e20], [float(x) for x in adx], atr
     return df
 
 
