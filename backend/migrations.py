@@ -33,7 +33,16 @@ async def _pepper_ema_only(engine, db):
                                   "pulsa «Reiniciar» para empezar de cero (borra posiciones paper, historial y señales)"})
 
 
-MIGRATIONS = {"2026-10-20-activo": _activo, "2026-10-22-hfm-alert-180": _hfm_alert_180, "2026-10-27-ema-cross-off": _ema_cross_off, "2026-11-21-pepper-ema-only": _pepper_ema_only}
+async def _pepper_exits(engine, db):
+    """Pepperstone: «parcial 50% + breakeven» becomes three independent exits. An enabled old setting is carried over as partial 50 % + breakeven at the same ATR multiple."""
+    s = await db.pep_settings.find_one({"_id": "main"}) or {}
+    if s.get("ema_test_partial_enabled"):
+        k = s.get("ema_test_partial_atr", 1.5)
+        await db.pep_settings.update_one({"_id": "main"}, {"$set": {"ema_partial_on": True, "ema_partial_pct": 50.0, "ema_partial_at_atr": k, "ema_be_on": True, "ema_be_atr": k,
+                                                                    "ema_test_partial_enabled": False}})
+
+
+MIGRATIONS = {"2026-10-20-activo": _activo, "2026-10-22-hfm-alert-180": _hfm_alert_180, "2026-10-27-ema-cross-off": _ema_cross_off, "2026-11-21-pepper-ema-only": _pepper_ema_only, "2026-11-22-pepper-exits": _pepper_exits}
 
 
 async def run(engine, db):

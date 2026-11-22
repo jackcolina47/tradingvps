@@ -83,7 +83,7 @@ const HFM_TOGGLES = EXTRA_TOGGLES.flatMap((t) => (t.k !== "close_before_weekend"
 ]));
 const EMA_TOGGLES = EXTRA_TOGGLES.filter((t) => ["close_before_weekend", "rollover_guard"].includes(t.k))
   .map((t) => ({ ...t, hint: `${t.hint} · no se aplica a las criptomonedas, que operan 24/7` }));
-const EMA_BT_INTRO = (brand) => (s) => `Cruce EMA 9 y 21 Personalizado sobre las últimas 1.000 velas con los ajustes guardados (SL ${s.ema_sl_atr}×ATR, entrada confirmada, parcial + breakeven y toque de EMA 21 si están activos): ${s.risk_per_trade}% por operación, 1:${s.leverage}, ${brand.costsNote}. Las criptomonedas usan las velas del perpetuo USDT y no aplican cierre de fin de semana.`;
+const EMA_BT_INTRO = (brand) => (s) => `Cruce EMA 9 y 21 Personalizado sobre las últimas 1.000 velas con los ajustes guardados (SL ${s.ema_sl_atr}×ATR, entrada confirmada, cierre parcial, trailing, breakeven y toque de EMA 21 si están activos): ${s.risk_per_trade}% por operación, 1:${s.leverage}, ${brand.costsNote}. Las criptomonedas usan las velas del perpetuo USDT y no aplican cierre de fin de semana.`;
 const PLAN_INTRO = (brand) => `Plan de crecimiento compuesto para la cuenta forex: cuándo reinvertir, cuándo subir el riesgo y cuándo empezar a retirar. Los escenarios Prudente / Realista / Ambicioso son rentabilidades mensuales supuestas para la proyección (no tienen relación con el perfil de riesgo del bot); el escenario «Según backtest» usa Monte Carlo sobre tus propias estrategias en lotes y pips (${brand.costsNote}, lote mínimo, sesiones y cierre de fin de semana como en el bot, sin filtro IA). Tu meta, aporte y escenario quedan guardados en la configuración de este bot.`;
 
 export default function FxDashboard({ onLogout, bot = "fx" }) {

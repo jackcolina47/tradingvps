@@ -93,6 +93,12 @@ export default function SettingsPanel({ settings, meta, profileActive, onSave, o
       body[k] = Math.min(max, Math.max(min, v || def));
       if (body[k] !== v) clamped.push(`${label} → ${body[k]}`);
     });
+    for (const [k, def, label] of [["ema_partial_pct", 50, "Parcial (%)"], ["ema_partial_at_atr", 1.5, "Parcial (×ATR)"], ["ema_trail_atr", 2, "Trailing (×ATR)"], ["ema_be_atr", 1, "Breakeven (×ATR)"]]) {
+      if (!(k in body)) continue;
+      const v = Number(body[k]);  // no range limit: only a positive number (and at most 100 %)
+      body[k] = v > 0 ? (k === "ema_partial_pct" ? Math.min(100, v) : v) : def;
+      if (body[k] !== v) clamped.push(`${label} → ${body[k]}`);
+    }
     delete body.bot_running;
     delete body.symbol_params;
     const ok = await onSave(body);

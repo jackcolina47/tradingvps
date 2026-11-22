@@ -118,7 +118,8 @@ def update_trailing(side: str, entry: float, sl: float, initial_sl: float, atr: 
 DEFAULT_RULES = {"trailing_enabled": True, "breakeven_enabled": True, "be_start_r": 1.0, "trail_start_r": 1.5, "trail_atr_mult": 1.0,
                  "partial_tp_enabled": False, "partial_tp_r": 1.5, "partial_tp_pct": 50,
                  "ema_test_partial_enabled": False, "ema_test_partial_atr": 1.5, "ema_touch_exit_enabled": False,
-                 "weekend_hold_be_only": True, "weekend_hold_fx_only": True}
+                 "weekend_hold_be_only": True, "weekend_hold_fx_only": True,
+                 "ema_partial_on": False, "ema_partial_pct": 50.0, "ema_partial_at_atr": 1.5, "ema_trail_on": False, "ema_trail_atr": 2.0, "ema_be_on": False, "ema_be_atr": 1.0}
 
 
 WEEKEND_BE_ROOM_ATR = 0.5  # profit (in ATR, beyond breakeven) needed on Friday to move the stop to breakeven and keep the trade over the weekend
@@ -134,6 +135,23 @@ def weekend_hold(rules: dict, symbol: str, side: str, sl: float, be: float, atr:
     if (price - be) * d >= WEEKEND_BE_ROOM_ATR * atr:
         return True, be, ""
     return False, None, f"sin ganancia suficiente para dejar el stop en breakeven (hacen falta {WEEKEND_BE_ROOM_ATR:g}×ATR)"
+
+
+def ema_exits(rules: dict, side: str, entry: float, atr: float, price: float, sl: float, be: float, partial_done: bool) -> dict:
+    """Single-strategy bot (Pepperstone), three independent exits → {"partial": due now?, "sl": new stop or None, "why": "breakeven" | "trailing"}. The stop only ever tightens."""
+    out = {"partial": False, "sl": None, "why": ""}
+    if not atr or atr <= 0:
+        return out
+    d = 1 if side == "long" else -1
+    fav = (price - entry) * d
+    out["partial"] = bool(rules["ema_partial_on"]) and not partial_done and fav >= rules["ema_partial_at_atr"] * atr
+    best = sl
+    if rules["ema_be_on"] and fav >= rules["ema_be_atr"] * atr and (be - best) * d > 0:
+        best, out["why"] = be, "breakeven"
+    if rules["ema_trail_on"] and ((trail := price - d * rules["ema_trail_atr"] * atr) - best) * d > 0:
+        best, out["why"] = trail, "trailing"
+    out["sl"] = best if best != sl else None
+    return out
 
 
 def trade_rules(settings) -> dict:

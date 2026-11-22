@@ -83,6 +83,13 @@ class FxSettings(BaseModel):
     ema_test_confirm_dist_atr: float = 0.5
     ema_test_confirm_bars: int = 20
     ema_sl_atr: float = 3.0
+    ema_partial_on: bool = False     # Pepperstone exits, each with its own toggle: partial close of ema_partial_pct % at +ema_partial_at_atr × ATR
+    ema_partial_pct: float = 50.0
+    ema_partial_at_atr: float = 1.5
+    ema_trail_on: bool = False       # trailing stop ema_trail_atr × ATR behind the price
+    ema_trail_atr: float = 2.0
+    ema_be_on: bool = False          # stop to breakeven at +ema_be_atr × ATR
+    ema_be_atr: float = 1.0
     display_tz: str = "utc"  # Pepperstone only: "utc" | "bst" (London time: BST in summer, GMT in winter)
     ema_touch_exit_enabled: bool = False
     bot_running: bool = False
@@ -277,6 +284,13 @@ class FxSettingsUpdate(BaseModel):
     ema_test_confirm_dist_atr: Optional[float] = Field(default=None, ge=0.1, le=3.0)
     ema_test_confirm_bars: Optional[int] = Field(default=None, ge=1, le=100)
     ema_sl_atr: Optional[float] = Field(default=None, ge=0.5, le=10)
+    ema_partial_on: Optional[bool] = None
+    ema_partial_pct: Optional[float] = Field(default=None, gt=0, le=100)
+    ema_partial_at_atr: Optional[float] = Field(default=None, gt=0)
+    ema_trail_on: Optional[bool] = None
+    ema_trail_atr: Optional[float] = Field(default=None, gt=0)
+    ema_be_on: Optional[bool] = None
+    ema_be_atr: Optional[float] = Field(default=None, gt=0)
     display_tz: Optional[str] = Field(default=None, pattern="^(utc|bst)$")
     ema_touch_exit_enabled: Optional[bool] = None
 

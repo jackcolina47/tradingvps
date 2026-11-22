@@ -682,3 +682,8 @@
 ## Iteración 112 · IA expert con acceso completo (lectura) a las reglas aprendidas
 - Nueva herramienta `get_learned_rules` en `chat/tools.py` (crypto, fx, pepper, lab, lab4h; filtros `only_active` y `search`): todas las reglas sin recorte + actividad. Recuento por bot en el snapshot (`chat/context.py`) e instrucción en `chat/service.py`.
 - Solo lectura: el chat no crea/edita/borra reglas. Verificado con una pregunta real al chat (Bybit + HotForex).
+
+## Iteración 113 · Pepperstone: tres salidas independientes (sustituyen «parcial 50% + breakeven»)
+- Ajustes `ema_partial_on/pct/at_atr`, `ema_trail_on/atr`, `ema_be_on/be_atr` (solo > 0, sin tope; % ≤ 100). `risk.ema_exits` + `PositionsMixin._ema_exits` (paper y REAL) + backtest (`ema_only`). El parcial ya no mueve el stop. Motivo de cierre SL / BREAKEVEN / TRAILING según dónde esté el stop.
+- Migración `2026-11-22-pepper-exits`: si el ajuste antiguo estaba activo → parcial 50 % + breakeven al mismo múltiplo. HotForex/Bybit conservan el ajuste antiguo.
+- Verificado: test unitario + backtests por API. UI solo compilada; REAL sin probar.

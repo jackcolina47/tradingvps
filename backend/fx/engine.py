@@ -156,7 +156,7 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
         if self.profile.ema_only:  # single fixed strategy on every active pair; nothing AI-driven in the trading flow
             syms = [x for x in s.symbols if x in self.profile.symbols] or list(self.profile.symbols)
             self._display_tz = s.display_tz
-            s = s.model_copy(update=dict(symbols=syms, ema_test_enabled=True, ema_test_symbols=syms, ema_test_adx_filter=False, ai_enabled=False, ai_funnel_enabled=False,
+            s = s.model_copy(update=dict(symbols=syms, ema_test_enabled=True, ema_test_symbols=syms, ema_test_adx_filter=False, ema_test_partial_enabled=False, ai_enabled=False, ai_funnel_enabled=False,
                                          ai_position_review_enabled=False, rules_auto_learn=False, htf_filter=False))
         return s
 

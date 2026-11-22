@@ -10,6 +10,15 @@ const CONFIRM = [
   ["ema_test_confirm_bars", "Plazo tras el cruce (velas)", 1, 1, 100, 20],
 ];
 
+const EXITS = [
+  ["partial", "Cierre parcial: N % a N × ATR", "Cuando la operación va a favor el múltiplo de ATR indicado, cierra ese porcentaje de la posición con beneficios. El resto sigue abierto. Si el lote mínimo no permite dividir la posición, el parcial se omite. No mueve el stop: para eso usa Breakeven o Trailing.",
+    [["ema_partial_pct", "Porcentaje a cerrar (%)", 5, 50], ["ema_partial_at_atr", "Activar a + (×ATR)", 0.1, 1.5]]],
+  ["trail", "Trailing: N × ATR", "El stop sigue al precio a la distancia indicada (en ATR de la vela de entrada) y solo se mueve a favor, nunca hacia atrás. Actúa desde la entrada: si la distancia es menor que la del SL, el stop se acerca desde el primer momento.",
+    [["ema_trail_atr", "Distancia del stop (×ATR)", 0.1, 2]]],
+  ["be", "Breakeven: N × ATR", "Cuando la operación va a favor el múltiplo de ATR indicado, mueve el stop a la entrada más el spread, para que no pueda acabar en pérdida.",
+    [["ema_be_atr", "Activar a + (×ATR)", 0.1, 1]]],
+];
+
 export default function EmaTestSettings({ form, set, meta, main = false }) {
   if (!("ema_test_enabled" in form)) return null;
   const on = main || !!form.ema_test_enabled;
@@ -113,7 +122,29 @@ export default function EmaTestSettings({ form, set, meta, main = false }) {
           </div>
         )}
       </div>
-      <div className="mt-3 rounded-sm border border-[#1E293B] bg-[#07090E]/60 p-2.5">
+      {main && EXITS.map(([key, title, hint, fields]) => (
+        <div key={key} data-testid={`ema-exit-${key}`} className="mt-3 rounded-sm border border-[#1E293B] bg-[#07090E]/60 p-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-[180px] flex-1">
+              <p className="text-sm text-slate-200">{title}</p>
+              <p className="text-[11px] text-slate-500">{hint}</p>
+            </div>
+            <Switch data-testid={`settings-ema-${key}-switch`} checked={!!form[`ema_${key}_on`]} onCheckedChange={(v) => set(`ema_${key}_on`, v)} className="data-[state=checked]:bg-fuchsia-500" />
+          </div>
+          {form[`ema_${key}_on`] && (
+            <div className="mt-2 flex flex-wrap items-end gap-3">
+              {fields.map(([k, label, step, def]) => (
+                <label key={k} className="block">
+                  <span className="mb-1 block font-mono text-[10px] uppercase tracking-wider text-slate-500">{label}</span>
+                  <Input data-testid={`settings-${k.replaceAll("_", "-")}-input`} type="number" step={step} min={0} value={form[k] ?? def}
+                    onChange={(e) => set(k, e.target.value)} className="num h-8 w-28 border-[#1E293B] bg-[#07090E] text-xs" />
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+      {!main && <div className="mt-3 rounded-sm border border-[#1E293B] bg-[#07090E]/60 p-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="text-sm text-slate-200">Cierre parcial 50% + breakeven</p>
@@ -129,7 +160,7 @@ export default function EmaTestSettings({ form, set, meta, main = false }) {
             <p className="text-[11px] text-slate-500">Recomendado: la mitad del múltiplo del SL. Rango 0.5–3. Compáralo en Backtest con el interruptor encendido y apagado.</p>
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

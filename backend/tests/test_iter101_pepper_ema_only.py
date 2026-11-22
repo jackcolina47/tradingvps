@@ -177,3 +177,18 @@ def test_touch_close_has_its_own_telegram_message():
         await M._announce_close(e, p, NS(pnl=2.5, pnl_pct=20.0, exit_price=72.0), "CRUCE")
     asyncio.run(run())
     assert "toque de la EMA 21" in sent[0] and "Perdió <b>1.25 USD</b>" in sent[0] and "toque" not in sent[1]
+
+
+def test_ema_exits_three_independent_rules():
+    from fx import risk
+    base = {**risk.DEFAULT_RULES}
+    ex = lambda r, price, sl=97.0, done=False, side="long", entry=100.0, be=100.1: risk.ema_exits({**base, **r}, side, entry, 1.0, price, sl, be, done)  # noqa: E731
+    assert ex({}, 105) == {"partial": False, "sl": None, "why": ""}                                                        # all off → nothing
+    assert ex({"ema_partial_on": True, "ema_partial_at_atr": 2.5}, 102.5)["partial"] and not ex({"ema_partial_on": True, "ema_partial_at_atr": 2.5}, 102.4)["partial"]
+    assert ex({"ema_partial_on": True}, 105, done=True)["partial"] is False and ex({"ema_partial_on": True}, 105)["sl"] is None   # partial never moves the stop
+    assert ex({"ema_be_on": True, "ema_be_atr": 0.7}, 100.7) == {"partial": False, "sl": 100.1, "why": "breakeven"} and ex({"ema_be_on": True, "ema_be_atr": 0.7}, 100.6)["sl"] is None
+    assert ex({"ema_trail_on": True, "ema_trail_atr": 12}, 105)["sl"] is None                                              # wider than the SL: never loosens it
+    assert ex({"ema_trail_on": True, "ema_trail_atr": 0.25}, 105) == {"partial": False, "sl": 104.75, "why": "trailing"}
+    assert ex({"ema_trail_on": True, "ema_trail_atr": 2}, 101, sl=99.5)["sl"] is None                                      # only tightens
+    assert ex({"ema_trail_on": True, "ema_trail_atr": 2, "ema_be_on": True, "ema_be_atr": 1}, 101)["why"] == "breakeven"    # BE (100.1) beats trail (99)
+    assert ex({"ema_trail_on": True, "ema_trail_atr": 2}, 95, sl=103.0, side="short", be=99.9) == {"partial": False, "sl": 97.0, "why": "trailing"}

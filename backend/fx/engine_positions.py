@@ -29,9 +29,11 @@ class PositionsMixin:
             if not rollover and ((price <= p.sl) if p.side == "long" else (price >= p.sl)):
                 await self.log("RISK", f"{p.symbol}: stop en breakeven del test cruce EMA alcanzado ({fmt_price(p.symbol, p.sl)}) tras el cierre parcial" if p.breakeven else
                                f"{p.symbol}: SL de seguridad del test cruce EMA alcanzado ({fmt_price(p.symbol, p.sl)}) · movimiento violento antes del cierre de vela")
-                await self.close_position(p.id, p.sl, "BREAKEVEN" if p.breakeven else "SL")
+                await self.close_position(p.id, p.sl, self._ema_sl_reason(p))
                 return
             updates.update(mark_price=price, unrealized_pnl=round(risk.pnl(p.symbol, p.side, p.entry_price, price, p.qty, tickers), 4))
+            if self.profile.ema_only and not rollover:
+                await self._ema_exits(p, price, rules, updates)
             if not rollover and ema_partial_due(rules, p.side, p.entry_price, p.atr, price, p.partial_done):
                 part = risk.partial_lots(p.qty, EMA_PARTIAL_PCT)
                 be = self._ema_be(p)
@@ -85,6 +87,51 @@ class PositionsMixin:
                 if be and not p.breakeven:
                     await self.log("RISK", f"{p.symbol}: stop movido a breakeven ({fmt_price(p.symbol, new_sl)})")
         await self.db.positions.update_one({"_id": ObjectId(p.id)}, {"$set": updates})
+
+    def _ema_sl_reason(self, p: Position) -> str:
+        if not self.profile.ema_only:
+            return "BREAKEVEN" if p.breakeven else "SL"
+        return "SL" if p.sl == p.initial_sl else "BREAKEVEN" if p.sl == self._ema_be(p) else "TRAILING"
+
+    async def _ema_exits(self, p: Position, price: float, rules: dict, updates: dict):
+        """Pepperstone: partial close (N % at +N×ATR), trailing (N×ATR) and breakeven (at +N×ATR), each on its own toggle. Paper and REAL."""
+        tickers, f = self.market.tickers, lambda v: fmt_price(p.symbol, v)  # noqa: E731
+        ex = risk.ema_exits(rules, p.side, p.entry_price, p.atr, price, p.sl, self._ema_be(p), p.partial_done)
+        tag = "REAL " if p.live else ""
+        if ex["partial"]:
+            pct, k = rules["ema_partial_pct"], rules["ema_partial_at_atr"]
+            part = min(risk.partial_lots(p.qty, pct, await self.broker.lot(p.symbol)) if p.live else risk.partial_lots(p.qty, pct), p.qty)
+            updates["partial_done"] = True
+            if part <= 0 or part >= p.qty:
+                await self.log("RISK", f"{p.symbol}: +{k:g}×ATR alcanzado · cierre parcial del {pct:g}% omitido (el lote mínimo no permite dividir la posición)")
+            else:
+                try:
+                    fee = abs((await self.broker.close_partial(p.order_id, part, p.link_id)).get("commission") or 0) if p.live else risk.spread_cost(p.symbol, part, tickers)
+                    gross = risk.pnl(p.symbol, p.side, p.entry_price, price, part, tickers)
+                    if not p.live:
+                        await self.db.account.update_one({"_id": "main"}, {"$inc": {"balance": gross - fee}})
+                    rest = round(p.qty - part, 8)
+                    updates.update(qty=rest, margin=round(p.margin * rest / p.qty, 6), partial_gross=round(p.partial_gross + gross, 6), partial_fees=round(p.partial_fees + fee, 6),
+                                   initial_qty=p.initial_qty or p.qty, **({} if p.live else {"fees": round(p.fees + fee, 6), "unrealized_pnl": round(risk.pnl(p.symbol, p.side, p.entry_price, price, rest, tickers), 4)}))
+                    p.qty = rest
+                    msg = f"cerrado {pct:g}% ({part:.2f} lotes) @ {f(price)} a +{k:g}×ATR · PnL {gross - fee:+.2f} USD · resto {rest:.2f} lotes"
+                    await self.log("ORDER", f"PARCIAL {tag}{p.side.upper()} {p.symbol} · {msg}")
+                    await self.tg(f"🎯 <b>PARCIAL {tag}{p.side.upper()} {p.symbol}</b>\n{msg[0].upper() + msg[1:]}", "orders")
+                except Exception as e:
+                    updates.pop("partial_done")
+                    await self.log("ERROR", f"{p.symbol}: cierre parcial REAL fallido · {str(e)[:120]}")
+        if ex["sl"] is not None:
+            new_sl = round(ex["sl"], SPECS[p.symbol]["digits"])
+            if new_sl == p.sl:
+                return
+            try:
+                if p.live:
+                    await self.broker.set_stop(p.symbol, p.order_id, new_sl, None)
+                updates.update(sl=new_sl, breakeven=True)
+                if ex["why"] == "breakeven":
+                    await self.log("RISK", f"{p.symbol}: +{rules['ema_be_atr']:g}×ATR alcanzado · stop {tag}movido a breakeven ({f(new_sl)})")
+            except Exception as e:
+                await self.log("ERROR", f"{p.symbol}: no se pudo mover el stop ({ex['why']}) en {self.bk} · {str(e)[:120]}")
 
     @staticmethod
     def _ema_be(p: Position) -> float:
@@ -199,7 +246,7 @@ class PositionsMixin:
             updates["qty"] = ex["volume"]
             p.qty = ex["volume"]
         if p.exit_mode == "cross":  # Test cruce EMA: safety SL travels in the order; only the optional partial + breakeven rule is managed here
-            await self._ema_partial_live(p, price, rules, updates)
+            await (self._ema_exits if self.profile.ema_only else self._ema_partial_live)(p, price, rules, updates)
             await self.db.positions.update_one({"_id": ObjectId(p.id)}, {"$set": updates})
             return
         if p.expires_at and now >= datetime.fromisoformat(p.expires_at):
@@ -260,7 +307,7 @@ class PositionsMixin:
             net = cr["pnl"] if cr else risk.pnl(p.symbol, p.side, p.entry_price, price, p.qty, self.market.tickers) + p.partial_gross - p.fees - p.partial_fees
             reason = (cr or {}).get("reason") or ("SL" if p.exit_mode == "cross" else "TP" if abs(price - p.tp) <= abs(price - p.sl) else ("TRAILING" if p.breakeven else "SL"))
             if reason == "SL" and p.breakeven:
-                reason = "BREAKEVEN" if p.exit_mode == "cross" else "TRAILING"
+                reason = self._ema_sl_reason(p) if p.exit_mode == "cross" else "TRAILING"
             await self.db.positions.delete_one({"_id": ObjectId(p.id)})
             trade = await self._record_trade(p, price, net, fees, reason)
         await self._announce_close(p, trade, reason, cr is None)

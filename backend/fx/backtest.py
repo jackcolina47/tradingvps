@@ -32,7 +32,7 @@ def session_ok(ts_ms: int, allowed) -> bool:
 
 def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initial: float, symbol: str,
              sl_atr: float = None, tp_atr: float = None, start: int = 210, end: int = None, *,
-             tickers: dict = None, min_lot_max_risk: float = 4.0, weekend_flat: bool = True, sessions_allowed=(), costs=None, cross_weekend_hold: bool = False) -> dict:
+             tickers: dict = None, min_lot_max_risk: float = 4.0, weekend_flat: bool = True, sessions_allowed=(), costs=None, cross_weekend_hold: bool = False, ema_only: bool = False) -> dict:
     """`trailing` = bool (classic rules) or a rules dict from fx.risk.trade_rules (breakeven/trailing levels + partial take-profit)."""
     rules = risk.trade_rules(trailing)
     use_trailing, use_partial = rules["trailing_enabled"], rules["partial_tp_enabled"]
@@ -52,7 +52,7 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
     def close(price, reason, i):
         nonlocal balance, pos
         if reason == "SL" and pos["be"]:
-            reason = "BREAKEVEN" if pos["strategy"] in CROSS_ONLY else "TRAILING"
+            reason = "BREAKEVEN" if pos["strategy"] in CROSS_ONLY and not pos.get("trail") else "TRAILING"
         fee = risk.spread_cost(symbol, pos["lots"], tickers, costs)
         gross = risk.pnl(symbol, pos["side"], pos["entry"], price, pos["lots"], tickers)
         net = gross + pos["partial_gross"] - pos["fee"] - fee
@@ -85,6 +85,19 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
                 close(closes[i], EXIT_REASON, i)
             elif cross_only and rules["ema_touch_exit_enabled"] and lows[i] <= e21[i] <= highs[i]:
                 close(closes[i], TOUCH_REASON, i)
+            elif cross_only and ema_only:
+                d = 1 if pos["side"] == "long" else -1
+                ex = risk.ema_exits(rules, pos["side"], pos["entry"], pos["atr"], closes[i], pos["sl"], pos["entry"] + spread * d, pos["partial"])
+                if ex["partial"]:
+                    part = risk.partial_lots(pos["lots"], rules["ema_partial_pct"])
+                    if 0 < part < pos["lots"]:
+                        pfee = risk.spread_cost(symbol, part, tickers, costs)
+                        pgross = risk.pnl(symbol, pos["side"], pos["entry"], closes[i], part, tickers)
+                        balance += pgross - pfee
+                        pos.update(lots=round(pos["lots"] - part, 8), fee=pos["fee"] + pfee, partial_gross=pos["partial_gross"] + pgross)
+                    pos["partial"] = True
+                if ex["sl"] is not None:
+                    pos.update(sl=ex["sl"], be=True, trail=ex["why"] == "trailing" or pos.get("trail", False))
             elif cross_only:
                 if rules["ema_test_partial_enabled"] and not pos["partial"] and fav >= rules["ema_test_partial_atr"] * pos["atr"]:
                     d = 1 if pos["side"] == "long" else -1
@@ -197,7 +210,7 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
 
 
 def run_backtest(klines: list, strategy: str, risk_pct: float, leverage: int, trailing, initial: float, symbol: str,
-                 mode: str, disabled, tickers: dict, min_lot_max_risk: float, weekend_flat: bool, sessions_allowed=(), costs=None, params: dict = None, cross_weekend_hold: bool = False) -> dict:
+                 mode: str, disabled, tickers: dict, min_lot_max_risk: float, weekend_flat: bool, sessions_allowed=(), costs=None, params: dict = None, cross_weekend_hold: bool = False, ema_only: bool = False) -> dict:
     df = build_fx_df(klines, int((params or {}).get("atr_period", 14)))
     if strategy == "fix_reversion":
         from fx.strategies_slow import scan_fix
@@ -207,4 +220,4 @@ def run_backtest(klines: list, strategy: str, risk_pct: float, leverage: int, tr
     if strategy in CROSS_ONLY:
         sessions_allowed = ()  # the test ignores the session filter, like the live engine
     return simulate(df, scan_signals(df, strategy, params, mode, disabled), risk_pct, leverage, trailing, initial, symbol,
-                    tickers=tickers, min_lot_max_risk=min_lot_max_risk, weekend_flat=weekend_flat, sessions_allowed=sessions_allowed, costs=costs, cross_weekend_hold=cross_weekend_hold)
+                    tickers=tickers, min_lot_max_risk=min_lot_max_risk, weekend_flat=weekend_flat, sessions_allowed=sessions_allowed, costs=costs, cross_weekend_hold=cross_weekend_hold, ema_only=ema_only)
