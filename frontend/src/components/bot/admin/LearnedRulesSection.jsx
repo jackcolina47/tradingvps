@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, Check, Sparkles, ChevronLeft, ChevronRight, History, Loader2, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { BookOpen, Check, Sparkles, ChevronLeft, ChevronRight, Download, History, Loader2, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -16,6 +16,35 @@ const ORDER = { new: () => 0, hits: (a, b) => (b.hits || 0) - (a.hits || 0), cos
 const EVENT = { FUSION: ["Fusión", "text-fuchsia-300"], NUEVA: ["Nueva", "text-emerald-300"], MODIFICAR: ["Reescrita", "text-sky-300"], DESACTIVAR: ["Apagada", "text-amber-300"], ELIMINAR: ["Eliminada", "text-rose-300"] };
 const SEL = "h-8 rounded-sm border border-[#1E293B] bg-[#07090E] px-2 font-mono text-[11px] text-slate-300 outline-none";
 const ICON_BTN = "rounded-sm p-1 text-slate-500 transition-colors hover:bg-[#111827] hover:text-slate-200 disabled:opacity-40";
+
+const dt = (iso) => (iso ? new Date(iso).toLocaleString("es-ES", { hour12: false, timeZone: "UTC" }) + " UTC" : "—");
+
+function rulesToTxt(rules, events, bot) {
+  const active = rules.filter((r) => r.enabled).length;
+  const head = [`REGLAS APRENDIDAS · ${bot}`, `Exportado: ${dt(new Date().toISOString())}`, `Total: ${rules.length} · activas: ${active} · apagadas: ${rules.length - active}`, ""];
+  const body = rules.map((r, i) => [
+    `#${i + 1} [${r.enabled ? "ACTIVA" : "APAGADA"}] ${r.auto ? "automática" : "manual"}`,
+    `Regla: ${r.text}`,
+    `Ámbito: ${r.symbol || "todos los símbolos"} · ${r.side ? (r.side === "long" ? "solo largos" : "solo cortos") : "ambos lados"} · ${r.strategy ? STRATEGY_LABELS[r.strategy] || r.strategy : "todas las estrategias"}`,
+    `Creada: ${dt(r.created_at)}${r.verdict ? ` · de un análisis ${r.verdict}` : ""}${r.source_trade_id ? ` · operación ${r.source_trade_id}` : ""}`,
+    `Señales bloqueadas: ${r.hits || 0} · resueltas: ${r.blocked_closed || 0} · habrían ganado: ${r.blocked_wins || 0} · PnL que habrían tenido: ${r.blocked_pnl || 0}`,
+    `Ganadoras que habría bloqueado: ${r.misses || 0}`,
+    ...(r.ai_note ? [`Nota de la IA: ${r.ai_note} (${dt(r.ai_edited_at)})`] : []),
+    `ID: ${r.id}`, "",
+  ].join("\n"));
+  const acts = events.length ? ["ACTIVIDAD RECIENTE DEL APRENDIZAJE", ...events.map((e) =>
+    `${dt(e.at)} · ${EVENT[e.action]?.[0] || e.action}${e.symbol ? ` · tras ${e.symbol} ${e.pnl > 0 ? "+" : ""}${e.pnl}` : ""}\n  ${e.prev ? `${e.prev} → ` : ""}${e.text}${e.reason ? `\n  Motivo: ${e.reason}` : ""}`)] : [];
+  return [...head, ...body, ...acts].join("\n");
+}
+
+function downloadRules(rules, events) {
+  const bot = (window.location.pathname.split("/")[1] || "bybit").toLowerCase();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([rulesToTxt(rules, events, bot)], { type: "text/plain;charset=utf-8;" }));
+  a.download = `reglas_${bot}_${new Date().toISOString().slice(0, 10)}.txt`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 
 function RulesSummary({ rules }) {
   const today = new Date().toDateString();
@@ -220,6 +249,10 @@ export default function LearnedRulesSection() {
             <button data-testid="learned-rules-cleanup" onClick={cleanup} disabled={busy === "cleanup" || rules.length < 2} title="La IA busca reglas duplicadas o contradictorias y propone fusionarlas. Gasta una llamada de IA."
               className="flex h-8 items-center gap-1.5 rounded-sm border border-fuchsia-500/40 px-2 font-mono text-[10px] uppercase tracking-wider text-fuchsia-300 transition-colors hover:bg-fuchsia-500/10 disabled:opacity-50">
               {busy === "cleanup" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} {busy === "cleanup" ? "Analizando…" : "Limpiar con IA"}
+            </button>
+            <button data-testid="learned-rules-download" onClick={() => downloadRules(rules, events)} title="Descarga todas las reglas (activas y apagadas) con todos sus detalles en un archivo .txt"
+              className="flex h-8 items-center gap-1.5 rounded-sm border border-[#1E293B] px-2 font-mono text-[10px] uppercase tracking-wider text-slate-300 transition-colors hover:bg-[#111827]">
+              <Download className="h-3.5 w-3.5" /> Descargar TXT
             </button>
             {off.length > 0 && (
               <button data-testid="learned-rules-delete-off" onClick={removeOff} disabled={busy === "bulk"} className="h-8 rounded-sm border border-rose-500/30 px-2 font-mono text-[10px] uppercase tracking-wider text-rose-300 transition-colors hover:bg-rose-500/10">

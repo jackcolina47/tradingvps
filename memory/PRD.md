@@ -666,3 +666,6 @@
 - Corregido: `/hfm/link` devolvía 500 tras vincular (variable `dups` definida en código inalcanzable desde la iteración 106).
 - `manualTrades` sigue en false (cambia cómo ve el bróker las órdenes y exige magic 0): pendiente de decisión del usuario.
 - Docs MetaApi consultadas: createAccount, updateAccount, enableFeaturesOrApis, resourceSlots, estimate-costs. Precio de la IP dedicada no publicado en texto. Verificado solo con MetaApi simulado.
+
+## Iteración 110 · Descargar reglas aprendidas en TXT (todos los bots)
+- Botón «Descargar TXT» (`learned-rules-download`) en `LearnedRulesSection.jsx`: exporta todas las reglas (activas y apagadas) con ámbito, origen, fechas UTC, estadísticas, nota IA e ID, más la actividad reciente. Solo frontend. Verificado en HotForex con una regla temporal (borrada).
