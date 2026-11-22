@@ -1,0 +1,32 @@
+{
+  "summary": "Verified the Caddyfile fix for the 'black page on /' bug caused by stale cached HTML pointing at a renamed hashed bundle. Reproduced the bug exactly on the OLD Caddyfile (:8097) and confirmed it is gone on the NEW Caddyfile (:8098). Backend static-serving tests (16) all pass; Playwright E2E across /, /bybit, /hotforex, /pepperstone, reloads, no-session, mobile and overview-failure scenarios all pass with 0 pageerrors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter105_vps_static.py",
+    "/app/test_reports/pytest/iter105.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "deploy/Caddyfile fix is correct: /static/* has immutable cache and no SPA fallback (so a missing bundle 404s loudly instead of being replaced by index.html), and the HTML shell has Cache-Control: no-cache so updated HTML is revalidated on every visit. Gzip/zstd preserved, /api/* proxy intact.",
+    "deploy/frontend.Dockerfile correctly COPYs deploy/Caddyfile into the final caddy:2-alpine image, so `bash update.sh` on the VPS will apply the fix on rebuild.",
+    "BotSelector is resilient: a 500 on /api/overview, aborted /api/pepper/overview, and null-field response on /api/fx/overview all keep the page rendered — the 3 cards remain visible and 'Sin respuesta del motor' badges appear. No path leaves #root empty.",
+    "Minor (not blocking): Caddy's default MIME for .js is 'text/javascript' (observed). Content-type assertion passed because both 'javascript' substring matches. No change needed.",
+    "Nice-to-have (optional): asset-manifest.json is also served under / with Cache-Control: no-cache which is fine, but it could be moved under /static for long caching — not a bug."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter105_vps_static.py (new)"
+  ],
+  "success_rate": {"backend": "100% (16/16 pytest)", "frontend": "100% (all Playwright checks)"},
+  "test_credentials": "Panel password: BlackCat2233@ (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Two local Caddy servers are running against /root/vpsbuild: :8097 uses the OLD Caddyfile (buggy, SPA fallback for /static/*), :8098 uses the NEW Caddyfile (fix). If they go down, relaunch with: `cd /root/caddytest && nohup /root/caddy run --config Caddyfile.fixed --adapter caddyfile &` (same for Caddyfile.old). The regression test file auto-skips when 8097/8098 are unreachable.",
+  "rca of the issue": {
+    "bug": "Users hitting https://dominio.com/ saw a black page after a frontend update; direct URLs like /bybit worked.",
+    "root_cause": "The OLD Caddyfile served the SPA with a single `try_files {path} /index.html` without any Cache-Control. Two consequences: (1) the browser kept reusing a stale index.html that referenced the previous build's hashed bundle (e.g., main.OLDHASH.js), and (2) when that stale bundle was requested after a deploy, Caddy's SPA fallback returned index.html with HTTP 200 and Content-Type text/html — so the browser tried to execute HTML as JS, throwing 'Unexpected token <' and leaving #root empty (black page). Direct URLs like /bybit worked because they returned the same stale HTML, but the user would only have reached /bybit if they had already loaded the fresh HTML from somewhere else (e.g., a hard refresh of that URL).",
+    "reproduction": "On :8097, intercepted GET / to return the real index.html with the bundle filename rewritten to main.STALEHASH.js. Captured pageerror 'Unexpected token <\\'' and #root length 0. Direct GET /static/js/main.STALEHASH.js returned 200 text/html — confirming the mechanism.",
+    "fix_validated": "On :8098 (new Caddyfile): /static/js/main.NOEXISTE.js → 404 (not text/html). /, /bybit, /hotforex, /pepperstone, /loquesea → 200 text/html with Cache-Control: no-cache and ETag; If-None-Match returns 304. Real bundles return Cache-Control: public, max-age=31536000, immutable and the correct content-types. Gzip still active. /api/* proxy and POST /api/auth/login both work. End-to-end: login, 3 reloads of /, direct nav to each bot and back, no-session load, 390x844 mobile load, and simulated overview API failures all succeed with 0 pageerrors and non-empty #root."
+  }
+}

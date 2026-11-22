@@ -685,6 +685,11 @@ Petición explícita del usuario (sustituye a «bloquear contra 4H sin gastar IA
 - `funnel_rich = True` y `funnel_late_atr = 0.35` ahora para toda la clase FX (HotForex y Pepperstone).
 - Entrada tardía → además de Signal `TARDIA` abre sombra kind `TARDIA` (una por vela, `engine.funnel_late_keys`) al precio tardío; aparece en Rendimiento → Operaciones sombra → «Por motivo del descarte» (ops, acierto, evitó, se perdió, PnL). Recuento de descartes en «señales por decisión».
 
+## Iteración 114 (2026-11) — Bug VPS: «/» en negro, rutas de bots bien
+- Causa (reproducida en local con Caddy + build de producción; sin acceso al VPS): `deploy/Caddyfile` servía index.html sin Cache-Control y devolvía index.html (200) para bundles /static inexistentes → tras una actualización el HTML viejo de «/» cargaba HTML como JS.
+- Fix: bloque `handle /static/*` (inmutable, 404 si falta) + `Cache-Control: no-cache` en el HTML. Se aplica con `bash update.sh` (el Dockerfile copia el Caddyfile).
+- Tested: testing_agent iteration_104 (16 pruebas de servidor estático + E2E). `tests/test_iter105_vps_static.py` se salta si no hay Caddy local en 8097/8098.
+
 ### Pendiente
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.
