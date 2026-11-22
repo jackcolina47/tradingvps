@@ -42,11 +42,13 @@ async def _bot(eng, profiles, detect, cfg_keys: tuple, cfg, nws, extra: dict) ->
     changes = [{"ts": d["ts"][:16], "fuente": d["source"], "cambios": {k: v.get("despues") for k, v in (d.get("changes") or {}).items()}}
                async for d in eng.db.changes.find({}, {"ts": 1, "source": 1, "changes": 1}).sort("ts", -1).limit(5)]
     n_shadow = await eng.db.shadow_trades.count_documents({})
+    n_rules, n_rules_on = await eng.db.ai_rules.count_documents({}), await eng.db.ai_rules.count_documents({"enabled": {"$ne": False}})
     health = eng.broker_health()
     out = {"bot": {"running": eng.running, "scanning": eng.scanning, "last_scan": eng.last_scan, "modo": eng.mode_label, "entorno": eng.env,
                    "perfil_riesgo": (profiles[prof]["name"] if prof is not None else "Personalizado"), "broker_health": health},
            "cuenta": _acc(acc), "ajustes": s, "posiciones_abiertas": positions, "senales_recientes": signals, "logs_recientes": logs,
            "cambios_recientes_evolucion": changes, "operaciones_sombra_total": n_shadow,
+           "reglas_aprendidas": {"total": n_rules, "activas": n_rules_on, "detalle": "usa la herramienta get_learned_rules para verlas completas"},
            "config": {k: getattr(cfg, k, None) for k in cfg_keys}, "noticias": nws.summary() if nws else None, **extra}
     return out
 

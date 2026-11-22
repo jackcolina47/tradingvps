@@ -12,7 +12,8 @@ from performance import performance
 from fx.shadow import shadow_stats as fx_shadow_stats
 import evolution
 import wfcheck
-from deps import db, engine, news, FX_BOTS
+from deps import db, engine, news, FX_BOTS, LABS
+import ai_rules
 
 FXB = {e.profile.panel: (e, s, n) for e, s, n in FX_BOTS}
 from chat import code_reader, proposals
@@ -28,6 +29,12 @@ def _t(name, desc, props=None, required=None):
 
 TOOLS = [
     _t("get_performance", "Rendimiento real completo del bot: por estrategia, par, lado, motivo de salida, horizonte, tipo de entrada, decisiones IA, operaciones sombra (valor del filtro) y recorrido MFE/MAE.", {"bot": BOT_PARAM}, ["bot"]),
+    _t("get_learned_rules", "TODAS las reglas aprendidas de un bot, sin recortar: texto completo, activa/apagada, automática o manual, ámbito (par, lado, estrategia), fecha, operación y veredicto de origen, "
+       "señales bloqueadas y su resultado, ganadoras que habría bloqueado, nota de la IA, y la actividad reciente del aprendizaje (nuevas, reescritas, apagadas, eliminadas, fusiones). "
+       "Cada bot tiene su propio banco de reglas. Úsala siempre que pregunten por reglas aprendidas.",
+       {"bot": {"type": "string", "enum": ["crypto", "fx", "pepper", "lab", "lab4h"], "description": "'crypto' (Bybit), 'fx' (HotForex), 'pepper' (Pepperstone), 'lab' (Bybit Lab) o 'lab4h' (Bybit Lab 4H)"},
+        "only_active": {"type": "boolean", "description": "true = solo las activas; por defecto todas"},
+        "search": {"type": "string", "description": "texto a buscar en la regla o el par (opcional)"}}, ["bot"]),
     _t("get_trades", "Últimas operaciones cerradas del bot (historial).", {"bot": BOT_PARAM, "limit": {"type": "integer", "description": "1-50, por defecto 20"}}, ["bot"]),
     _t("get_signals", "Últimas señales detectadas (ejecutadas, rechazadas por la IA o bloqueadas) con su razonamiento y contexto.", {"bot": BOT_PARAM, "limit": {"type": "integer"}}, ["bot"]),
     _t("get_logs", "Últimas líneas del registro del bot (opcionalmente filtradas por nivel: INFO, SCAN, SIGNAL, AI_EVAL, ORDER, RISK, PLAN, NEWS, ERROR).", {"bot": BOT_PARAM, "limit": {"type": "integer"}, "level": {"type": "string"}}, ["bot"]),
@@ -139,6 +146,13 @@ async def run_tool(name: str, args: dict, session_id: str) -> dict:
         if name == "get_performance":
             eng = _eng(bot)
             return _compact(await (performance(eng.db, fx_shadow_stats) if bot in FXB else performance(eng.db)))
+        if name == "get_learned_rules":
+            eng = {x.bot_key: x for x in LABS}.get(bot) or _eng(bot)
+            rules = await ai_rules.list_rules(eng.db)
+            needle = str(args.get("search") or "").strip().lower()
+            view = [r for r in rules if (r["enabled"] or not args.get("only_active")) and (not needle or needle in r["text"].lower() or needle in (r.get("symbol") or "").lower())]
+            return {"bot": bot, "total": len(rules), "activas": sum(r["enabled"] for r in rules), "automaticas": sum(r["auto"] for r in rules), "devueltas": len(view),
+                    "reglas": view, "actividad_reciente": await ai_rules.events(eng.db)}
         if name == "get_trades":
             eng = _eng(bot)
             n = max(1, min(int(args.get("limit") or 20), 50))

@@ -678,3 +678,7 @@
 5. `price_action` enriquecido: `upper_wick_pct`, `lower_wick_pct`, `ema9_21_gap_atr`, `htf_trend`, `d1_trend` (+ línea en el resumen que va al prompt).
 - Tests: `tests/test_iter111_1h_optimizations.py` (10). Suite completa: ~230 fallos antiguos antes y después (tests contra el servidor vivo, dependientes del orden); mismo resultado en los ficheros de estrategias/reglas/price action.
 - OJO: la suite completa modifica el estado del preview (arranca bots, cambia ajustes). No volver a ejecutarla entera sin necesidad.
+
+## Iteración 112 · IA expert con acceso completo (lectura) a las reglas aprendidas
+- Nueva herramienta `get_learned_rules` en `chat/tools.py` (crypto, fx, pepper, lab, lab4h; filtros `only_active` y `search`): todas las reglas sin recorte + actividad. Recuento por bot en el snapshot (`chat/context.py`) e instrucción en `chat/service.py`.
+- Solo lectura: el chat no crea/edita/borra reglas. Verificado con una pregunta real al chat (Bybit + HotForex).
