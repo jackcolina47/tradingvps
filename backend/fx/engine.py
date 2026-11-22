@@ -16,6 +16,7 @@ from fx.models import FxSettings
 from fx.market import FxMarket, market_open, closing_soon, friday_stage
 from fx import risk
 from fx.symbols import is_crypto
+from strategies import EMA_TEST
 from fx import filters
 from fx.live import FxLiveBroker, is_our_link
 from fx.shadow import monitor_shadows
@@ -206,7 +207,13 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
         now = datetime.now(timezone.utc)
         if settings.close_before_weekend and market_open() and friday_stage() == "flat" and self._weekend_flat_day != today():
             self._weekend_flat_day = today()
-            ids = [str(d["_id"]) async for d in self.db.positions.find({}, {"_id": 1, "symbol": 1}) if not is_crypto(d["symbol"])]
+            keep = not self.profile.ema_only  # HotForex: the EMA-cross test trades stay open over the weekend (they leave on the opposite cross or their SL)
+            docs = [d async for d in self.db.positions.find({}, {"_id": 1, "symbol": 1, "strategy": 1, "exit_mode": 1}) if not is_crypto(d["symbol"])]
+            held = [d for d in docs if keep and d.get("strategy") == EMA_TEST and d.get("exit_mode") == "cross"]
+            ids = [str(d["_id"]) for d in docs if d not in held]
+            if held:
+                await self.log("RISK", f"Fin de semana · {len(held)} posición(es) del test de cruce de EMAs se mantienen abiertas ({', '.join(d['symbol'] for d in held)}): "
+                                       "siguen protegidas por su SL y expuestas al hueco de apertura del domingo")
             if ids:
                 await self.log("RISK", f"Cierre de fin de semana · {len(ids)} posiciones cerradas (viernes 15:30 de Nueva York)")
                 for pid in ids:

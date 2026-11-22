@@ -141,3 +141,49 @@ def test_fail_safe_when_ai_down(monkeypatch):
             await db.client.drop_database(db.name)
         assert out["hfm"][0] == 0 and out["hfm"][1] == "BLOQUEADA" and "fail-safe activo" in out["hfm"][2], out
     asyncio.run(run())
+
+
+def test_weekend_flat_keeps_ema_test_positions_on_hfm_only(monkeypatch):
+    """HotForex: Friday 15:30 NY closes everything except the EMA-cross test trades. Pepperstone (ema_only) still closes them."""
+    import fx.engine as fe
+    from types import SimpleNamespace as NS
+
+    async def run(profile):
+        class Cur:
+            def __init__(s, docs): s.docs = docs
+            def __aiter__(s): return s._gen()
+            async def _gen(s):
+                for d in s.docs:
+                    yield d
+        docs = [{"_id": 1, "symbol": "EURUSD", "strategy": "ema_test", "exit_mode": "cross"}, {"_id": 2, "symbol": "GBPUSD", "strategy": "trend_ema", "exit_mode": None}]
+        closed, logs = [], []
+
+        class Stop(Exception):
+            pass
+
+        async def fetch(_):
+            return {}
+
+        async def close(pid, reason=None):
+            closed.append((pid, reason))
+
+        async def log(level, msg):
+            logs.append(msg)
+
+        async def boom(*a, **k):
+            raise Stop()
+        async def gs():
+            return NS(close_before_weekend=True, symbols=["EURUSD"])
+        e = NS(get_settings=gs, profile=profile, market=NS(fetch_tickers=fetch), db=NS(positions=NS(find=lambda *a, **k: Cur(docs))), _weekend_flat_day=None, close_position=close, log=log, new_broker=boom,
+               live=True)
+        monkeypatch.setattr(fe, "market_open", lambda: True)
+        monkeypatch.setattr(fe, "friday_stage", lambda: "flat")
+        try:
+            await fe.FxEngine._monitor_once(e)
+        except (Stop, AttributeError):  # stop right after the weekend block
+            pass
+        return closed, logs
+    closed, logs = asyncio.run(run(HFM))
+    assert closed == [("2", "FIN_SEMANA")] and any("se mantienen abiertas" in m for m in logs), (closed, logs)
+    closed, _ = asyncio.run(run(PEPPERSTONE))
+    assert [c[0] for c in closed] == ["1", "2"]

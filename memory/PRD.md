@@ -650,3 +650,7 @@
 - `/hfm/link` avisa de cuentas duplicadas en MetaApi con el mismo login (no borra nada).
 - `/hfm/test` devuelve `diagnosis` cuando la cuenta existe pero no está conectada: comprobaciones (estado, conexión, antigüedad, plataforma/región distintas, duplicadas), respuesta del terminal, causa más probable y pasos. Panel «Diagnóstico de conexión» en `HfmSection.jsx` (`hfm-diagnosis`).
 - MetaApi no da un campo con el motivo exacto: la causa es orientativa. Verificado solo con MetaApi simulado; pendiente con la cuenta real del usuario.
+
+## Iteración 107 · HotForex: el test de cruce de EMAs no se cierra el fin de semana
+- `FxEngine._monitor_once`: el cierre del viernes 15:30 NY excluye en HotForex las posiciones `ema_test` con `exit_mode="cross"` (se registra en el log). El bloqueo de entradas desde las 12:00 NY sigue igual. Pepperstone sin cambios.
+- Backtest FX: `cross_weekend_hold` (HotForex) refleja lo mismo. Test en `test_iter92_hfm_rules_only.py`.

@@ -32,7 +32,7 @@ def session_ok(ts_ms: int, allowed) -> bool:
 
 def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initial: float, symbol: str,
              sl_atr: float = None, tp_atr: float = None, start: int = 210, end: int = None, *,
-             tickers: dict = None, min_lot_max_risk: float = 4.0, weekend_flat: bool = True, sessions_allowed=(), costs=None) -> dict:
+             tickers: dict = None, min_lot_max_risk: float = 4.0, weekend_flat: bool = True, sessions_allowed=(), costs=None, cross_weekend_hold: bool = False) -> dict:
     """`trailing` = bool (classic rules) or a rules dict from fx.risk.trade_rules (breakeven/trailing levels + partial take-profit)."""
     rules = risk.trade_rules(trailing)
     use_trailing, use_partial = rules["trailing_enabled"], rules["partial_tp_enabled"]
@@ -110,7 +110,7 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
                                                                 rules["be_start_r"], rules["trail_start_r"], rules["trail_atr_mult"],
                                                                 be_enabled=rules["breakeven_enabled"], trail_enabled=use_trailing)
         weekend = before_weekend(i)
-        if pos and weekend:
+        if pos and weekend and not (cross_weekend_hold and pos["strategy"] in CROSS_ONLY):
             close(closes[i], "FIN_SEMANA", i)
             weekend_closed += 1
         if not pos and not weekend and i in signals:
@@ -191,7 +191,7 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
 
 
 def run_backtest(klines: list, strategy: str, risk_pct: float, leverage: int, trailing, initial: float, symbol: str,
-                 mode: str, disabled, tickers: dict, min_lot_max_risk: float, weekend_flat: bool, sessions_allowed=(), costs=None, params: dict = None) -> dict:
+                 mode: str, disabled, tickers: dict, min_lot_max_risk: float, weekend_flat: bool, sessions_allowed=(), costs=None, params: dict = None, cross_weekend_hold: bool = False) -> dict:
     df = build_fx_df(klines, int((params or {}).get("atr_period", 14)))
     if strategy == "fix_reversion":
         from fx.strategies_slow import scan_fix
@@ -201,4 +201,4 @@ def run_backtest(klines: list, strategy: str, risk_pct: float, leverage: int, tr
     if strategy in CROSS_ONLY:
         sessions_allowed = ()  # the test ignores the session filter, like the live engine
     return simulate(df, scan_signals(df, strategy, params, mode, disabled), risk_pct, leverage, trailing, initial, symbol,
-                    tickers=tickers, min_lot_max_risk=min_lot_max_risk, weekend_flat=weekend_flat, sessions_allowed=sessions_allowed, costs=costs)
+                    tickers=tickers, min_lot_max_risk=min_lot_max_risk, weekend_flat=weekend_flat, sessions_allowed=sessions_allowed, costs=costs, cross_weekend_hold=cross_weekend_hold)

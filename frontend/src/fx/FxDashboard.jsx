@@ -76,6 +76,7 @@ const SESSION_CHIPS = (meta) => [{ k: "sessions_allowed", label: "Sesiones para 
   hint: "El bot solo abre nuevas entradas cuando alguna de las sesiones marcadas está abierta (Londres y Nueva York concentran la liquidez). Sin selección opera en todo el horario forex. Las posiciones abiertas se gestionan igual en cualquier sesión. El backtest aplica el mismo filtro." }];
 const fmtLev = (v) => `1:${v}`;
 const EMA_HIDE = ["scan_interval_sec", "ai_enabled", "ai_funnel_enabled", "ai_min_confidence", "min_rr", "breakeven_enabled", "trailing_enabled", "htf_filter"];
+const HFM_TOGGLES = EXTRA_TOGGLES.map((t) => (t.k === "close_before_weekend" ? { ...t, hint: `${t.hint}. Excepción: las posiciones del Test cruce EMA 9/21 no se cierran y pasan el fin de semana abiertas con su SL` } : t));
 const EMA_TOGGLES = EXTRA_TOGGLES.filter((t) => ["close_before_weekend", "rollover_guard"].includes(t.k))
   .map((t) => ({ ...t, hint: `${t.hint} · no se aplica a las criptomonedas, que operan 24/7` }));
 const EMA_BT_INTRO = (brand) => (s) => `Cruce EMA 9 y 21 Personalizado sobre las últimas 1.000 velas con los ajustes guardados (SL ${s.ema_sl_atr}×ATR, entrada confirmada, parcial + breakeven y toque de EMA 21 si están activos): ${s.risk_per_trade}% por operación, 1:${s.leverage}, ${brand.costsNote}. Las criptomonedas usan las velas del perpetuo USDT y no aplican cierre de fin de semana.`;
@@ -238,7 +239,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
           ) : (
           <SettingsPanel settings={data.settings} meta={meta} profileActive={data.profile_active} leverageMax={500} maxPositions={12}
             hide={rulesOnly ? ["scan_interval_sec", ...RULES_ONLY_HIDE] : ["scan_interval_sec"]}
-            extraToggles={rulesOnly ? [LEARN_TOGGLE, ...EXTRA_TOGGLES.filter((t) => !RULES_ONLY_HIDE.includes(t.k))] : EXTRA_TOGGLES}
+            extraToggles={rulesOnly ? [LEARN_TOGGLE, ...HFM_TOGGLES.filter((t) => !RULES_ONLY_HIDE.includes(t.k))] : EXTRA_TOGGLES}
             extraNums={EXTRA_NUMS.filter((n) => n.k !== "min_lot_max_risk" && !(rulesOnly && RULES_ONLY_HIDE.includes(n.k)))}
             extraChips={[...SESSION_CHIPS(meta), ...(rulesOnly ? [] : SEASON_CHIPS(meta))]} extraSelects={rulesOnly ? EXTRA_SELECTS.filter((x) => x.k !== "ai_news_weight") : EXTRA_SELECTS} fmtLeverage={fmtLev} strategyKeys={meta?.strategy_keys} longKeys={meta?.long_horizon_keys}
             onSave={(body) => act(() => http.put("/settings", body), "Configuración guardada")}

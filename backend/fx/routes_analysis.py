@@ -56,7 +56,7 @@ def register(router, engine, store, news):
             klines = await engine.market.fetch_klines(req.symbol, req.timeframe, 1000, cache_sec=60)
         result = await asyncio.to_thread(run_backtest, klines, req.strategy, req.risk_per_trade, req.leverage, trade_rules(s), await _initial_balance(),
                                          req.symbol, s.signal_mode, s.disabled_strategies, dict(engine.market.tickers), s.min_lot_max_risk, s.close_before_weekend and not crypto,
-                                         () if crypto else tuple(s.sessions_allowed), engine.costs, params or None)
+                                         () if crypto else tuple(s.sessions_allowed), engine.costs, params or None, not engine.profile.ema_only)
         result.pop("r_multiples", None)
         return {"symbol": req.symbol, "strategy": req.strategy, "timeframe": tf, "params": params or None, "spread_pips": round(pips(req.symbol, engine.costs.spread(req.symbol)), 1), "commission_lot_usd": engine.costs.commission_lot_usd,
                 "sessions_allowed": s.sessions_allowed, **result}
