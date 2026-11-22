@@ -674,6 +674,9 @@ Petición explícita del usuario (sustituye a «bloquear contra 4H sin gastar IA
 - `maker.queue_entry` (REAL): rechazo al colocar → `_retry` una vez al mejor bid/ask (`bybit.best`, /v5/market/tickers) si está a ≤ 0,15 ATR (`RETRY_MAX_ATR`); si falla → descartada (`_open_fail`), sin mercado. Tamaño insuficiente → descartada.
 - VPS del usuario: 15m, SL/TP de la IA, Gemini 3.8 Flash como modelo potente.
 
+## Iteración 111 (2026-11) — Chat IA: acceso completo de lectura a las reglas aprendidas
+- Causa: el chat no tenía ninguna herramienta de reglas. Nueva `get_rules` (bot, only_enabled, symbol) en `chat/tools.py`: todas las reglas sin recortar + estadísticas + `historial_cambios` (60 eventos). Solo lectura (el usuario pidió ver; crear/editar desde el chat queda fuera).
+
 ### Pendiente
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.

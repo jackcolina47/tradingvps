@@ -5,7 +5,7 @@ import { ProposalCard } from "./ProposalCard";
 
 const TOOL_LABELS = {
   get_performance: "rendimiento", get_trades: "historial", get_signals: "señales", get_logs: "logs", get_options: "opciones", get_market_context: "mercado", get_news: "noticias",
-  get_evolution: "evolución", get_plan_checkin: "plan", get_guard: "horario y eventos", run_walk_forward: "walk-forward",
+  get_evolution: "evolución", get_plan_checkin: "plan", get_guard: "horario y eventos", get_rules: "reglas aprendidas", run_walk_forward: "walk-forward",
   list_code: "código", read_code: "código", search_code: "código", propose_settings_change: "propuesta", propose_config_change: "propuesta", propose_action: "propuesta", remember: "memoria",
 };
 

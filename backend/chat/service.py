@@ -15,6 +15,7 @@ logger = logging.getLogger("chat")
 KNOWLEDGE = open(os.path.join(os.path.dirname(__file__), "knowledge.md"), encoding="utf-8").read()
 MAX_HOPS = 8
 MAX_TOOL_CHARS = 14_000
+RULES_TOOL_CHARS = 150_000   # learned rules are never trimmed in practice
 MAX_MEMORY_NOTES = 30
 JOB_TTL_SEC = 600
 _summarizing: set = set()
@@ -139,8 +140,9 @@ async def _run_turn(chat, text: str, sid: str, job: dict) -> tuple:
                 prop_ids.append(result["proposal_id"])
             tools_used.append(tc.name)
             payload = dumps(result)
-            if len(payload) > MAX_TOOL_CHARS:
-                payload = payload[:MAX_TOOL_CHARS] + '… [resultado recortado: pide un subconjunto más pequeño]"}'
+            cap = RULES_TOOL_CHARS if tc.name == "get_rules" else MAX_TOOL_CHARS
+            if len(payload) > cap:
+                payload = payload[:cap] + '… [resultado recortado: pide un subconjunto más pequeño]"}'
             chat.add_tool_result(tc.id, payload)
         job["steps"].append("Redactando la respuesta")
         resp = await ai_advisor.ask_tools(chat, None)

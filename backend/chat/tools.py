@@ -11,6 +11,7 @@ from fx.market import SESSIONS
 from performance import performance
 from fx.shadow import shadow_stats as fx_shadow_stats
 import evolution
+import ai_rules
 from deps import db, engine, FX_BOTS
 
 FXB = {e.profile.panel: (e, s) for e, s in FX_BOTS}
@@ -32,6 +33,11 @@ TOOLS = [
     _t("get_logs", "Últimas líneas del registro del bot (opcionalmente filtradas por nivel: INFO, SCAN, SIGNAL, AI_EVAL, ORDER, RISK, PLAN, NEWS, ERROR).", {"bot": BOT_PARAM, "limit": {"type": "integer"}, "level": {"type": "string"}}, ["bot"]),
     _t("get_options", "Valores válidos y rangos de cada ajuste del bot (pares disponibles, temporalidades, niveles de confianza IA, sesiones, claves de configuración general permitidas). Úsalo antes de proponer cambios.", {"bot": BOT_PARAM}, ["bot"]),
     _t("get_guard", "Horario operativo (Nueva York), ventana activa o próxima, y calendario de eventos rojos con los pares que bloquea cada uno (±15 min).", {"bot": BOT_PARAM}, ["bot"]),
+    _t("get_rules", "TODAS las reglas aprendidas del bot, completas y sin recortar: texto íntegro, par al que aplica (vacío = todos), si está activa, si la creó la IA (auto) o el usuario, "
+                    "operación de origen y veredicto, aciertos (hits) y fallos (misses), y qué habrían hecho las señales que bloqueó (cerradas, ganadoras, PnL). "
+                    "Incluye también el historial de cambios automáticos sobre las reglas (desactivadas, modificadas, eliminadas, con motivo). Úsalo siempre que el usuario pregunte por reglas.",
+       {"bot": BOT_PARAM, "only_enabled": {"type": "boolean", "description": "true = solo las activas (las que el modelo potente recibe hoy)"},
+        "symbol": {"type": "string", "description": "opcional: reglas que aplican a ese par (globales + específicas)"}}, ["bot"]),
     _t("get_evolution", "Línea de tiempo de cambios de ajustes (fuente, antes→después, rendimiento antes/después y veredicto MEJOR/PEOR/PENDIENTE, ids para deshacer).", {"bot": BOT_PARAM, "limit": {"type": "integer"}}, ["bot"]),
     _t("get_plan_checkin", "Chequeo del plan de crecimiento: fase actual, criterios cumplidos, avisos y si toca avanzar.", {"bot": BOT_PARAM}, ["bot"]),
     _t("list_code", "Lista archivos y carpetas del proyecto (solo lectura). Raíces: /app/backend, /app/frontend/src, /app/deploy.", {"path": {"type": "string"}}),
@@ -108,6 +114,18 @@ async def run_tool(name: str, args: dict, session_id: str) -> dict:
         if name == "get_guard":
             eng = _eng(bot)
             return _compact(trade_guard.status(eng.guard_kind, (await eng.get_settings()).symbols))
+        if name == "get_rules":
+            eng = _eng(bot)
+            rules = await ai_rules.list_rules(eng.db)
+            sym = str(args.get("symbol") or "").upper().strip()
+            if sym:
+                rules = [r for r in rules if not r["symbol"] or r["symbol"].upper() == sym]
+            if args.get("only_enabled"):
+                rules = [r for r in rules if r["enabled"]]
+            return {"total": len(rules), "activas": sum(1 for r in rules if r["enabled"]), "desactivadas": sum(1 for r in rules if not r["enabled"]),
+                    "creadas_por_ia": sum(1 for r in rules if r["auto"]), "creadas_por_usuario": sum(1 for r in rules if not r["auto"]),
+                    "auto_desactivacion": f"una regla se apaga sola al acumular {ai_rules.MAX_MISSES} fallos (ganadoras que habría bloqueado)",
+                    "rules": rules, "historial_cambios": await ai_rules.events(eng.db, 60)}
         if name == "get_evolution":
             eng = _eng(bot)
             tl = await evolution.timeline(eng, max(1, min(int(args.get("limit") or 15), 40)))
