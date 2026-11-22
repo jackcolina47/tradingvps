@@ -83,15 +83,22 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
         if forex and settings.close_before_weekend and friday_stage():
             raise HTTPException(400, "Viernes desde las 12:00 de Nueva York: sin nuevas entradas hasta el lunes")
         d = 1 if body.side == "long" else -1
+        cross = bool(getattr(getattr(engine, "profile", None), "ema_only", False))  # single-strategy bot: no TP, exit on the opposite EMA cross
+        if cross:
+            body.tp = price + 2 * (price - body.sl)  # virtual reference only, never executed
+            if await engine.db.positions.count_documents({}) >= settings.max_positions:
+                raise HTTPException(400, f"Máximo de posiciones alcanzado ({settings.max_positions})")
+        elif body.tp is None:
+            raise HTTPException(400, "Falta el take profit")
         if (price - body.sl) * d <= 0 or (body.tp - price) * d <= 0:
             raise HTTPException(400, f"Niveles inválidos para el precio actual ({price:.6g}): el SL debe quedar {'por debajo' if d > 0 else 'por encima'} y el TP al otro lado")
         if (await engine.account_summary())["daily_paused"]:
             raise HTTPException(400, "Límite de pérdida diaria alcanzado")
         sig = {"side": body.side, "strategy": "manual", "price": price, "sl": body.sl, "tp": body.tp, "atr": body.atr, "score": 0,
                "reasons": ["Operación manual desde el gráfico"], "indicators": {"atr": body.atr}, "key_ts": int(time.time() * 1000), "tp_mode": "fixed"}
-        await engine.log("ORDER", f"{body.symbol}: orden MANUAL {body.side.upper()} · riesgo {body.risk_pct:g}% · SL {body.sl:.6g} · TP {body.tp:.6g}")
+        await engine.log("ORDER", f"{body.symbol}: orden MANUAL {body.side.upper()} · riesgo {body.risk_pct:g}% · SL {body.sl:.6g} · " + ("sin TP, salida en el cruce contrario de EMAs" if cross else f"TP {body.tp:.6g}"))
         engine._open_fail = None
-        res = await engine.open_position(body.symbol, sig, settings.model_copy(update={"risk_per_trade": body.risk_pct}), None)
+        res = await engine.open_position(body.symbol, sig, settings.model_copy(update={"risk_per_trade": body.risk_pct}), None, **({"exit_mode": "cross"} if cross else {}))
         pos, reason = res if isinstance(res, tuple) else (res, getattr(engine, "_open_fail", None))
         if not pos:
             raise HTTPException(400, f"No se abrió: {reason or 'apertura cancelada'}")

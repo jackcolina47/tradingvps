@@ -421,7 +421,7 @@ class ManualOrder(BaseModel):
     symbol: str
     side: str = Field(pattern="^(long|short)$")
     sl: float = Field(gt=0)
-    tp: float = Field(gt=0)
+    tp: Optional[float] = Field(default=None, gt=0)  # omitted on EMA-only bots: the trade leaves on the opposite EMA cross
     atr: float = Field(gt=0)
     risk_pct: float = Field(ge=0.1, le=5)
 

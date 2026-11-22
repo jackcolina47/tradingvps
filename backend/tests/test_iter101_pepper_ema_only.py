@@ -158,3 +158,22 @@ def test_backtest_touch_exit_and_crypto_costs():
     assert a["trades"] and not any(t["reason"] == TOUCH_REASON for t in a["trades"]) and any(t["reason"] == TOUCH_REASON for t in b["trades"])
     c = PEPPERSTONE.costs("razor")
     assert c.side_cost("ADAUSD", 1.0, {}) == pytest.approx(SPECS["ADAUSD"]["spread"] / 2 * 1000) and c.side_cost("EURUSD", 1.0, {}) > 3.5
+
+
+def test_touch_close_has_its_own_telegram_message():
+    from types import SimpleNamespace as NS
+    sent = []
+
+    async def run():
+        e = NS(bk="Pepperstone")
+        e.log = lambda *a, **k: asyncio.sleep(0)
+
+        async def tg(msg, kind):
+            sent.append(msg)
+        e.tg = tg
+        p = NS(live=False, side="long", symbol="SOLUSD", entry_price=70.0)
+        from fx.engine_positions import PositionsMixin as M
+        await M._announce_close(e, p, NS(pnl=-1.25, pnl_pct=-10.0, exit_price=69.0), "TOQUE_EMA")
+        await M._announce_close(e, p, NS(pnl=2.5, pnl_pct=20.0, exit_price=72.0), "CRUCE")
+    asyncio.run(run())
+    assert "toque de la EMA 21" in sent[0] and "Perdió <b>1.25 USD</b>" in sent[0] and "toque" not in sent[1]

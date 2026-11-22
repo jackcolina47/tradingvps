@@ -622,3 +622,8 @@
 - Migración `2026-11-21-pepper-ema-only`: NO borra datos; deja el bot detenido con la nueva lista de pares. «Empezar de cero» = botón Reiniciar.
 - Pendiente/avisos: el cruce se calcula con EMA 10/20 y el gráfico/toque usan EMA 9/21 (confirmar con el usuario); tamaños de contrato cripto en paper son estimados; nombres de símbolos cripto en MT sin verificar en REAL; el diálogo de orden manual aún pide TP.
 - Tests: `tests/test_iter101_pepper_ema_only.py`, `tests/test_iter105_pepper_http.py`; informe `test_reports/iteration_105.json`.
+
+## Iteración 102 · Aviso de toque + orden manual sin TP (Pepperstone)
+- Telegram: mensaje propio al cerrar por `TOQUE_EMA` («toque de la EMA 21», Ganó/Perdió X USD) en `_announce_close`.
+- Orden manual en bots `ema_only`: `tp` opcional, abre con `exit_mode="cross"` (solo SL), respeta «Máx. posiciones»; sale por cruce contrario real (evento de cruce tras la entrada) o por toque de EMA 21 si está activo. Diálogo sin campos de TP (`trade.noTp`). Bybit/HotForex siguen exigiendo TP.
+- Verificado: tests iter101 (mensaje Telegram) + API (orden SOLUSD sin TP → exit_mode cross). Cierre por cruce de una manual no observado en vivo.

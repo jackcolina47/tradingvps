@@ -167,7 +167,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <Watchlist items={data.watchlist} selected={symbol} onSelect={setSymbol} />
           <PriceChart symbol={symbol} defaultTf={data.settings.timeframe} kind={meta?.symbol_info?.[symbol]?.name || "Forex"} tfs={FX_TFS}
-            trade={{ riskPct: data.settings.risk_per_trade, equity: data.account.equity, live: data.status.mode === "REAL", currency: "USD", onDone: refresh }} />
+            trade={{ riskPct: data.settings.risk_per_trade, equity: data.account.equity, live: data.status.mode === "REAL", currency: "USD", onDone: refresh, noTp: emaOnly }} />
           {emaOnly
             ? <AiSignals rulesOnly signals={data.signals} title="Cruces detectados" emptyText="Cuando el bot detecte un cruce de EMAs válido aparecerá aquí." className="lg:col-span-3" />
             : <BotPanel settings={data.settings} meta={meta} account={data.account} equity={data.equity} profileActive={data.profile_active} fmtLeverage={fmtLev} rulesOnly={rulesOnly} />}

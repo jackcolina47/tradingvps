@@ -100,7 +100,17 @@ class SignalsMixin:
         """Strategy exits decided at candle close (ema_cross: the EMAs crossed back against the position; optional: the closed candle touched the EMA21)."""
         row = df.iloc[i]
         closed_ms = int(row["ts"]) + TF_SECONDS[settings.timeframe] * 1000 if settings else 0
-        async for d in self.db.positions.find({"symbol": symbol, "strategy": {"$in": list(EXIT_ON_CROSS)}}, {"_id": 1, "side": 1, "strategy": 1, "exit_mode": 1, "opened_at": 1}):
+        prev = df.iloc[i - 1]
+        f, s, pf, ps = float(row["ema10"]), float(row["ema20"]), float(prev["ema10"]), float(prev["ema20"])
+        async for d in self.db.positions.find({"symbol": symbol, "$or": [{"strategy": {"$in": list(EXIT_ON_CROSS)}}, {"strategy": "manual", "exit_mode": "cross"}]},
+                                              {"_id": 1, "side": 1, "strategy": 1, "exit_mode": 1, "opened_at": 1}):
+            if d["strategy"] == "manual":  # manual order: leaves on a real cross against it (it may have been opened against the current EMA alignment)
+                if settings and closed_ms > datetime.fromisoformat(d["opened_at"]).timestamp() * 1000 and ((f < s and pf >= ps) if d["side"] == "long" else (f > s and pf <= ps)):
+                    await self.log("INFO", f"{symbol}: EMA10 cruzó {'por debajo' if d['side'] == 'long' else 'por encima'} de EMA20 · cierre de la posición manual {d['side'].upper()} por cruce contrario")
+                    await self.close_position(str(d["_id"]), None, EXIT_REASON)
+                    continue
+                if not (settings and settings.ema_touch_exit_enabled):
+                    continue
             touch = (settings and settings.ema_touch_exit_enabled and d.get("exit_mode") == "cross" and float(row["low"]) <= float(row["ema21"]) <= float(row["high"])
                      and closed_ms > datetime.fromisoformat(d["opened_at"]).timestamp() * 1000)  # only candles that closed after the entry
             if touch and not exit_signal(d["strategy"], d["side"], float(row["ema10"]), float(row["ema20"])):
