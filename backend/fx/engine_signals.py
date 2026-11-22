@@ -215,6 +215,25 @@ class SignalsMixin:
                     return fb, "FOMC", factor, ctx
         return None, None, factor, ctx
 
+    async def _d1_trend(self, symbol: str):
+        try:
+            return htf_trend(self._df(await self.market.fetch_klines(symbol, "1d", 300, cache_sec=3600)))
+        except Exception:
+            return None
+
+    async def _entry_guard(self, symbol: str, sig: dict) -> str:
+        """Right before a market order: price not more than 0.4 ATR away from the signal close, spread not above 0.15 ATR. REAL uses the broker's live bid/ask."""
+        price, spread = self.market.tickers.get(symbol, {}).get("price"), self.costs.spread(symbol)
+        if self.live and self.broker:
+            try:
+                tick = await self.broker.api.tick(self.broker.account_id, self.broker.broker_symbol(symbol), self.broker.region)
+                if tick.get("bid") and tick.get("ask"):
+                    price, spread = tick["ask"] if sig["side"] == "long" else tick["bid"], tick["ask"] - tick["bid"]
+            except Exception as e:
+                logger.warning(f"entry guard tick {symbol}: {e}")
+        atr = sig.get("atr")
+        return price_action.late_entry(sig["side"], sig["price"], price, atr, both_ways=True) or price_action.wide_spread(spread, atr)
+
     async def _handle_signal(self, symbol, sig, settings: FxSettings, df, htf, htf_tf, horizon: str = "short", tf: str = None):
         key = f"{symbol}:{sig['strategy']}:{sig['side']}:{sig['key_ts']}"
         if key in self.signal_keys:
@@ -233,6 +252,10 @@ class SignalsMixin:
             block, kind = g_block, g_kind
         pa = price_action.from_df(df, sig["side"], sig["price"], sig["indicators"].get("atr", 0), sig["sl"], sig["tp"], upto=len(df) - 1,
                                   max_run=settings.price_action_max_candles, swing_atr=settings.price_action_swing_atr)
+        guard = horizon == "short" and sig.get("exit_mode") != "cross"
+        d1 = await self._d1_trend(symbol) if guard else None
+        if guard:
+            pa = price_action.refine(df, sig, pa, htf_tf, htf, d1, max_run=settings.price_action_max_candles, swing_atr=settings.price_action_swing_atr)
         pa_block = price_action.hard_block(pa) if settings.price_action_block and horizon == "short" and not rules_only else ""
         if not block and pa_block:
             block, kind = pa_block, "PRECIO_EXTENDIDO"
@@ -242,6 +265,8 @@ class SignalsMixin:
             logger.info(f"[STAGE 0 REJECT] {symbol} {sig['side']} · {pf_block}")
         risk_factor *= g_factor
         t = self.market.tickers.get(symbol, {})
+        if not block and guard and (late := await self._entry_guard(symbol, sig)):
+            block, kind = late, "BLOQUEADA"
         news_ctx = self.news.context(symbol) if self.news else None
         context = {"mode": "REAL" if self.live else "PAPER", "sessions": [x["id"] for x in market_status()["sessions"] if x["open"]], "htf_tf": htf_tf,
                    "htf_trend": {1: "ALCISTA", -1: "BAJISTA", 0: "NEUTRAL"}.get(htf, "N/D"), "price_now": t.get("price"), "change_24h": t.get("change_pct"),
@@ -249,7 +274,7 @@ class SignalsMixin:
                    "open_positions": len(open_syms), "max_positions": settings.max_positions, "daily_pnl_pct": acc["daily_pnl_pct"], "equity": acc["equity"],
                    "news_risk": (news_ctx or {}).get("mercado", {}).get("risk") if news_ctx else None, "news_pair": (news_ctx or {}).get("par") if news_ctx else None,
                    "news_size_factor": risk_factor, "ai_enabled": settings.ai_enabled, "ai_min_confidence": settings.ai_min_confidence,
-                   "horizon": horizon, "price_action": pa, **g_ctx}
+                   "horizon": horizon, "price_action": pa, "d1_trend": price_action.TREND_TXT.get(d1, "N/D"), **g_ctx}
         base = dict(symbol=symbol, side=sig["side"], strategy=sig["strategy"], timeframe=tf, price=sig["price"], sl=sig["sl"], tp=sig["tp"],
                     score=sig["score"], reasons=sig["reasons"], indicators=sig["indicators"], key=key, context=context, horizon=horizon)
         if block:
@@ -337,6 +362,12 @@ class SignalsMixin:
         res = await self.db.signals.insert_one(signal.to_mongo())
         sid = str(res.inserted_id)
         if approve:
+            late = await self._entry_guard(symbol, sig) if guard else ""
+            if late:  # checked again right before the market order: the price / spread may have moved during the rules check
+                await self.log("RISK", f"{symbol}: señal descartada · {late}")
+                await self.db.signals.update_one({"_id": res.inserted_id}, {"$set": {"note": f"No ejecutada: {late}"}})
+                await open_shadow(self, sid, symbol, sig, settings, "NO_EJECUTADA", acc, signal.ai_confidence, signal.ai_risk, risk_factor, note=late)
+                return
             risk_reason = ("riesgo de noticias" if news_block or (self.news and self.news.gate(symbol)[1] < 1) else "volatilidad extrema / sesgo estacional") if risk_factor < 1 else ""
             pos, reason = await self.open_position(symbol, sig, settings, sid, risk_factor, risk_reason, expires_at=sig.get("expires_at"), horizon=horizon)
             await self.db.signals.update_one({"_id": res.inserted_id}, {"$set": {"executed": True} if pos else {"note": f"No ejecutada: {reason}"}})

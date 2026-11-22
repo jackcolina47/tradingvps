@@ -669,3 +669,12 @@
 
 ## Iteración 110 · Descargar reglas aprendidas en TXT (todos los bots)
 - Botón «Descargar TXT» (`learned-rules-download`) en `LearnedRulesSection.jsx`: exporta todas las reglas (activas y apagadas) con ámbito, origen, fechas UTC, estadísticas, nota IA e ID, más la actividad reciente. Solo frontend. Verificado en HotForex con una regla temporal (borrada).
+
+## Iteración 111 · Optimización 1H (Bybit y HotForex)
+1. `ai_rules.relevant`: señales de `ema_pullback`/`supertrend_momentum`/`trend_ema` no reciben reglas que mencionen «reversión a la media» o «Bollinger» (banco de reglas por bot intacto: `engine.db`).
+2. `strategies.py`: `MIN_TREND_ADX = 20` en ema_pullback y supertrend_momentum en cualquier modo; ema_pullback exige EMA9/EMA21 alineadas.
+3. `price_action.trim_tp/refine`: TP más allá del swing → swing ∓ 0,2 ATR si R:R ≥ 1,5 (solo en vivo, horizonte corto; el backtest no lo aplica).
+4. Entrada tardía (`late_entry`, 0,4 ATR): Bybit maker y mercado (a favor), HotForex mercado (cualquier dirección) + spread > 0,15 ATR (`_entry_guard`, bid/ask real en REAL, spread estimado en paper). Se comprueba antes de la IA y otra vez antes de la orden.
+5. `price_action` enriquecido: `upper_wick_pct`, `lower_wick_pct`, `ema9_21_gap_atr`, `htf_trend`, `d1_trend` (+ línea en el resumen que va al prompt).
+- Tests: `tests/test_iter111_1h_optimizations.py` (10). Suite completa: ~230 fallos antiguos antes y después (tests contra el servidor vivo, dependientes del orden); mismo resultado en los ficheros de estrategias/reglas/price action.
+- OJO: la suite completa modifica el estado del preview (arranca bots, cambia ajustes). No volver a ejecutarla entera sin necesidad.

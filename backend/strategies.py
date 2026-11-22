@@ -176,6 +176,9 @@ def breakout_turtle(df, i, htf=None, params=None, m=None) -> Optional[dict]:
     return _signal(side, r, sl, tp, "breakout_turtle", reasons, score, r["ts"])
 
 
+MIN_TREND_ADX = 20  # ema_pullback / supertrend_momentum never trade a sideways market (ADX 10-19), whatever the «Criterios de entrada» mode
+
+
 def supertrend_momentum(df, i, htf=None, params=None, m=None) -> Optional[dict]:
     r = df.iloc[i]
     flip = None
@@ -191,7 +194,7 @@ def supertrend_momentum(df, i, htf=None, params=None, m=None) -> Optional[dict]:
     still = r["st_dir"] == (1 if long else -1)
     ema_ok = r["close"] > r["ema50"] if long else r["close"] < r["ema50"]
     rsi_ok = r["rsi"] > 50 if long else r["rsi"] < 50
-    if not (still and ema_ok and rsi_ok and r["adx"] > m["st_adx"]) or _against_htf(htf, long):
+    if not (still and ema_ok and rsi_ok and r["adx"] >= max(m["st_adx"], MIN_TREND_ADX)) or _against_htf(htf, long):
         return None
     reasons = [
         f"Supertrend girado a {'alcista' if long else 'bajista'} en {r['st']:.4g}",
@@ -206,10 +209,10 @@ def supertrend_momentum(df, i, htf=None, params=None, m=None) -> Optional[dict]:
 
 def ema_pullback(df, i, htf=None, params=None, m=None) -> Optional[dict]:
     r, p = df.iloc[i], df.iloc[i - 1]
-    if r["adx"] <= m["pb_adx"]:
+    if r["adx"] < max(m["pb_adx"], MIN_TREND_ADX):
         return None
-    up = r["ema50"] > r["ema200"] and r["close"] > r["ema50"]
-    down = r["ema50"] < r["ema200"] and r["close"] < r["ema50"]
+    up = r["ema50"] > r["ema200"] and r["close"] > r["ema50"] and r["ema9"] > r["ema21"]   # fast EMAs aligned with the trade
+    down = r["ema50"] < r["ema200"] and r["close"] < r["ema50"] and r["ema9"] < r["ema21"]
     if up and p["low"] <= p["ema21"] and r["close"] > r["ema21"] and r["close"] > r["open"] and _rsi_ok(r["rsi"], m["pb_rsi"], True):
         side = "long"
     elif down and p["high"] >= p["ema21"] and r["close"] < r["ema21"] and r["close"] < r["open"] and _rsi_ok(r["rsi"], m["pb_rsi"], False):
@@ -220,7 +223,7 @@ def ema_pullback(df, i, htf=None, params=None, m=None) -> Optional[dict]:
     if _against_htf(htf, long):
         return None
     reasons = [
-        f"Tendencia {'alcista' if long else 'bajista'}: EMA50 {'sobre' if long else 'bajo'} EMA200",
+        f"Tendencia {'alcista' if long else 'bajista'}: EMA50 {'sobre' if long else 'bajo'} EMA200 y EMA9 {'sobre' if long else 'bajo'} EMA21",
         f"Retroceso tocó la EMA21 y la vela cierra de nuevo {'por encima' if long else 'por debajo'}",
         f"RSI {r['rsi']:.1f} sin sobreextensión",
         f"ADX {r['adx']:.1f}",

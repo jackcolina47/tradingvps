@@ -1,4 +1,5 @@
 """Learned rules: short trader-written (or AI-suggested) rules stored per bot and injected, with high priority, into the AI signal-evaluation prompt."""
+import unicodedata
 from datetime import datetime, timezone
 from typing import Optional, List
 from bson import ObjectId
@@ -62,13 +63,25 @@ async def miss(db, rule_id: str) -> dict:
     return _pub(doc)
 
 
+TREND_STRATEGIES = {"ema_pullback", "supertrend_momentum", "trend_ema"}
+MEAN_REVERSION_WORDS = ("reversion a la media", "bollinger")
+
+
+def relevant(rule: dict, strategy: str = None) -> bool:
+    """Trend-following signals never get the rules written about mean reversion / Bollinger: they only add noise to the AI check."""
+    if strategy not in TREND_STRATEGIES:
+        return True
+    text = unicodedata.normalize("NFKD", rule.get("text") or "").encode("ascii", "ignore").decode().lower()
+    return not any(w in text for w in MEAN_REVERSION_WORDS)
+
+
 async def active(db, symbol: str = None, side: str = None, strategy: str = None) -> List[dict]:
     """Enabled rules that apply to this signal: a rule scoped to a pair / side / strategy is only sent to the AI for matching signals."""
     q = {"enabled": True}
     if symbol:
         q["$or"] = [{"symbol": ""}, {"symbol": None}, {"symbol": symbol}]
     rules = [_pub(d) async for d in db.ai_rules.find(q).sort("_id", -1)]
-    return [r for r in rules if (not side or r["side"] in ("", side)) and (not strategy or r["strategy"] in ("", strategy))]
+    return [r for r in rules if (not side or r["side"] in ("", side)) and (not strategy or r["strategy"] in ("", strategy)) and relevant(r, strategy)]
 
 
 async def add(db, body: RuleIn) -> dict:

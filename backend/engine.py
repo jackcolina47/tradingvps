@@ -808,6 +808,12 @@ class TradingEngine:
         docs += [{**d, "pending": True} for d in await self.db.pending_entries.find(q, {"symbol": 1, "horizon": 1}).to_list(100)]
         return docs
 
+    async def _d1_trend(self, symbol: str):
+        try:
+            return htf_trend(build_df(await self.market.fetch_klines(symbol, "1d", 200, cache_sec=3600)))
+        except Exception:
+            return None
+
     async def _handle_signal(self, symbol, sig, settings: Settings, df, htf, htf_tf, horizon: str = "short", tf: str = None):
         """Every detected signal is opened. Only gates: risk limits (one position per pair, slots, daily loss, exchange down) and the learned rules."""
         key = f"{symbol}:{sig['strategy']}:{sig['side']}:{sig['key_ts']}"
@@ -839,6 +845,11 @@ class TradingEngine:
                    "open_positions": len(open_syms), "max_positions": settings.max_positions, "daily_pnl_pct": acc["daily_pnl_pct"], "equity": acc["equity"],
                    "recent_changes": [round(x, 3) for x in (closes.pct_change().dropna() * 100).tolist()],
                    "price_action": price_action.from_df(df, sig["side"], sig["price"], sig["indicators"].get("atr", 0), sig["sl"], sig["tp"], upto=len(df) - 1)}
+        guard = horizon == "short" and sig.get("exit_mode") != "cross"
+        if guard:
+            context["d1_trend"] = price_action.TREND_TXT.get(d1 := await self._d1_trend(symbol), "N/D")
+            context["price_action"] = price_action.refine(df, sig, context["price_action"], htf_tf, htf, d1)
+            block = block or price_action.late_entry(sig["side"], sig["price"], t0.get("price"), sig.get("atr"))
         signal = Signal(symbol=symbol, side=sig["side"], strategy=sig["strategy"], timeframe=tf,
                         price=sig["price"], sl=sig["sl"], tp=sig["tp"], score=sig["score"], reasons=sig["reasons"],
                         indicators=sig["indicators"], ai_decision="SIN_IA", key=key, context=context)
@@ -882,7 +893,12 @@ class TradingEngine:
                 await self.tg(f"📚 <b>{symbol} {sig['side'].upper()} bloqueada por regla</b>\n{signal.ai_reasoning[:300]}", "ai")
         res = await self.db.signals.insert_one(signal.to_mongo())
         sid = str(res.inserted_id)
-        if approve:
+        late = price_action.late_entry(sig["side"], sig["price"], self.market.tickers.get(symbol, {}).get("price"), sig.get("atr")) if approve and guard else ""
+        if late:  # the price ran while the rules were being checked: nothing is sent to the exchange
+            await self.log("RISK", f"{symbol}: señal descartada · {late}")
+            await self.db.signals.update_one({"_id": res.inserted_id}, {"$set": {"note": f"No ejecutada: {late}"}})
+            await open_shadow(self, sid, symbol, sig, settings, "NO_EJECUTADA", acc["equity"], horizon=horizon)
+        elif approve:
             self._open_fail = None
             if settings.entry_order_type == "maker":
                 pos = await maker.queue_entry(self, symbol, sig, settings, sid, 1.0, "", horizon, tf)

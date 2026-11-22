@@ -94,6 +94,64 @@ def from_df(df, side: str, entry: float, atr: float = 0.0, sl: float = None, tp:
     return facts(rows, side, entry, atr, sl, tp, max_run, swing_atr)
 
 
+TP_SWING_BUFFER_ATR = 0.2   # trimmed TP sits this far in front of the swing
+TP_TRIM_MIN_RR = 1.5        # …and is only used if the trade still pays at least this R:R
+LATE_ENTRY_ATR = 0.4        # price already ran this far from the signal close → entry discarded as late
+MAX_SPREAD_ATR = 0.15       # forex: no market entry with a spread wider than this
+TREND_TXT = {1: "ALCISTA", -1: "BAJISTA", 0: "NEUTRAL"}
+
+
+def trim_tp(pa: dict, sig: dict):
+    """TP beyond the opposing swing → TP just in front of it (swing ∓ 0.2 ATR) when R:R stays ≥ 1.5; else None (TP unchanged)."""
+    if not pa or not pa.get("tp_beyond_swing") or sig.get("exit_mode") == "cross":
+        return None
+    long = sig["side"] == "long"
+    swing, atr = pa.get("swing_high") if long else pa.get("swing_low"), sig.get("atr") or pa.get("atr") or 0
+    risk = abs(sig["price"] - sig["sl"])
+    if not swing or not atr > 0 or not risk > 0:
+        return None
+    tp = swing - TP_SWING_BUFFER_ATR * atr if long else swing + TP_SWING_BUFFER_ATR * atr
+    reward = tp - sig["price"] if long else sig["price"] - tp
+    return tp if reward / risk >= TP_TRIM_MIN_RR else None
+
+
+def refine(df, sig: dict, pa: dict, htf_tf: str = None, htf: int = None, d1: int = None, **kw) -> dict:
+    """Before the AI sees the signal: trims a TP that sits beyond a swing (mutates `sig`) and adds trigger-candle wicks, EMA9-EMA21 gap and HTF / 1D trends."""
+    tp = trim_tp(pa, sig)
+    if tp is not None:
+        old, sig["tp"] = sig["tp"], tp
+        sig["reasons"] = [*sig["reasons"], f"TP recortado de {old:.6g} a {tp:.6g}: queda {TP_SWING_BUFFER_ATR:g}×ATR antes del swing previo (R:R {abs(tp - sig['price']) / abs(sig['price'] - sig['sl']):.2f})"]
+        pa = {**from_df(df, sig["side"], sig["price"], sig.get("atr") or 0, sig["sl"], tp, upto=len(df) - 1, **kw), "tp_trimmed_from": old}
+    r, atr = df.iloc[-2], sig.get("atr") or pa.get("atr") or 0   # trigger candle = last closed one
+    rng = float(r["high"] - r["low"])
+    if rng > 0:
+        pa["upper_wick_pct"] = round(float(r["high"] - max(r["open"], r["close"])) / rng * 100, 1)
+        pa["lower_wick_pct"] = round(float(min(r["open"], r["close"]) - r["low"]) / rng * 100, 1)
+    if atr > 0 and "ema9" in r and "ema21" in r:
+        pa["ema9_21_gap_atr"] = round(float(r["ema9"] - r["ema21"]) / atr, 2)
+    pa["htf_trend"], pa["d1_trend"] = TREND_TXT.get(htf, "N/D"), TREND_TXT.get(d1, "N/D")
+    pa["summary"] = [*pa.get("summary", []),
+                     f"Vela gatillo: mecha superior {pa.get('upper_wick_pct', 'N/D')} % e inferior {pa.get('lower_wick_pct', 'N/D')} % de su rango. "
+                     f"EMA9−EMA21: {pa.get('ema9_21_gap_atr', 'N/D')} ATR. Tendencia {htf_tf or 'TF superior'}: {pa['htf_trend']} · 1D: {pa['d1_trend']}."]
+    return pa
+
+
+def late_entry(side: str, signal_close: float, price_now: float, atr: float, both_ways: bool = False) -> str:
+    """Reason text if the price already moved more than 0.4 ATR from the signal candle close (in favour of the trade; `both_ways`: in any direction), else ''."""
+    if not price_now or not atr or not atr > 0:
+        return ""
+    move = (price_now - signal_close) * (1 if side == "long" else -1) / atr
+    if move > LATE_ENTRY_ATR + 1e-9 or (both_ways and abs(move) > LATE_ENTRY_ATR + 1e-9):
+        return f"entrada tardía: el precio ya se movió {abs(move):.2f} ATR {'a favor' if move > 0 else 'en contra'} desde el cierre de la vela señal (máx. {LATE_ENTRY_ATR:g})"
+    return ""
+
+
+def wide_spread(spread: float, atr: float) -> str:
+    if spread and atr and atr > 0 and spread > MAX_SPREAD_ATR * atr:
+        return f"spread demasiado abierto: {spread / atr:.2f} ATR (máx. {MAX_SPREAD_ATR:g})"
+    return ""
+
+
 def hard_block(pa: dict) -> str:
     """Deterministic gate: reason text if the entry chases an extended move or sits against a nearby swing, else ''."""
     if not pa or not pa.get("warning"):
