@@ -7,6 +7,7 @@ Confidence above the configured threshold → real entry; below → shadow trade
 import time
 import json
 import asyncio
+from bson import ObjectId
 import logging
 from datetime import datetime, timezone, timedelta
 import pandas as pd
@@ -516,6 +517,18 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
         await engine.funnel_shadow(sid, symbol, sig, settings, "BAJA_CONFIANZA", state["acc"], res["confidence"])
         return 1
     await engine.log("AI_EVAL", f"{head} → APROBADA · {'CONTRATENDENCIA · SL fijo y TP corto de la IA' if source == 'contra' else 'SL/TP fijos por ATR' if source == 'atr' else 'SL/TP de la IA'} · {res['reasoning'][:200]}{tail}")
+    late = getattr(engine, "funnel_late_atr", None)
+    if late:   # market entry: never chase a move that already left
+        t = engine.market.tickers.get(symbol, {})
+        d = 1 if side == "long" else -1
+        px = (t.get("price") or price) + d * (t.get("spread") or 0) / 2   # ask for a buy, bid for a sell
+        ran = (px - m["close"]) * d / m["atr"] if m["atr"] else 0
+        if ran > late:
+            why = f"entrada tardía: el precio ya corrió {ran:.2f} ATR a favor desde el cierre de la vela señal (máx. {late})"
+            await engine.db.signals.update_one({"_id": ObjectId(sid)}, {"$set": {"ai_decision": "TARDIA", "note": f"No ejecutada · {why}"}})
+            _note(engine, symbol, 2, "PASS", why, res["confidence"])
+            await engine.log("RISK", f"{symbol}: {res['decision']} aprobada pero descartada · {why} ({m['close']:.6g} → {px:.6g})")
+            return 0
     ok, reason = await engine.funnel_open(symbol, sig, settings, sid, state["acc"])
     if ok:
         _note(engine, symbol, 2, "EJECUTADA", res["reasoning"], res["confidence"])

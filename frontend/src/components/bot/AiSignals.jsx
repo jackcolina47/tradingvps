@@ -5,6 +5,7 @@ import { fmtPrice, fmtTime, STRATEGY_LABELS } from "@/lib/api";
 const DECISION_CLS = {
   APROBADA: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
   PASS: "bg-slate-500/10 text-slate-300 border-slate-500/30",
+  TARDIA: "bg-amber-500/10 text-amber-300 border-amber-500/30",
   CONTRA_4H: "bg-amber-500/10 text-amber-300 border-amber-500/30",
   BAJA_CONFIANZA: "bg-purple-500/10 text-purple-300 border-purple-500/30",
   RECHAZADA: "bg-rose-500/10 text-rose-400 border-rose-500/30",
@@ -35,7 +36,7 @@ const GATE_TIP = "Se ejecuta solo si la confianza del modelo potente supera «Co
 function SignalCard({ s, minConfidence, rulesOnly }) {
   const min = s.ai_min_confidence ?? minConfidence;
   const belowMin = s.ai_decision === "APROBADA" && !s.executed && Number.isInteger(min) && s.ai_confidence < min;
-  const showMin = Number.isInteger(min) && ["APROBADA", "BAJA_CONFIANZA", "PASS", "CONTRA_4H"].includes(s.ai_decision);
+  const showMin = Number.isInteger(min) && ["APROBADA", "BAJA_CONFIANZA", "PASS", "CONTRA_4H", "TARDIA"].includes(s.ai_decision);
   return (
     <article data-testid={`ai-signal-${s.id}`} className="border-b border-[#1E293B]/70 px-4 py-3.5">
       <div className="flex items-center justify-between gap-2">
@@ -46,7 +47,7 @@ function SignalCard({ s, minConfidence, rulesOnly }) {
         </div>
         <span data-testid={`ai-decision-${s.id}`} title={belowMin ? GATE_TIP : undefined}
           className={`rounded-sm border px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider ${belowMin ? DECISION_CLS.BLOQUEADA : DECISION_CLS[s.ai_decision]}`}>
-          {s.ai_decision === "SIN_IA" ? (rulesOnly ? "Entrada directa" : "Sin IA") : rulesOnly && s.ai_decision === "RECHAZADA" ? "Bloqueada por regla" : rulesOnly && s.ai_decision === "APROBADA" ? "Pasa las reglas" : s.ai_decision === "SESION" ? "Sesión" : s.ai_decision === "BAJA_CONFIANZA" ? "Sombra · confianza baja" : s.ai_decision === "PASS" ? "PASS · sin operación" : s.ai_decision === "CONTRA_4H" ? "Bloqueada · contra 4H" : belowMin ? "Aprobada · bajo mínimo" : s.ai_decision}
+          {s.ai_decision === "SIN_IA" ? (rulesOnly ? "Entrada directa" : "Sin IA") : rulesOnly && s.ai_decision === "RECHAZADA" ? "Bloqueada por regla" : rulesOnly && s.ai_decision === "APROBADA" ? "Pasa las reglas" : s.ai_decision === "SESION" ? "Sesión" : s.ai_decision === "BAJA_CONFIANZA" ? "Sombra · confianza baja" : s.ai_decision === "PASS" ? "PASS · sin operación" : s.ai_decision === "CONTRA_4H" ? "Bloqueada · contra 4H" : s.ai_decision === "TARDIA" ? "Descartada · entrada tardía" : belowMin ? "Aprobada · bajo mínimo" : s.ai_decision}
         </span>
       </div>
       <p className="mt-1 font-mono text-[10px] text-slate-500">

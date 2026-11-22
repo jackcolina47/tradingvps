@@ -677,6 +677,10 @@ Petición explícita del usuario (sustituye a «bloquear contra 4H sin gastar IA
 ## Iteración 111 (2026-11) — Chat IA: acceso completo de lectura a las reglas aprendidas
 - Causa: el chat no tenía ninguna herramienta de reglas. Nueva `get_rules` (bot, only_enabled, symbol) en `chat/tools.py`: todas las reglas sin recortar + estadísticas + `historial_cambios` (60 eventos). Solo lectura (el usuario pidió ver; crear/editar desde el chat queda fuera).
 
+## Iteración 112 (2026-11) — HotForex: funnel_rich + filtro de entrada tardía
+- `fx/engine_signals.py`: propiedades `funnel_rich` y `funnel_late_atr` (0.35) activas solo si `profile.panel == "fx"` (HotForex). Pepperstone sin cambios (el usuario pidió solo fx).
+- `funnel._deep`: antes de `funnel_open`, si ask (BUY) / bid (SELL) corrió > 0,35 ATR a favor desde el cierre de la vela señal → Signal pasa a `TARDIA`, sin abrir; se reintenta en el siguiente disparo. UI: etiqueta «Descartada · entrada tardía».
+
 ### Pendiente
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.

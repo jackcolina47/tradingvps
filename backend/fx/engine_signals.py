@@ -61,6 +61,16 @@ class SignalsMixin:
     # ---------- AI funnel adapter ----------
     funnel_mtf = ("4h", "1h")   # 4H structure + 1H confirmation before the entry timeframe
 
+    @property
+    def funnel_rich(self) -> bool:
+        """HotForex only: fast EMAs, ADX slope, swings, range regime, over-extension filter and AI-stop buffer."""
+        return self.profile.panel == "fx"
+
+    @property
+    def funnel_late_atr(self):
+        """HotForex only: a market entry is dropped when the price already ran this many ATR past the signal candle's close."""
+        return 0.35 if self.profile.panel == "fx" else None
+
     async def funnel_frame(self, symbol: str, tf: str, limit: int = 300):
         """Candles with the broker's tick volume while the MetaApi account is deployed; Yahoo (no volume → candle range) otherwise."""
         b = self.broker
