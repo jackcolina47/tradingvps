@@ -9,6 +9,7 @@ from notify import notify as tg
 
 logger = logging.getLogger("maker")
 OFFSET = 0.0002
+RETRY_MAX_ATR = 0.15   # a rejected limit order is re-placed once at the new best maker price if it moved less than this
 MAX_WAIT_SEC = 86400
 
 
@@ -25,7 +26,8 @@ def paper_filled(side: str, limit: float, price: float) -> bool:
 
 
 async def queue_entry(engine, symbol: str, sig: dict, settings, signal_id: str, risk_factor: float, risk_reason: str, horizon: str, tf: str):
-    """Places the post-only order (REAL) or registers the simulated one (PAPER). Falls back to market when the broker rejects it."""
+    """Places the post-only order (REAL) or registers the simulated one (PAPER). A rejected order is re-placed once at the new best
+    maker price (within 0.15 ATR of the original); a second failure discards the entry. Never falls back to a market order."""
     price = engine.market.tickers.get(symbol, {}).get("price") or sig["price"]
     side, limit = sig["side"], limit_price(sig["side"], price)
     sl, tp = limit - (sig["price"] - sig["sl"]), limit + (sig["tp"] - sig["price"])
@@ -35,19 +37,43 @@ async def queue_entry(engine, symbol: str, sig: dict, settings, signal_id: str, 
            "created_at": now_iso(), "expires_at": (datetime.now(timezone.utc) + timedelta(seconds=wait)).isoformat(), "live": engine.live,
            "order_id": None, "link_id": None, "qty": None}
     if engine.live:
-        try:
-            size = await engine.live_size(symbol, limit, sl, settings.risk_per_trade * risk_factor, settings.leverage)
+        async def place(px: float):
+            s, t = px - (sig["price"] - sig["sl"]), px + (sig["tp"] - sig["price"])
+            size = await engine.live_size(symbol, px, s, settings.risk_per_trade * risk_factor, settings.leverage)
             if not size:
-                return await engine.open_position(symbol, sig, settings, signal_id, risk_factor, risk_reason, horizon=horizon)
-            r = await engine.broker.open_limit(symbol, side, size["qty"], limit, sl, tp, settings.leverage)
-            doc.update(order_id=r["order_id"], link_id=r["link_id"], qty=r["qty"])
+                return None
+            r = await engine.broker.open_limit(symbol, side, size["qty"], px, s, t, settings.leverage)
+            doc.update(limit_price=px, sl=s, tp=t, order_id=r["order_id"], link_id=r["link_id"], qty=r["qty"])
+            return r
+        try:
+            if not await place(limit):
+                return None   # below the minimum lot / margin: live_size already logged it
         except Exception as e:
-            await engine.log("RISK", f"{symbol}: orden límite maker rechazada por Bybit ({str(e)[:100]}) · se envía a mercado")
-            return await engine.open_position(symbol, sig, settings, signal_id, risk_factor, risk_reason, horizon=horizon, entry_type="market_fallback")
+            why = await _retry(engine, symbol, side, limit, sig, place, str(e)[:100])
+            if why:
+                engine._open_fail = why
+                await engine.log("RISK", f"{symbol}: {why} · entrada descartada (sin orden a mercado)")
+                return None
+        limit, sl, tp = doc["limit_price"], doc["sl"], doc["tp"]
     await engine.db.pending_entries.insert_one(doc)
     await engine.db.signals.update_one({"_id": ObjectId(signal_id)}, {"$set": {"note": f"Orden límite maker en espera @ {limit:.6g} (hasta {settings.maker_wait_bars} velas)"}})
     await engine.log("ORDER", f"{symbol}: orden LÍMITE maker {side.upper()} @ {limit:.6g} · espera máx. {settings.maker_wait_bars} velas de {tf} · si no se llena se cancela")
     return doc
+
+
+async def _retry(engine, symbol: str, side: str, limit: float, sig: dict, place, error: str):
+    """One more post-only attempt at the new best maker price. Returns the discard reason, or None when the order is resting."""
+    head = f"orden límite maker rechazada por Bybit ({error})"
+    try:
+        book = await engine.broker.client.best(symbol)
+        px = book["bid"] if side == "long" else book["ask"]
+        atr = sig.get("atr") or 0
+        if not px or not atr or abs(px - limit) > RETRY_MAX_ATR * atr:
+            return f"{head} y el precio se alejó más de {RETRY_MAX_ATR} ATR ({limit:.6g} → {px:.6g})"
+        await engine.log("ORDER", f"{symbol}: {head} · reintento único al mejor precio maker {px:.6g}")
+        return None if await place(px) else f"{head} · {engine._open_fail or 'tamaño insuficiente en el reintento'}"
+    except Exception as e:
+        return f"{head} y el reintento también falló ({str(e)[:100]})"
 
 
 async def _finish(engine, d: dict, fill: dict = None, entry_type: str = "maker"):

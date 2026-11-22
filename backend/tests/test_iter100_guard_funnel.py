@@ -149,12 +149,17 @@ class TestStage0:
     def test_adx_and_volume_ok_passes(self):
         assert funnel.stage0(self._m(adx=18, activity=0.8, activity_kind="volumen")) is None
 
-    def test_overextended_only_for_rich(self):
+    def test_overextension_depends_on_4h(self):
         floor = dict(adx=25, activity=2.0, activity_kind="volumen", rsi=30, dist_ema20_atr=-2.4)
-        assert funnel.stage0(self._m(**floor)) is None
-        assert "suelo" in funnel.stage0(self._m(rich=True, **floor))
-        assert "techo" in funnel.stage0(self._m(rich=True, **{**floor, "rsi": 70, "dist_ema20_atr": 2.1}))
-        assert funnel.stage0(self._m(rich=True, **{**floor, "rsi": 30, "dist_ema20_atr": -1.5})) is None
+        assert funnel.stage0(self._m(rich=True, **floor)) is None
+        assert funnel.overext_discard(self._m(**floor), "BAJISTA") is None   # not a rich engine
+        assert "suelo" in funnel.overext_discard(self._m(rich=True, **floor), "BAJISTA")
+        assert "suelo" in funnel.overext_discard(self._m(rich=True, **floor), "MIXTA")
+        assert funnel.overext_discard(self._m(rich=True, **floor), "ALCISTA") is None
+        roof = {**floor, "rsi": 70, "dist_ema20_atr": 2.1}
+        assert "techo" in funnel.overext_discard(self._m(rich=True, **roof), "ALCISTA")
+        assert funnel.overext_discard(self._m(rich=True, **roof), "BAJISTA") is None
+        assert funnel.overext_discard(self._m(rich=True, **{**floor, "dist_ema20_atr": -1.5}), "BAJISTA") is None
 
     def test_ai_stop_buffer(self):
         s = type("S", (), {"atr_levels_enabled": False, "atr_sl_mult": 2.0, "atr_tp_mult": 4.0})()

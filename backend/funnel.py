@@ -118,11 +118,28 @@ def stage0(m: dict) -> str | None:
         return f"sin tendencia (ADX {m['adx']} < {MIN_ADX})"
     if m["activity_kind"] == "volumen" and m["activity"] < MIN_VOLUME:   # forex on Yahoo data has no reliable volume: ADX only
         return f"volumen débil ({m['activity']}× < {MIN_VOLUME}×)"
-    if m.get("rich"):   # late entry: no AI call
-        if m["rsi"] < OVEREXT_RSI[0] and m["dist_ema20_atr"] < -OVEREXT_ATR:
-            return f"sobreextendido en suelo (RSI/ATR) · RSI {m['rsi']}, precio a {m['dist_ema20_atr']} ATR de EMA20"
-        if m["rsi"] > OVEREXT_RSI[1] and m["dist_ema20_atr"] > OVEREXT_ATR:
-            return f"sobreextendido en techo (RSI/ATR) · RSI {m['rsi']}, precio a +{m['dist_ema20_atr']} ATR de EMA20"
+    return None
+
+
+def overextended(m: dict) -> str | None:
+    """'suelo' / 'techo' when the price is stretched (RSI + distance to the EMA20). Rich engines only."""
+    if not m.get("rich"):
+        return None
+    if m["rsi"] < OVEREXT_RSI[0] and m["dist_ema20_atr"] < -OVEREXT_ATR:
+        return "suelo"
+    if m["rsi"] > OVEREXT_RSI[1] and m["dist_ema20_atr"] > OVEREXT_ATR:
+        return "techo"
+    return None
+
+
+OVEREXT_KEEP = {"suelo": ("ALCISTA", "long"), "techo": ("BAJISTA", "short")}   # 4H trend that keeps the pair alive for a rebound, and the only side allowed
+
+
+def overext_discard(m: dict, trend_4h: str = None) -> str | None:
+    """Stage-0 reason: a stretched pair is dropped without AI unless the 4H trend backs the rebound."""
+    ext = overextended(m)
+    if ext and trend_4h != OVEREXT_KEEP[ext][0]:
+        return f"sobreextendido en {ext} (RSI/ATR) · RSI {m['rsi']}, precio a {m['dist_ema20_atr']:+} ATR de EMA20, 4H {trend_4h or 's/d'}"
     return None
 
 
@@ -372,6 +389,10 @@ async def run(engine, settings) -> int:
             m["bias"] = BIAS_SIDE.get(m["mtf"]["4h"]["trend"])
             engine.analysis[symbol]["htf"] = {"MIXTA": "NEUTRAL"}.get(m["mtf"]["4h"]["trend"], m["mtf"]["4h"]["trend"])
             engine.analysis[symbol]["mtf"] = {tf: h["trend"] for tf, h in m["mtf"].items()}
+        why = overext_discard(m, (m.get("mtf") or {}).get("4h", {}).get("trend"))
+        if why:
+            _note(engine, symbol, 0, "DESCARTADO", why)
+            continue
         eligible[symbol] = m
     if not eligible:
         return 0
@@ -387,7 +408,13 @@ async def run(engine, settings) -> int:
             logger.exception("funnel stage 1")
             await engine.log("ERROR", f"Embudo · filtro rápido sin respuesta: {str(e)[:140]}")
             return 0
-        for c in s1["candidates"]:
+        for c in list(s1["candidates"]):
+            ext = overextended(eligible[c["symbol"]])
+            if ext and c["side"] != OVEREXT_KEEP[ext][1]:   # stretched pair kept alive for the rebound only: the late side is dropped
+                s1["candidates"].remove(c)
+                _note(engine, c["symbol"], 1, "DESCARTADO", f"{c['side'].upper()} tardío: sobreextendido en {ext} (RSI/ATR)")
+                await engine.log("RISK", f"{c['symbol']}: candidato {c['side'].upper()} descartado sin IA potente · sobreextendido en {ext} (RSI/ATR)")
+                continue
             if eligible[c["symbol"]].get("bias") not in (None, c["side"]):
                 c["counter_trend"] = True   # stage 2 must set the target before the first 4H/1H obstacle
                 await engine.log("SCAN", f"{c['symbol']}: candidato {c['side'].upper()} de contratendencia (4H {eligible[c['symbol']]['mtf']['4h']['trend']}) · el modelo potente exigirá TP corto")

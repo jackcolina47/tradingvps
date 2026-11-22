@@ -80,6 +80,12 @@ class BybitClient:
             "usdt_equity": f(usdt.get("equity")),
         }
 
+    async def best(self, symbol: str) -> dict:
+        """Best bid / ask of the order book."""
+        res = await self.call("GET", "/v5/market/tickers", {"category": "linear", "symbol": symbol}, auth=False)
+        t = (res.get("list") or [{}])[0]
+        return {"bid": float(t.get("bid1Price") or 0), "ask": float(t.get("ask1Price") or 0)}
+
     async def instrument(self, symbol: str) -> dict:
         key = (self.base_url, symbol)
         hit = _instruments.get(key)

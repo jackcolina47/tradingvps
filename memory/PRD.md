@@ -669,6 +669,11 @@ Petición explícita del usuario (sustituye a «bloquear contra 4H sin gastar IA
 - `maker._discard`: orden límite no llenada en `maker_wait_bars` velas (o Cancelled/Rejected en Bybit) → cancelada y entrada descartada; ya no hay `market_fallback` por espera. Queda a mercado solo si Bybit rechaza la orden al colocarla (queue_entry).
 - Tested: pytest (stage0/levels nuevos), render de `_row_txt`, sizing 1 % con stop con buffer, expiración maker en paper con BD temporal. Sin testing agent; maker REAL no probado.
 
+## Iteración 110 (2026-11) — Bybit: sobreextensión condicionada a 4H + rechazo maker sin mercado
+- `funnel.overextended` / `overext_discard`: fuera de `stage0`; tras calcular 4H se descarta suelo si 4H != ALCISTA y techo si 4H != BAJISTA. Si el par sobrevive, tras el Paso 1 se elimina el candidato del lado tardío (short en suelo / long en techo).
+- `maker.queue_entry` (REAL): rechazo al colocar → `_retry` una vez al mejor bid/ask (`bybit.best`, /v5/market/tickers) si está a ≤ 0,15 ATR (`RETRY_MAX_ATR`); si falla → descartada (`_open_fail`), sin mercado. Tamaño insuficiente → descartada.
+- VPS del usuario: 15m, SL/TP de la IA, Gemini 3.8 Flash como modelo potente.
+
 ### Pendiente
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.
