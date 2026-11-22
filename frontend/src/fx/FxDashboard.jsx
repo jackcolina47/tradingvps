@@ -134,7 +134,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
   return (
     <BrandContext.Provider value={brand}>
     <div data-testid="fx-dashboard" data-bot={bot} className="app-bg grain min-h-screen">
-      <Header status={data.status} busy={busy} onToggle={toggleBot} view={view} onLogout={onLogout} brand={brand.header} onSwitchBot={() => nav("/")} bot={bot} onRefresh={refresh}
+      <Header status={data.status} busy={busy} onToggle={toggleBot} view={view} onLogout={onLogout} brand={brand.header} onSwitchBot={() => nav("/")} bot={bot} onRefresh={refresh} hideChat={emaOnly}
         onSettings={() => setView((v) => (v === "settings" ? "panel" : "settings"))}
         onDocs={() => setView((v) => (v === "docs" ? "panel" : "docs"))}
         onDeploy={() => setView((v) => (v === "deploy" ? "panel" : "deploy"))}

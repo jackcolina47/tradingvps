@@ -1,0 +1,41 @@
+{
+  "summary": "Iter105: Backend HTTP + Pepperstone FE validation for the EMA-only bot. Backend: created /app/backend/tests/test_iter105_pepper_http.py (10/10 passed over the public URL) covering /api/pepper/meta (23 syms, strategies==['ema_test'], ema_only true, profiles null), /api/fx/meta (12 syms incl USDJPY, ema_only false, profiles non-empty), /api/pepper/klines ADAUSD 200 + USDJPY 400, /api/fx/klines USDJPY 200 + ADAUSD 400, settings PUT roundtrip for ema_sl_atr=4 and ema_touch_exit_enabled=true (restored), PUT symbols ['USDJPY','EURUSD'] → GET ['EURUSD'] (restored), backtest SOLUSD + EURUSD 200 with strategy ema_test and reasons only in {SL,CRUCE,BREAKEVEN,TOQUE_EMA,FIN_SEMANA}. FE: /pepperstone loaded without errors, all required data-testids present (fx-operations-panel full-width 1872/1920 with 1 sibling, 4 tabs only, settings-panel with 23 symbol chips, no JPY/CHF, no strategy chips, no criterios select, no risk-profile bar, no settings-ai-enabled-switch, no settings-ema-test-adx-filter-switch, ema-main-header text 'CRUCE EMA 10 Y 20 PERSONALIZADO ESTRATEGIA ÚNICA', has settings-ema-sl-atr-input, settings-ema-touch-exit-switch, settings-ema-test-confirm-switch, settings-ema-test-partial-switch). HotForex preserved (ops+signals panels, ADX filter, optimizer/news tabs). Lab /lab label 'Test cruce EMA 10/20' still present (in banner). BLOCKED on actually opening a SOLUSD paper position due to BUG below so could not verify position-card responsiveness, position-chart-dialog, GET /api/pepper/positions/<id>/candles or trade-analyze-btn-<id> in UI.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/pepper/manual-order", "issue": "Returns 400 'Mercado cerrado' for crypto symbols (SOLUSD, etc.) when forex market is closed (weekend). Spec: crypto trades 24/7. Root cause: /app/backend/routers/shared_routes.py line 78 calls fx_market_open() for any profile symbol without a crypto bypass. Also the friday_stage/close_before_weekend check on line 80 lacks a crypto bypass. Suggested fix: `if getattr(engine, 'profile', None) and body.symbol not in CRYPTO and not fx_market_open(): ...` and same for the friday_stage branch (import CRYPTO from fx.symbols).", "priority": "CRITICAL"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Pepperstone header", "issue": "'CHATEA CON IA EXPERT' button is still rendered in the Pepperstone header. Spec: Pepperstone must NOT show this button. (HotForex may still show it, this one must be removed only for /pepperstone.)", "selector": "button:has-text('CHATEA CON IA EXPERT') / [data-testid='chat-launcher'] is False but a chat button exists via text", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Manual BUY on crypto from main chart", "issue": "Comprar button shows 'Mercado cerrado' toast for SOLUSD on Saturday — same root cause as the backend bug above.", "affected_selectors": ["chart-buy-btn", "manual-order-confirm"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter105_pepper_http.py",
+    "/app/test_reports/pytest/iter105_results.xml"
+  ],
+  "action_items": [
+    "Fix /api/pepper/manual-order weekend gating: skip fx_market_open() and friday_stage() checks when body.symbol is in CRYPTO (import CRYPTO from fx.symbols). Without this fix, users cannot open paper positions on crypto during the weekend even though crypto is advertised as 24/7.",
+    "Remove the 'Chatea con IA expert' header button from the Pepperstone dashboard only (keep for HotForex/Bybit).",
+    "After the manual-order fix, re-run the FE playbook: open paper BUY on SOLUSD, verify position-card-<id> data-testid fields (position-opened-<id>, position-pnl-<id>), position-chart-btn-<id> → position-chart-dialog with canvas and 'Entrada/SL/EMA 9/EMA 21' legend, GET /api/pepper/positions/<id>/candles shape (candles, ema9, ema21, entry, sl, opened), card responsiveness at 390x844 and 1920x800 (no overflow), close-position-<id>, and trade-analyze-btn-<id> in Historial."
+  ],
+  "critical_code_review_comments": [
+    "shared_routes.manual_order couples the Friday/weekend gate to the profile (fx vs pepper) rather than to the symbol class — this directly contradicts the 'crypto 24/7' requirement. The engine-level entry path (_handle_test_signal, covered by test_iter101) already bypasses friday for crypto; the manual-order path must do the same.",
+    "The dialog on the main chart still exposes a TAKE PROFIT · DISTANCIA / PRECIO TP field for Pepperstone. The product requirement is 'NO take profit; exit = opposite EMA cross or TOQUE_EMA'. Consider hiding TP on Pepperstone or at least labelling the dialog so the user understands the bot will close on the next opposite cross regardless."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter105_pepper_http.py (new, 10 tests, all passing)"
+  ],
+  "success_rate": {"backend": "100% of the 10 HTTP tests (iter105) + the agent-to-agent note confirms iter101 unit tests pass — 1 product bug found in manual-order", "frontend": "~85% of the playbook (all static UI checks pass; only the position-open flow is blocked by the backend 'Mercado cerrado' bug for crypto)"},
+  "test_credentials": "BlackCat2233@ (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. settings PUT was round-tripped and restored to original values (ema_sl_atr=3, ema_touch_exit_enabled=false, full 23-symbol list). No positions were opened in paper. Bots left stopped.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Preview URL is https://repo-workspace-14--8ursakdp.preview.emergentagent.com, login password BlackCat2233@. It is currently weekend UTC (Saturday Nov 21 2026) — forex is closed, so any 'open paper position' step on Pepperstone must use a crypto symbol AND requires the manual_order crypto bypass fix first. After the fix, drive the chart BUY button (selector: button:has-text('BUY') inside the main chart area, then click the dialog's 'COMPRAR' button, which gets intercepted by DialogOverlay — use force=True or click the text locator directly, not the ElementHandle, to bypass pointer-event issues). Position cards use data-testid position-card-<id>, position-opened-<id>, position-pnl-<id>, position-chart-btn-<id>, close-position-<id>; chart dialog uses position-chart-dialog + position-chart-canvas.",
+  "rca of the issue": "manual-order Mercado-cerrado on crypto: /app/backend/routers/shared_routes.py:78 gates every symbol behind fx_market_open() whenever the engine has a profile (i.e. fx or pepper). CRYPTO symbols live in the Pepperstone profile but are 24/7 instruments; the engine's auto path already skips the Friday/weekend block for CRYPTO in fx.engine_signals.py but the manual chart-button path was missed. Fix: `from fx.symbols import CRYPTO`; `if getattr(engine,'profile',None) and body.symbol not in CRYPTO and not fx_market_open(): raise HTTPException(400,'Mercado cerrado')`; same crypto bypass on the friday_stage() branch (line 80). Reproduction: curl -X POST /api/pepper/manual-order {symbol:'SOLUSD', side:'long', sl:68.59, tp:73.76, atr:0.86, risk_pct:0.9} on a Saturday → HTTP 400 'Mercado cerrado' (expected: 200 with the new position). Confirmed on preview."
+}

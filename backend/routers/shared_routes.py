@@ -52,6 +52,8 @@ class CashFlowRequest(BaseModel):
     amount: float = Field(ge=-10_000_000, le=10_000_000)
     note: str = Field(default="", max_length=120)
 
+from fx.symbols import is_crypto  # noqa: E402
+
 
 def add_shared_routes(router, engine, label: str, currency: str = "USDT", before_unit: str = "ms"):
     async def _trade(trade_id: str) -> Trade:
@@ -75,9 +77,10 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
         price = (engine.market.tickers.get(body.symbol) or {}).get("price")
         if not price:
             raise HTTPException(400, "Sin precio en vivo para ese par")
-        if getattr(engine, "profile", None) and not fx_market_open():
+        forex = bool(getattr(engine, "profile", None)) and not is_crypto(body.symbol)  # crypto CFDs trade 24/7: no forex hours, no Friday rule
+        if forex and not fx_market_open():
             raise HTTPException(400, "Mercado cerrado")
-        if getattr(engine, "profile", None) and settings.close_before_weekend and friday_stage():
+        if forex and settings.close_before_weekend and friday_stage():
             raise HTTPException(400, "Viernes desde las 12:00 de Nueva York: sin nuevas entradas hasta el lunes")
         d = 1 if body.side == "long" else -1
         if (price - body.sl) * d <= 0 or (body.tp - price) * d <= 0:

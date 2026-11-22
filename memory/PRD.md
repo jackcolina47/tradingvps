@@ -613,3 +613,12 @@
 - Segundo laboratorio paper-only: `LabEngine(key="lab4h")` en `deps.py` (`LABS`), colecciones `lab4h_*`, API `/api/lab4h`, ruta `/lab4h`, tarjeta en el selector y opción `lab4h` en Telegram por chat.
 - En su primer arranque copia los ajustes de Bybit Lab con temporalidad 4h (editable) y capital 1000 USDT; historial propio desde cero.
 - Verificado en preview: API (ajustes copiados, 1000 USDT, aislamiento de ajustes) y pantalla. Sin confirmar en VPS.
+
+## Iteración 101 · Pepperstone = estrategia única «Cruce EMA 10 y 20 Personalizado» (jun 2026)
+- `BrokerProfile.ema_only` + `symbols` por bróker (`fx/broker.py`). Pepperstone: 23 pares (`PEPPER_SYMBOLS`: sin JPY/CHF, + AUDCAD, AUDNZD, 14 cripto CFD con velas/precios del perpetuo USDT vía `FxMarket.crypto`). HotForex sin cambios (12 pares).
+- `FxEngine.get_settings` fuerza en ema_only: test EMA activo en todos los pares, sin IA / filtro ADX / HTF / revisión IA / aprendizaje. Sin noticias IA, sin revisión automática ni walk-forward por cron.
+- Nuevos ajustes: `ema_sl_atr` (SL N×ATR, sin TP) y `ema_touch_exit_enabled` (cierre `TOQUE_EMA` si una vela posterior a la entrada cierra tocando la EMA21). «Máx. posiciones» y sesiones aplican; cripto 24/7 (sin regla de viernes ni horario forex, también en órdenes manuales).
+- UI Pepperstone: operaciones a ancho completo (4 pestañas), `PositionCards` responsive con hora de apertura y botón «Gráfico» (`PositionChartDialog`: entrada, SL, EMA 9, EMA 21; endpoint `GET /positions/{id}/candles`), ajustes reducidos, sin chat IA.
+- Migración `2026-11-21-pepper-ema-only`: NO borra datos; deja el bot detenido con la nueva lista de pares. «Empezar de cero» = botón Reiniciar.
+- Pendiente/avisos: el cruce se calcula con EMA 10/20 y el gráfico/toque usan EMA 9/21 (confirmar con el usuario); tamaños de contrato cripto en paper son estimados; nombres de símbolos cripto en MT sin verificar en REAL; el diálogo de orden manual aún pide TP.
+- Tests: `tests/test_iter101_pepper_ema_only.py`, `tests/test_iter105_pepper_http.py`; informe `test_reports/iteration_105.json`.
