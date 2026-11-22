@@ -135,10 +135,11 @@ export default function HfmSection({ config, onSave, onRefresh, account }) {
   });
   const link = () => run("link", async () => {
     let data;
-    for (let i = 0; i < 40; i++) {  // MetaApi validates the MT credentials in the background: keep asking (up to ~5 min) and show what is happening
+    const t0 = Date.now();
+    for (let i = 0; Date.now() - t0 < 360000; i++) {  // MetaApi validates the MT credentials in the background: keep asking (up to ~5 min) and show what is happening
       ({ data } = await http.post("/hfm/link", null, { timeout: 45000 }));
       if (!data.pending) break;
-      setResult((r) => ({ ...(r || {}), hint: `${data.hint} Esperando… (${i + 1})` }));
+      setResult((r) => ({ ...(r || {}), hint: `${data.hint} Esperando… ${Math.round((Date.now() - t0) / 1000)} s` }));
       await new Promise((res) => setTimeout(res, data.retry_after * 1000));
     }
     if (data.pending) { setResult((r) => ({ ...(r || {}), hint: null })); throw new Error("MetaApi sigue validando la cuenta tras varios minutos: revisa login, contraseña, servidor y plataforma (MT4/MT5) y vuelve a pulsar «Vincular cuenta»"); }

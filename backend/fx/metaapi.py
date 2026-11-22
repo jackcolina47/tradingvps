@@ -95,6 +95,7 @@ class MetaApi:
         self.read_timeout, self.trade_timeout = read_timeout, trade_timeout
         self.client = httpx.AsyncClient(timeout=httpx.Timeout(read_timeout, connect=8.0))
         self._specs = {}
+        self.retries = len(RETRY_DELAYS)  # 0 = single attempt per call (interactive steps that must answer fast)
 
     def _prov(self) -> str:
         return self.base_url or PROV
@@ -117,13 +118,14 @@ class MetaApi:
                                               timeout=httpx.Timeout(timeout or (self.trade_timeout if trade else self.read_timeout), connect=8.0))
             except httpx.HTTPError as e:
                 err = MetaApiError(0, f"MetaApi no responde: {type(e).__name__}{(' · ' + str(e)[:80]) if str(e) else ''}", kind="unknown" if trade else "transient")
+                err.read_timeout = isinstance(e, httpx.ReadTimeout)  # request was received; the server is just slow to answer
             else:
                 if r.status_code == 429:
                     wait = _retry_after(r)
                     err = MetaApiError(429, f"MetaApi: límite de peticiones alcanzado (reintento en {wait:.0f} s)", kind="transient", retry_after=wait)
                     if trade:
                         raise err
-                    if attempt < len(RETRY_DELAYS):
+                    if attempt < self.retries:
                         await asyncio.sleep(min(wait, 10.0))
                         attempt += 1
                         continue
@@ -133,7 +135,7 @@ class MetaApi:
                     err = MetaApiError(r.status_code, f"MetaApi {r.status_code}: servicio temporalmente no disponible", kind="unknown" if trade else "transient")
                 else:
                     return self._parse(r)
-            if trade or attempt >= len(RETRY_DELAYS):
+            if trade or attempt >= self.retries:
                 err.attempts = attempt + 1
                 raise err
             await asyncio.sleep(RETRY_DELAYS[attempt])
@@ -176,7 +178,12 @@ class MetaApi:
                    "type": p["type"], "reliability": p["reliability"], "region": self.region, "manualTrades": False, "keywords": list(keywords)}
         tx = tx or uuid.uuid4().hex[:32]
         for k in range(tries):
-            res = await self._call("POST", f"{self._prov()}/users/current/accounts", json=payload, tx=tx)
+            try:
+                res = await self._call("POST", f"{self._prov()}/users/current/accounts", json=payload, tx=tx)
+            except MetaApiError as e:
+                if tries == 1 and getattr(e, "read_timeout", False):  # MetaApi holds the request while it validates with the broker: same transaction, ask again
+                    return {"_retry": True, "retry_after": 3, "slow": True}
+                raise
             if not (isinstance(res, dict) and res.get("_retry")):
                 return res or {}
             if k == tries - 1 and tries == 1:

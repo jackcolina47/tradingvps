@@ -108,7 +108,8 @@ def register(router, engine, store):
         c = store.cfg
         if not (c.metaapi_token and c.mt_login and c.mt_password and c.mt_server):
             raise HTTPException(400, f"Guarda primero el token de MetaApi, login, contraseña y servidor de {engine.bk}")
-        api = MetaApi(c.metaapi_token, c.metaapi_region, c.metaapi_base_url)
+        api = MetaApi(c.metaapi_token, c.metaapi_region, c.metaapi_base_url, read_timeout=15.0)
+        api.retries = 0  # every step must answer well inside the browser timeout; the panel repeats the step
         try:
             acc = await api.find_account(c.mt_login, c.mt_server)
             if not acc:
@@ -118,6 +119,9 @@ def register(router, engine, store):
                 created = await api.provision(c.mt_login, c.mt_password, c.mt_server, c.mt_platform, name=engine.profile.metaapi_name, plan=c.metaapi_plan, keywords=engine.profile.keywords,
                                               tx=link_tx["tx"], tries=1)
                 if created.get("_retry"):  # MetaApi is still validating the MT credentials: answer now, the panel keeps asking with the same transaction
+                    if not link_tx.get("logged"):
+                        link_tx["logged"] = True
+                        await engine.log("INFO", f"Vinculando la cuenta {engine.bk} {c.mt_login} en {c.mt_server} ({c.mt_platform.upper()}): MetaApi está validando los datos con el bróker…")
                     return {"ok": True, "pending": True, "retry_after": max(2, min(int(created["retry_after"]), 10)),
                             "hint": "MetaApi está validando el login, la contraseña y el servidor con el bróker. Suele tardar entre 10 segundos y 2 minutos."}
                 link_tx.clear()
@@ -128,9 +132,11 @@ def register(router, engine, store):
                 acc = await api.account(acc["_id"])
         except MetaApiError as e:
             link_tx.clear()
+            await engine.log("ERROR", f"No se pudo vincular la cuenta {engine.bk}: {e.msg}")
             raise HTTPException(424, e.msg)
         except Exception as e:
             link_tx.clear()
+            await engine.log("ERROR", f"No se pudo vincular la cuenta {engine.bk}: {str(e)[:160]}")
             raise HTTPException(424, f"No se pudo vincular la cuenta: {str(e)[:160]}")
         finally:
             await api.aclose()

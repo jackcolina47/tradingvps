@@ -644,3 +644,4 @@
 - Causa probable (no confirmada con la cuenta real del usuario): MetaApi responde 202 mientras valida la cuenta MT y `/hfm/link` esperaba en bloque hasta ~3 min (más que el timeout del navegador/proxy).
 - Ahora `/hfm/link` responde al instante `{pending, retry_after, hint}` reutilizando el mismo transaction-id (`link_tx`), y `HfmSection.jsx` reintenta solo hasta ~5 min mostrando el estado; error claro si no termina.
 - Verificado con un MetaApi simulado (202 ×3 → 201). Pendiente: confirmación del usuario con su cuenta demo.
+- Iter 105b: el usuario (VPS) recibió «timeout of 45000ms exceeded» al vincular → cada paso de `/hfm/link` ahora es de un solo intento con lectura de 15 s (`api.retries = 0`); un ReadTimeout del POST de alta se trata como «validando» (mismo transaction-id) y un fallo de conexión da error inmediato. Se registra en el log del bot. Verificado con MetaApi simulado lento (40 s). Pendiente confirmación del usuario.
