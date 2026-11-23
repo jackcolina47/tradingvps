@@ -690,6 +690,10 @@ Petición explícita del usuario (sustituye a «bloquear contra 4H sin gastar IA
 - Fix: bloque `handle /static/*` (inmutable, 404 si falta) + `Cache-Control: no-cache` en el HTML. Se aplica con `bash update.sh` (el Dockerfile copia el Caddyfile).
 - Tested: testing_agent iteration_104 (16 pruebas de servidor estático + E2E). `tests/test_iter105_vps_static.py` se salta si no hay Caddy local en 8097/8098.
 
+## Iteración 115 (2026-11) — Filtro duro de cruce EMA9/21 tras el Paso 1 (motores `funnel_rich`: los 3 bots)
+- `funnel.run`: tras el Paso 1, SHORT con `fast_cross` ALCISTA o LONG con BAJISTA se descarta sin Paso 2 (`FAST_CROSS_SIDE`), log RISK «contra el cruce EMA9/21». Excepciones: `counter_trend` (contra 4H) y lado de rebote de un par sobreextendido.
+- Tested: testing_agent iteration_105 — 249 passed + 16 skipped (`tests/test_iter106_fast_cross_filter.py`, 14 nuevos).
+
 ### Pendiente
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.

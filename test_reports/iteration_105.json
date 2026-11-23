@@ -1,0 +1,25 @@
+{
+  "summary": "Verified the EMA9/21 fast-cross early-discard in funnel.run (lines 423-428). Added 14 new tests in test_iter106_fast_cross_filter.py covering: constants, MIXTA 4H discard matrix (SHORT vs ALCISTA / LONG vs BAJISTA discarded sin stage2; SHORT vs BAJISTA / LONG vs ALCISTA reach stage2), counter-trend exception (SHORT counter 4H-ALCISTA + cross ALCISTA → stage2 con counter_trend=True; simétrico), with-4H against the cross (no overext) → discarded, overextended rebound exception (suelo + LONG + BAJISTA cross → stage2; suelo + SHORT → still dropped por 'sobreextendido'), non-rich engine (funnel_rich=False) → no cross-based discard, and 3-candidate scenario (only the one against the cross removed, stage2 called twice, SCAN log counts 2). Full regression green: 249 passed + 16 skipped (was 235+16). Settings toggles on /api/settings, /api/fx/settings, /api/pepper/settings all True (no restore needed).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter106_fast_cross_filter.py",
+    "/app/test_reports/pytest/iter106.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix is implemented cleanly in funnel.run (≈líneas 423-428): the discard happens AFTER marking counter_trend (so the counter-trend exception works by construction) and uses `not ext` to let the overextended rebound through. FAST_CROSS_SIDE constant is defined (line 136) y los 3 motores reales (engine.TradingEngine, fx.engine_signals.SignalsMixin que hereda tanto HotForex como Pepperstone vía deps.FX_BOTS) tienen funnel_rich=True.",
+    "Log de descarte cumple lo pedido: nivel RISK, contiene 'cruce EMA9/21' y 'descartado sin IA potente', y _note marca stage=1, state='DESCARTADO' en engine.analysis[symbol].funnel.",
+    "Observación menor (no bloquea): el candidato se descarta en el mismo bloque del rebote sobreextendido con `s1['candidates'].remove(c)` dentro del `for c in list(...)`; el uso de list() ya protege de la mutación. Correcto."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter106_fast_cross_filter.py (new)"
+  ],
+  "success_rate": {"backend": "100% (249/249 passed + 16 skipped)", "frontend": "n/a (backend only)"},
+  "test_credentials": "Panel password: BlackCat2233@ (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. No LLM tokens spent (stage1/stage2 patched con monkeypatch).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter106 tests reutilizan FakeEngine/_settings/_force_in_hours/_patch_metrics_stretched desde test_iter103_bybit_hardening. Para forzar fast_cross sin tocar el DataFrame: patch de funnel.metrics que inyecta m['fast_cross'] cuando rich=True (identificando símbolo por precio del FakeMarket). El bloque filtrado está en funnel.run justo tras stage1, antes de que el bucle de stage2 arranque.",
+  "rca of the issue": "No era un bug sino una ineficiencia: el modelo rápido puede proponer candidatos contra el cruce EMA9/21 y el modelo potente gastaba tokens y ~6 s descartándolos. El fix añade un filtro determinista justo después de stage1 que, salvo contratendencia o rebote sobreextendido, elimina esos candidatos y lo registra como RISK. Verificado con 14 tests unitarios y regresión completa en verde."
+}
