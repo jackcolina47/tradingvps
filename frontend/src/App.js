@@ -182,7 +182,7 @@ function Dashboard({ onLogout }) {
               hint: "Máximo 6 pares. Los parámetros propios (SL/TP/ATR) de cada uno se actualizan si el optimizador encuentra una combinación robusta mejor." }]}
             onSave={(body) => act(() => http.put("/settings", body), "Configuración guardada")}
             onProfile={(level) => act(() => http.post("/profile", { level }), `Perfil de riesgo aplicado: ${meta?.profiles?.[level]?.name || level}`)} />
-          <Terminal logs={data.logs} onClear={() => act(() => http.delete("/logs"))} />
+          <Terminal exportable logs={data.logs} onClear={() => act(() => http.delete("/logs"))} />
         </div>
         <p className="pb-4 pt-2 font-mono text-[10px] uppercase tracking-wider text-slate-600">
           Simulación con precios reales · No es asesoría financiera · El trading con apalancamiento implica alto riesgo

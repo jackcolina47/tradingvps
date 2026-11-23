@@ -249,7 +249,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
             onSave={(body) => act(() => http.put("/settings", body), "Configuración guardada")}
             onProfile={(level) => act(() => http.post("/profile", { level }), `Perfil de riesgo aplicado: ${meta?.profiles?.[level]?.name || level}`)} />
           )}
-          <Terminal logs={data.logs} onClear={() => act(() => http.delete("/logs"))} />
+          <Terminal exportable={bot === "fx"} logs={data.logs} onClear={() => act(() => http.delete("/logs"))} />
         </div>
         <p className="pb-4 pt-2 font-mono text-[10px] uppercase tracking-wider text-slate-600">
           Simulación con precios reales de Yahoo Finance{emaOnly ? " (cripto: perpetuos USDT)" : ""} · Lotes y pips según especificaciones de {brand.broker}{data.status.costs?.commission_lot_usd ? ` · comisión ${data.status.costs.commission_lot_usd} USD/lote` : ""} · No es asesoría financiera · El apalancamiento implica alto riesgo

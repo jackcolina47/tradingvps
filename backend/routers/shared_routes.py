@@ -1,6 +1,6 @@
 """Endpoints shared by both bots (session, password, Telegram/AI connection tests, trade detail/notes/candles). Registered on each protected router."""
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
@@ -56,6 +56,18 @@ from fx.symbols import is_crypto  # noqa: E402
 
 
 def add_shared_routes(router, engine, label: str, currency: str = "USDT", before_unit: str = "ms"):
+    @router.get("/logs/export")
+    async def export_logs(hours: int = 24):
+        """Every bot log line and every detected signal (funnel stage 0 / 1 / 2) of the last 24, 48 or 72 hours, oldest first."""
+        if hours not in (24, 48, 72):
+            raise HTTPException(400, "Periodo no válido: 24, 48 o 72 horas")
+        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+        logs = [{"ts": d.get("ts", ""), "level": d.get("level", ""), "message": d.get("message", "")} async for d in engine.db.logs.find({"ts": {"$gte": since}}).sort("_id", 1)]
+        keys = ("created_at", "symbol", "side", "strategy", "timeframe", "price", "sl", "tp", "score", "ai_stage", "ai_decision", "ai_confidence", "ai_risk", "ai_model", "ai_reasoning",
+                "executed", "note", "reasons")
+        signals = [{k: d.get(k) for k in keys} async for d in engine.db.signals.find({"created_at": {"$gte": since}}).sort("_id", 1)]
+        return {"bot": label, "hours": hours, "since": since, "logs": logs, "signals": signals}
+
     async def _trade(trade_id: str) -> Trade:
         doc = await engine.db.trades.find_one({"_id": ObjectId(trade_id)}) if ObjectId.is_valid(trade_id) else None
         if not doc:

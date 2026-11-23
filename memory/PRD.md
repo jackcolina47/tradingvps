@@ -690,3 +690,6 @@
 
 ## Iteración 114 · Pepperstone: cripto renombradas a XXXUSDT
 - `fx/symbols.py` (claves `…USDT`, quote interno USD) + migración `2026-11-22-pepper-crypto-usdt` (renombra en ajustes, posiciones, historial y señales). En REAL el símbolo enviado al bróker es `XXXUSDT`+sufijo: sin verificar que Pepperstone los nombre así.
+
+## Iteración 115 · Descargar / borrar registros (Bybit y HotForex)
+- `GET /logs/export?hours=24|48|72` (shared_routes): líneas de log + señales con `ai_stage` (fase 0/1/2). `Terminal.jsx` con prop `exportable`: periodo, formato TXT/CSV, «Descargar» y «Borrar todo» con confirmación (usa el `DELETE /logs` existente). Activo en Bybit (`App.js`) y HotForex; Pepperstone y Lab conservan «Limpiar».
