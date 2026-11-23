@@ -234,7 +234,7 @@ class TestOverextendedMatrix:
         m = {"atr": 1.0, "adx": 25.0, "activity_kind": "volumen", "activity": 2.0}
         assert funnel_mod.stage0(m) is None
         assert funnel_mod.MIN_ADX == 18
-        assert funnel_mod.MIN_VOLUME == 0.8
+        assert funnel_mod.MIN_VOLUME == 0.55
 
     def test_overext_keep_table(self):
         # Floor rebound = long (bounce from oversold in uptrend); ceiling = short in downtrend

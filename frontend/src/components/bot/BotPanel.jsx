@@ -11,7 +11,7 @@ const Stat = ({ label, value, testId }) => (
 );
 
 const STAGES = [
-  ["Etapa 0 · Filtro técnico (sin IA)", "EMAs 20/50/200, RSI, MACD, ADX, ATR, volumen y zonas de oferta/demanda de cada par. Descarta sin gastar IA los pares con ADX menor a 18 o volumen menor a 0,8× (en forex el volumen solo cuenta con cuenta demo o real conectada), los que ya tienen posición y los bloqueados por evento rojo."],
+  ["Etapa 0 · Filtro técnico (sin IA)", "EMAs 20/50/200, RSI, MACD, ADX, ATR, volumen y zonas de oferta/demanda de cada par. Descarta sin gastar IA los pares con ADX menor a 18 o volumen menor a 0,55× (en forex el volumen solo cuenta con cuenta demo o real conectada), los que ya tienen posición y los bloqueados por evento rojo."],
   ["Etapa 1 · Modelo rápido", "Una sola llamada con la tabla de todos los pares: elige como máximo 3 candidatos."],
   ["Etapa 2 · Modelo potente", "Analiza cada candidato como un trader profesional, aplica las reglas aprendidas y responde BUY / SELL / PASS con un % de confianza. Vuelve a analizar los candidatos al cierre de cada vela de 15 minutos hasta abrir operación o llenar las posiciones máximas."],
 ];

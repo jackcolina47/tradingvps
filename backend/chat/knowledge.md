@@ -10,7 +10,7 @@ Cada bot tiene cuenta paper propia (capital inicial $500), ajustes, posiciones, 
 ## Arquitectura actual: Embudo IA (`funnel.py`)
 Ya NO existen estrategias estáticas, backtest, optimizador, walk-forward, perfiles de riesgo, modos test, laboratorio ni agente de noticias con titulares/sentimiento.
 Disparo en :00/:15/:30/:45 + 8 s (`funnel.next_trigger`), solo dentro del horario operativo y con huecos libres:
-- **Paso 0** (sin IA): EMA 20/50/200, RSI, MACD, ADX, ATR, actividad (volumen o rango) y zonas de oferta/demanda. Descarta ADX < 18 o volumen < 0,8× (FX sin bróker conectado: solo ADX).
+- **Paso 0** (sin IA): EMA 20/50/200, RSI, MACD, ADX, ATR, actividad (volumen o rango) y zonas de oferta/demanda. Descarta ADX < 18 o volumen < 0,55× (FX sin bróker conectado: solo ADX).
 - **Paso 1** (modelo rápido): elige 0–3 candidatos en una llamada. No se repite si ningún par se movió 0,15 ATR en la misma vela.
 - **Multitemporal (los tres bots)**: el Paso 1 usa Gemini 3.5 Flash (respaldo: modelo rápido normal) y evalúa 4H (estructura) + 1H (confirmación); `timeframe` es la temporalidad de entrada (recomendado 15m). Contra la tendencia de 4H se permite solo como rebote (contratendencia): SL fijo, TP de la IA antes de la primera EMA/zona de 4H-1H, R:R ≥ 1,5 (`COUNTER_MIN_RR`); si no, queda como CONTRA_4H sin abrir. El modelo potente es decisivo: PASS solo ante conflicto severo.
 - **HotForex y Pepperstone**: filtro de entrada tardía: una entrada aprobada se descarta (decisión `TARDIA`) si el bid/ask ya corrió más de 0,35 ATR a favor desde el cierre de la vela señal; se abre una sombra `TARDIA` (una por vela) que mide qué habría pasado entrando tarde (Rendimiento → Operaciones sombra → por motivo).

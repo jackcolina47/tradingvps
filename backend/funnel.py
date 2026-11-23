@@ -23,7 +23,7 @@ INFO = {STRATEGY: {"name": "Embudo IA", "rules": "Filtro técnico sin IA → mod
                                                  "Solo se ejecuta si la confianza supera «Confianza IA para abrir operación»; si no, se sigue como operación sombra.",
                    "basis": "Análisis discrecional de un trader profesional (tendencia, EMAs, momentum, volumen, oferta y demanda) con dimensionamiento por riesgo fijo."}}
 TRIGGER_MIN, TRIGGER_DELAY_SEC = 15, 8   # the funnel fires at :00/:15/:30/:45 + 8 s, once the exchange has closed the candle
-MIN_ADX, MIN_VOLUME = 18, 0.8
+MIN_ADX, MIN_VOLUME = 18, 0.55
 OVEREXT_RSI, OVEREXT_ATR = (32, 68), 2.0   # late entries: RSI beyond these and price further than 2 ATR from the EMA20 (rich engines)
 SL_BUFFER_ATR = 0.25                        # safety margin added behind an AI stop (rich engines)
 SWING_BARS, RANGE_BARS, RANGE_CROSSES = 20, 15, 3

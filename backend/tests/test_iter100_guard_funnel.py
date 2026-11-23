@@ -137,10 +137,10 @@ class TestStage0:
         assert funnel.stage0(self._m(adx=18, activity=0.3)) is None
 
     def test_weak_volume_discarded(self):
-        assert "volumen" in funnel.stage0(self._m(adx=25, activity=0.79, activity_kind="volumen"))
+        assert "volumen" in funnel.stage0(self._m(adx=25, activity=0.54, activity_kind="volumen"))
 
     def test_adx_and_volume_ok_passes(self):
-        assert funnel.stage0(self._m(adx=18, activity=0.8, activity_kind="volumen")) is None
+        assert funnel.stage0(self._m(adx=18, activity=0.55, activity_kind="volumen")) is None
 
     def test_overextension_depends_on_4h(self):
         floor = dict(adx=25, activity=2.0, activity_kind="volumen", rsi=30, dist_ema20_atr=-2.4)
