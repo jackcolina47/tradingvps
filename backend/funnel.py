@@ -133,6 +133,7 @@ def overextended(m: dict) -> str | None:
     return None
 
 
+FAST_CROSS_SIDE = {"long": "ALCISTA", "short": "BAJISTA"}   # EMA9/21 cross each side needs (rich engines), unless it is a rebound
 OVEREXT_KEEP = {"suelo": ("ALCISTA", "long"), "techo": ("BAJISTA", "short")}   # 4H trend that keeps the pair alive for a rebound, and the only side allowed
 
 
@@ -419,6 +420,12 @@ async def run(engine, settings) -> int:
             if eligible[c["symbol"]].get("bias") not in (None, c["side"]):
                 c["counter_trend"] = True   # stage 2 must set the target before the first 4H/1H obstacle
                 await engine.log("SCAN", f"{c['symbol']}: candidato {c['side'].upper()} de contratendencia (4H {eligible[c['symbol']]['mtf']['4h']['trend']}) · el modelo potente exigirá TP corto")
+            cross = eligible[c["symbol"]].get("fast_cross")
+            if cross and cross != FAST_CROSS_SIDE[c["side"]] and not c.get("counter_trend") and not ext:
+                s1["candidates"].remove(c)   # against the EMA9/21 cross of the entry timeframe: the strong model would reject it anyway
+                why = f"{c['side'].upper()} contra el cruce EMA9/21 de {tf} ({cross}: EMA9 {'>' if cross == 'ALCISTA' else '<'} EMA21)"
+                _note(engine, c["symbol"], 1, "DESCARTADO", why)
+                await engine.log("RISK", f"{c['symbol']}: candidato {why} · descartado sin IA potente")
         picked = {c["symbol"] for c in s1["candidates"]}
         for symbol in eligible:
             if symbol not in picked:
