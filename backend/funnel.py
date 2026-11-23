@@ -512,7 +512,7 @@ async def _record(engine, cand: dict, m: dict, res: dict, s1: dict, tf: str, thr
         indicators={k: m[k] for k in ("close", "ema20", "ema50", "ema200", "rsi", "macd_hist", "adx", "atr", "activity")},
         ai_decision=decision, ai_confidence=res["confidence"], ai_min_confidence=threshold, ai_stage=2, ai_model=res["model"], ai_ms=res["ms"],
         ai_reasoning=res["reasoning"], note=note, key=key,
-        context={"funnel": {"stage1": {"reason": cand["reason"], "model": s1["model"], "ms": s1["ms"]}, "verdict": res["decision"],
+        context={"funnel": {"stage1": {"reason": cand["reason"], "model": s1["model"], "ms": s1["ms"]}, "verdict": res["decision"], "range_edge": cand.get("range_edge"),
                             "mtf": {t: h["trend"] for t, h in (m.get("mtf") or {}).items()} or None}}).to_mongo())
 
 
@@ -530,7 +530,7 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
     ctx = {**engine.funnel_ctx(symbol), "posiciones_abiertas": len(state["open"]), "max_posiciones": settings.max_positions,
            "pnl_dia_pct": state["acc"]["daily_pnl_pct"], "eventos_rojos_proximos": _upcoming(kind, symbol)}
     res = await stage2(kind, symbol, tf, cand, m, df, i, has_volume, htf, rules, ctx, settings, engine.usage_kind)
-    tail = f" · {res['model']} · {res['ms']} ms"
+    tail = (f" · RANGO ({cand['range_edge']})" if cand.get("range_edge") else "") + f" · {res['model']} · {res['ms']} ms"
     threshold = settings.ai_min_confidence
     if res["decision"] == "PASS":
         await _record(engine, cand, m, res, s1, tf, threshold, "PASS", key, f"Regla aprendida: {res['rule']['text'][:120]}" if res["rule"] else "")
@@ -597,7 +597,7 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
         engine.signal_keys.add(candle_key)
         await engine.funnel_shadow(sid, symbol, sig, settings, "BAJA_CONFIANZA", state["acc"], res["confidence"])
         return 1
-    await engine.log("AI_EVAL", f"{head} → APROBADA · {'CONTRATENDENCIA · SL fijo y TP corto de la IA' if source == 'contra' else f'RANGO ({edge}) · TP antes de la zona opuesta' if source == 'rango' else 'SL/TP fijos por ATR' if source == 'atr' else 'SL/TP de la IA'} · {res['reasoning'][:200]}{tail}")
+    await engine.log("AI_EVAL", f"{head} → APROBADA · {'CONTRATENDENCIA · SL fijo y TP corto de la IA' if source == 'contra' else 'TP antes de la zona opuesta' if source == 'rango' else 'SL/TP fijos por ATR' if source == 'atr' else 'SL/TP de la IA'} · {res['reasoning'][:200]}{tail}")
     late = getattr(engine, "funnel_late_atr", None)
     if late:   # market entry: never chase a move that already left
         t = engine.market.tickers.get(symbol, {})

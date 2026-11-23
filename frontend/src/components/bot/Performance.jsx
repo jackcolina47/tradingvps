@@ -10,6 +10,7 @@ import ExcursionStats from "./performance/ExcursionStats";
 import DailyPnl from "./performance/DailyPnl";
 
 const SIDE = { long: "Long", short: "Short" };
+const SETUP = { tendencia: "Tendencia", rango: "Rango (extremo)", contratendencia: "Contratendencia (contra 4H)" };
 const DECISION = { APROBADA: "Aprobadas IA", PASS: "PASS del modelo potente", CONTRA_4H: "Bloqueadas contra 4H", TARDIA: "Descartadas por entrada tardía", BAJA_CONFIANZA: "Sombras por confianza baja", RECHAZADA: "Rechazadas IA", BLOQUEADA: "Bloqueadas riesgo", NOTICIAS: "Bloqueadas noticias", FUNDING: "Bloqueadas funding", REGIMEN: "Bloqueadas régimen BTC", ROTACION: "Bloqueadas rotación", EXPOSICION: "Bloqueadas exposición", ROLLOVER: "Bloqueadas rollover", VOLATILIDAD: "Bloqueadas volatilidad", ESTACIONAL: "Bloqueadas estacionalidad", REGIMEN_USD: "Bloqueadas régimen USD", FOMC: "Bloqueadas FOMC", PRECIO_EXTENDIDO: "Bloqueadas precio extendido", RR_BAJO: "Bloqueadas R:R bajo", SPREAD: "Bloqueadas spread", MERCADO: "Mercado cerrado", SESION: "Fuera de sesión", SIN_IA: "Sin IA", ERROR: "Error IA" };
 
 const Group = ({ title, label, rows, render = (k) => k, testId, isOn, onToggle, hint }) => (
@@ -86,6 +87,7 @@ export default function Performance({ tradeCount, settings, onSave }) {
             <Group title="Por par" label="Par" rows={data.by_symbol} testId="perf-by-symbol" isOn={(k) => settings.symbols.includes(k)} onToggle={toggleSymbol} />
             <Group title="Por dirección" label="Lado" rows={data.by_side} render={(k) => SIDE[k] || k} testId="perf-by-side" />
             <Group title="Por tipo de salida" label="Salida" rows={data.by_reason} render={(k) => REASON_LABELS[k] || k} testId="perf-by-reason" />
+            {data.by_setup?.length > 0 && <Group title="Por tipo de operación" label="Tipo" rows={data.by_setup} render={(k) => SETUP[k] || k} testId="perf-by-setup" />}
             {data.by_horizon?.length > 0 && <Group title="Por horizonte" label="Horizonte" rows={data.by_horizon} render={(k) => HORIZON_LABELS[k] || k} testId="perf-by-horizon" />}
             {data.by_entry_type?.length > 0 && <Group title="Por tipo de entrada" label="Entrada" rows={data.by_entry_type} render={(k) => ENTRY_LABELS[k] || k} testId="perf-by-entry-type" />}
           </>

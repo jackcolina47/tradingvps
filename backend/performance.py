@@ -136,12 +136,30 @@ async def confidence_calibration(db) -> dict:
             "recommended": best["threshold"] if status == "ok" else None, "levels": levels}
 
 
+SETUPS = ("tendencia", "rango", "contratendencia")
+
+
+async def by_setup(db) -> list:
+    """Closed funnel trades split by how they got in: trend, range edge or counter-trend (against 4H)."""
+    kind = {}
+    async for s in db.signals.find({"ai_stage": 2, "executed": True}, {"context.funnel.range_edge": 1, "context.funnel.counter_trend": 1}):
+        f = (s.get("context") or {}).get("funnel") or {}
+        kind[str(s["_id"])] = "rango" if f.get("range_edge") else "contratendencia" if f.get("counter_trend") else "tendencia"
+    acc = {}
+    async for t in db.trades.find({"signal_id": {"$in": list(kind)}}, {"signal_id": 1, "pnl": 1, "fees": 1}):
+        r = acc.setdefault(kind[t["signal_id"]], {"n": 0, "pnl": 0.0, "fees": 0.0, "wins": 0, "gw": 0.0, "gl": 0.0})
+        pnl = float(t.get("pnl") or 0)
+        r["n"], r["pnl"], r["fees"], r["wins"] = r["n"] + 1, r["pnl"] + pnl, r["fees"] + float(t.get("fees") or 0), r["wins"] + (pnl > 0)
+        r["gw" if pnl > 0 else "gl"] += pnl
+    return [_row({"_id": k, **acc[k]}) for k in SETUPS if k in acc]
+
+
 async def performance(db, shadow=shadow_stats, with_excursion: bool = True, tz_min: int = 0) -> dict:
     decisions = {r["_id"]: r["n"] async for r in db.signals.aggregate([{"$group": {"_id": "$ai_decision", "n": {"$sum": 1}}}])}
     return {
         "by_strategy": await _group(db, "strategy"), "by_symbol": await _group(db, "symbol"),
         "by_side": await _group(db, "side"), "by_reason": await _group(db, "reason"),
-        "by_horizon": await _group(db, "horizon"), "by_entry_type": await _group(db, "entry_type"),
+        "by_horizon": await _group(db, "horizon"), "by_entry_type": await _group(db, "entry_type"), "by_setup": await by_setup(db),
         "daily": await daily_pnl(db, tz_min),
         "maker": await maker_stats(db), "excursion": await excursion_stats(db) if with_excursion else None,
         "signals": {"total": sum(decisions.values()), "executed": await db.signals.count_documents({"executed": True}),

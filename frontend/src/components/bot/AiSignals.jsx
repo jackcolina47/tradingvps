@@ -44,6 +44,10 @@ function SignalCard({ s, minConfidence, rulesOnly }) {
           <span className="font-display text-sm font-semibold text-slate-100">{s.symbol}</span>
           <SideBadge side={s.side} />
           <span className="font-mono text-[10px] text-slate-500">{s.timeframe}</span>
+          {s.context?.funnel?.range_edge && (
+            <span data-testid={`ai-range-${s.id}`} title={s.context.funnel.range_edge === "EXTREMO_OFERTA" ? "Extremo de oferta del rango" : "Extremo de demanda del rango"}
+              className="rounded-sm border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-sky-300">Rango</span>
+          )}
         </div>
         <span data-testid={`ai-decision-${s.id}`} title={belowMin ? GATE_TIP : undefined}
           className={`rounded-sm border px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider ${belowMin ? DECISION_CLS.BLOQUEADA : DECISION_CLS[s.ai_decision]}`}>

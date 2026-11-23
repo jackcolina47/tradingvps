@@ -708,6 +708,10 @@ Petición explícita del usuario (sustituye a «bloquear contra 4H sin gastar IA
 - Tested: testing_agent iteration_106 — 281 passed + 16 skipped (`tests/test_iter107_range_edge.py`, 32).
 - Menor sin corregir: el log AI_EVAL dice «SL/TP de la IA» (no «RANGO») cuando la IA fija SL y TP dentro del rango.
 
+## Iteración 118 (2026-11) — Etiqueta RANGO + Rendimiento por tipo de operación
+- `funnel._deep`: toda línea de log del modelo potente sobre un candidato de rango lleva «RANGO (EXTREMO_…)»; `_record` guarda `context.funnel.range_edge` también en PASS/CONTRA_4H/BAJA_CONFIANZA. `AiSignals.jsx`: insignia «Rango».
+- `performance.by_setup` → `by_setup` en /performance: trades del embudo por tendencia / rango / contratendencia (join por signal_id). Tabla «Por tipo de operación» en Rendimiento (3 bots).
+
 ### Pendiente
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.
