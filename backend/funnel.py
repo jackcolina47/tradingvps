@@ -27,6 +27,9 @@ MIN_ADX, MIN_VOLUME = 18, 0.8
 OVEREXT_RSI, OVEREXT_ATR = (32, 68), 2.0   # late entries: RSI beyond these and price further than 2 ATR from the EMA20 (rich engines)
 SL_BUFFER_ATR = 0.25                        # safety margin added behind an AI stop (rich engines)
 SWING_BARS, RANGE_BARS, RANGE_CROSSES = 20, 15, 3
+# range-edge path: a sideways pair (ADX < 18 or RANGO / CHOPPY) still reaches the AI when the price sits on a tested edge of the range
+RANGE_ZONE_ATR, RANGE_TOUCHES, RANGE_RSI, RANGE_ROOM_ATR, RANGE_TP_GAP_ATR = 0.35, 2, (38, 62), 1.8, 0.25
+RANGE_SIDE = {"EXTREMO_OFERTA": "short", "EXTREMO_DEMANDA": "long"}
 
 
 def next_trigger(now: float = None) -> float:
@@ -111,10 +114,37 @@ def metrics(df: pd.DataFrame, i: int, has_volume: bool, price: float, rich: bool
             **(_rich(df, i, atr, price) if rich else {})}
 
 
+def range_edge(m: dict) -> str | None:
+    """'EXTREMO_OFERTA' / 'EXTREMO_DEMANDA' when a sideways pair sits on a tested edge of its range with room to the other side."""
+    if not (m["adx"] < MIN_ADX or m.get("regime")):
+        return None
+    sup, dem = m.get("supply"), m.get("demand")
+    if not sup or not dem:
+        return None
+
+    def edge(zone, other, rsi_ok):
+        return zone["dist_atr"] <= RANGE_ZONE_ATR and zone.get("touches", 0) >= RANGE_TOUCHES and rsi_ok and other["dist_atr"] >= RANGE_ROOM_ATR
+    if edge(sup, dem, m["rsi"] >= RANGE_RSI[1]):
+        return "EXTREMO_OFERTA"
+    if edge(dem, sup, m["rsi"] <= RANGE_RSI[0]):
+        return "EXTREMO_DEMANDA"
+    return None
+
+
+def range_target(m: dict, side: str) -> float:
+    """Take profit of a range trade: 0.25 ATR before the opposite zone."""
+    return m["demand"]["high"] + RANGE_TP_GAP_ATR * m["atr"] if side == "short" else m["supply"]["low"] - RANGE_TP_GAP_ATR * m["atr"]
+
+
 def stage0(m: dict) -> str | None:
-    """Deterministic filter: a flat, quiet pair far from any zone is not worth an AI call. Returns the discard reason."""
+    """Deterministic filter: a flat or quiet pair is not worth an AI call, unless it sits on a tested edge of its range. Returns the discard reason."""
     if not m["atr"] > 0:
         return "sin ATR válido"
+    return None if m.get("range_edge") else trend_gate(m)
+
+
+def trend_gate(m: dict) -> str | None:
+    """ADX / volume reason that keeps a pair out of the trend path."""
     if m["adx"] < MIN_ADX:
         return f"sin tendencia (ADX {m['adx']} < {MIN_ADX})"
     if m["activity_kind"] == "volumen" and m["activity"] < MIN_VOLUME:   # forex on Yahoo data has no reliable volume: ADX only
@@ -169,6 +199,11 @@ FAST_SYSTEM = (
 )
 
 
+RANGE_FAST_SYSTEM = (
+    " OPERACIONES DE RANGO: un par marcado con `oportunidad_rango` está en un mercado lateral, pegado a un borde ya testeado del rango y con recorrido hacia el otro lado. "
+    "Para ese par propón únicamente SHORT si es EXTREMO_OFERTA o LONG si es EXTREMO_DEMANDA, y solo si ves rechazo en el borde; no exijas tendencia, ADX alto ni alineación de EMAs."
+)
+
 MTF_SYSTEM = (
     " ANÁLISIS MULTITEMPORAL: cada par trae además su estructura en 4H y en 1H. Evalúa primero 4H (estructura y dirección de fondo), después 1H "
     "(confirmación: tendencia, momentum y si el precio está en una zona útil) y usa la tabla de {tf} solo como gatillo de entrada. "
@@ -199,12 +234,14 @@ def _row_txt(symbol: str, m: dict) -> str:
                f"último swing low {m['swing_low']:.6g} (a {m['swing_low_atr']:+} ATR)"
                + (f" | regimen_{m.get('tf', 'tf')}: {m['regime']} ({m['ema20_crosses']} cruces de EMA20 en {RANGE_BARS} velas): exige extremos claros de oferta/demanda" if m["regime"] else "")
                if m.get("rich") else "")
+            + (f"\n   oportunidad_rango: {m['range_edge']} (mercado lateral: solo {RANGE_SIDE[m['range_edge']].upper()} desde este borde, objetivo antes de la zona opuesta)" if m.get("range_edge") else "")
             + (f"\n   {_mtf_txt(m)}" if m.get("mtf") else ""))
 
 
 async def stage1(kind: str, tf: str, rows: dict, limit: int, usage_kind: str) -> dict:
     mtf = any(m.get("mtf") for m in rows.values())
-    system = FAST_SYSTEM.format(market=MARKET[kind], tf=tf, n=limit) + (MTF_SYSTEM.format(tf=tf) if mtf else "")
+    system = (FAST_SYSTEM.format(market=MARKET[kind], tf=tf, n=limit) + (MTF_SYSTEM.format(tf=tf) if mtf else "")
+              + (RANGE_FAST_SYSTEM if any(m.get("range_edge") for m in rows.values()) else ""))
     prompt = "\n".join(_row_txt(s, m) for s, m in rows.items()) + f"\n\n¿Qué pares (máx. {limit}) merecen el análisis completo?"
     t0 = time.monotonic()
 
@@ -242,6 +279,8 @@ DEEP_SYSTEM = (
     "Si la operación va en contra de la tendencia mayor de 4H (rebote técnico), el Take Profit debe fijarse obligatoriamente antes de la primera EMA relevante "
     "(EMA 20 o EMA 50 de 4H/1H) o bloque de oferta/demanda previo, asegurando una toma de beneficios rápida: en ese caso devuelve SIEMPRE `tp` como precio, "
     "con al menos 1.5 veces la distancia del stop. "
+    "Si el par está en régimen RANGO / CHOPPY o marcado como EXTREMO_OFERTA / EXTREMO_DEMANDA (con ADX < 20), busca rechazos en los bordes del rango "
+    "(velas con mecha de rechazo o giro de RSI) y coloca el Take Profit 0.25 ATR antes de la zona opuesta del rango, sin exigir rupturas ni alineación de EMAs de tendencia. "
     "`confidence` es tu estimación honesta (0-100) de la probabilidad de que la operación alcance el objetivo antes que el stop; no la infles. "
     "{levels} "
     "Si hay REGLAS APRENDIDAS, tienen prioridad: si la operación incumple alguna, responde PASS e indica su número en `rule`. "
@@ -266,7 +305,7 @@ async def stage2(kind: str, symbol: str, tf: str, cand: dict, m: dict, df, i: in
     rule_lines = "\n".join(f"{n}. {r['text']}" + (f" (solo {r['symbol']})" if r.get("symbol") else "") for n, r in enumerate(rules, 1))
     prompt = (
         f"PAR: {symbol} | TF {tf} | hora Nueva York {datetime.now(trade_guard.NY).strftime('%A %H:%M')}\n"
-        f"Candidato del filtro rápido: {cand['side'].upper()} · {cand['reason']}" + (" · CONTRATENDENCIA (contra 4H): rebote técnico con TP corto" if cand.get("counter_trend") else "") + "\n"
+        f"Candidato del filtro rápido: {cand['side'].upper()} · {cand['reason']}" + (f" · OPERACIÓN DE RANGO ({cand['range_edge']}): rechazo en el borde, TP 0.25 ATR antes de la zona opuesta" if cand.get("range_edge") else "") + (" · CONTRATENDENCIA (contra 4H): rebote técnico con TP corto" if cand.get("counter_trend") else "") + "\n"
         f"ESTADO ({tf}): {_row_txt(symbol, {**m, 'mtf': None})}\n"
         + (f"ANÁLISIS MULTITEMPORAL (4H = estructura, 1H = confirmación, {tf} = entrada): {_mtf_txt(m)}\n" if m.get("mtf") else
            f"TEMPORALIDAD SUPERIOR ({htf['tf']}): tendencia {htf['trend']} · RSI {htf['rsi']} · ADX {htf['adx']} · precio a {htf['dist_ema50_atr']:+} ATR de su EMA50\n") +
@@ -346,7 +385,7 @@ async def run(engine, settings) -> int:
             i = len(df) - 2
             price = engine.market.tickers.get(symbol, {}).get("price") or float(df["close"].iloc[-1])
             m = metrics(df, i, has_volume, price, getattr(engine, "funnel_rich", False))
-            m["tf"] = tf
+            m["tf"], m["range_edge"] = tf, range_edge(m)
             rows[symbol], frames[symbol] = m, (df, i, has_volume)
             prev = engine.analysis.get(symbol, {})
             engine.analysis[symbol] = {**engine.funnel_analysis(symbol, m), "trend": {"MIXTA": "NEUTRAL"}.get(m["trend"], m["trend"]), "rsi": m["rsi"], "macd_hist": m["macd_hist"],
@@ -382,6 +421,9 @@ async def run(engine, settings) -> int:
             _note(engine, symbol, 0, "DESCARTADO", why)
             dropped.append(f"{symbol} ({why})")
             continue
+        if m.get("range_edge") and trend_gate(m):
+            await _say(engine, f"range:{symbol}", "SCAN", f"{symbol}: {m['range_edge']} · pasa al modelo rápido por la vía de extremo de rango ({trend_gate(m)}; RSI {m['rsi']}, "
+                                                           f"oferta a {m['supply']['dist_atr']} ATR, demanda a {m['demand']['dist_atr']} ATR)")
         if getattr(engine, "funnel_mtf", None):
             try:
                 m["mtf"] = await _mtf(engine, symbol, m["price"])
@@ -425,8 +467,17 @@ async def run(engine, settings) -> int:
             if eligible[c["symbol"]].get("bias") not in (None, c["side"]):
                 c["counter_trend"] = True   # stage 2 must set the target before the first 4H/1H obstacle
                 await engine.log("SCAN", f"{c['symbol']}: candidato {c['side'].upper()} de contratendencia (4H {eligible[c['symbol']]['mtf']['4h']['trend']}) · el modelo potente exigirá TP corto")
+            edge = eligible[c["symbol"]].get("range_edge")
+            if edge and RANGE_SIDE[edge] == c["side"]:
+                c["range_edge"] = edge   # range trade: exempt from the EMA9/21 cross filter, target before the opposite zone
+            elif edge and trend_gate(eligible[c["symbol"]]):   # the pair only got here through the range path: no other side allowed
+                s1["candidates"].remove(c)
+                why = f"{c['side'].upper()} en {edge}: en mercado lateral solo se admite {RANGE_SIDE[edge].upper()} desde este borde"
+                _note(engine, c["symbol"], 1, "DESCARTADO", why)
+                await engine.log("RISK", f"{c['symbol']}: candidato {why} · descartado sin IA potente")
+                continue
             cross = eligible[c["symbol"]].get("fast_cross")
-            if cross and cross != FAST_CROSS_SIDE[c["side"]] and not c.get("counter_trend") and not ext:
+            if cross and cross != FAST_CROSS_SIDE[c["side"]] and not c.get("counter_trend") and not ext and not c.get("range_edge"):
                 s1["candidates"].remove(c)   # against the EMA9/21 cross of the entry timeframe: the strong model would reject it anyway
                 why = f"{c['side'].upper()} contra el cruce EMA9/21 de {tf} ({cross}: EMA9 {'>' if cross == 'ALCISTA' else '<'} EMA21)"
                 _note(engine, c["symbol"], 1, "DESCARTADO", why)
@@ -490,6 +541,11 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
         return 0
     side = "long" if res["decision"] == "BUY" else "short"
     price = engine.market.tickers.get(symbol, {}).get("price") or m["price"]
+    d = 1 if side == "long" else -1
+    edge = cand.get("range_edge") if RANGE_SIDE.get(cand.get("range_edge")) == side else None
+    if edge:   # range trade: the target is the AI's when it stays inside the range, otherwise 0.25 ATR before the opposite zone
+        auto = range_target(m, side)
+        res = {**res, "tp": res["tp"] if res["tp"] and 0 < (res["tp"] - price) * d <= (auto - price) * d else auto}
     sl, tp, source = levels(side, price, m["atr"], settings, res["sl"], res["tp"], engine.funnel_digits(symbol), SL_BUFFER_ATR if m.get("rich") else 0.0)
     counter = m.get("bias") not in (None, side)
     if counter:   # against the 4H trend: the stop stays, the target is the AI's (before the first 4H/1H obstacle), never further than the normal one
@@ -504,6 +560,17 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
         if reward < abs(tp - price):
             dg = engine.funnel_digits(symbol)
             tp, source = float(res["tp"]) if dg is None else round(float(res["tp"]), dg), "contra"
+    if edge and source != "contra":
+        risk, reward = (price - sl) * d, (res["tp"] - price) * d
+        if reward < MIN_RR * risk:
+            why = f"{res['decision']} de rango sin recorrido: R:R {reward / risk:.2f} < {MIN_RR} hasta 0.25 ATR antes de la zona opuesta"
+            _note(engine, symbol, 2, "PASS", why, res["confidence"])
+            await _record(engine, cand, m, res, s1, tf, threshold, "PASS", key, why)
+            await engine.log("RISK", f"{symbol}: {why} · confianza {res['confidence']}%{tail}")
+            return 0
+        if reward < abs(tp - price):
+            dg = engine.funnel_digits(symbol)
+            tp, source = float(res["tp"]) if dg is None else round(float(res["tp"]), dg), "rango"
     approved = res["confidence"] > threshold
     if not approved and candle_key in engine.signal_keys:   # this candle already has its shadow trade: just report the new verdict
         _note(engine, symbol, 2, "SOMBRA", f"Confianza {res['confidence']}% ≤ {threshold}% · {res['reasoning']}", res["confidence"])
@@ -520,7 +587,7 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
                     ai_decision="APROBADA" if approved else "BAJA_CONFIANZA", ai_confidence=res["confidence"], ai_min_confidence=threshold, ai_stage=2,
                     ai_model=res["model"], ai_ms=res["ms"], ai_adjusted_sl=res["sl"], ai_adjusted_tp=res["tp"], ai_levels_applied=source == "ia",
                     ai_reasoning=res["reasoning"], key=key,
-                    context={**ctx, "funnel": {"stage1": {"reason": cand["reason"], "model": s1["model"], "ms": s1["ms"]}, "levels": source, "counter_trend": counter, "trend": m["trend"],
+                    context={**ctx, "funnel": {"stage1": {"reason": cand["reason"], "model": s1["model"], "ms": s1["ms"]}, "levels": source, "counter_trend": counter, "range_edge": edge, "trend": m["trend"],
                                                "htf_tf": htf_tf, "mtf": {tf: h["trend"] for tf, h in (m.get("mtf") or {}).items()} or None, "activity_kind": m["activity_kind"], "demand": m["demand"], "supply": m["supply"]}})
     sid = str((await engine.db.signals.insert_one(signal.to_mongo())).inserted_id)
     head = f"{symbol} {res['decision']} · confianza {res['confidence']}% (umbral {threshold}%)"
@@ -530,7 +597,7 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
         engine.signal_keys.add(candle_key)
         await engine.funnel_shadow(sid, symbol, sig, settings, "BAJA_CONFIANZA", state["acc"], res["confidence"])
         return 1
-    await engine.log("AI_EVAL", f"{head} → APROBADA · {'CONTRATENDENCIA · SL fijo y TP corto de la IA' if source == 'contra' else 'SL/TP fijos por ATR' if source == 'atr' else 'SL/TP de la IA'} · {res['reasoning'][:200]}{tail}")
+    await engine.log("AI_EVAL", f"{head} → APROBADA · {'CONTRATENDENCIA · SL fijo y TP corto de la IA' if source == 'contra' else f'RANGO ({edge}) · TP antes de la zona opuesta' if source == 'rango' else 'SL/TP fijos por ATR' if source == 'atr' else 'SL/TP de la IA'} · {res['reasoning'][:200]}{tail}")
     late = getattr(engine, "funnel_late_atr", None)
     if late:   # market entry: never chase a move that already left
         t = engine.market.tickers.get(symbol, {})
