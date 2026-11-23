@@ -65,14 +65,18 @@ async def miss(db, rule_id: str) -> dict:
 
 TREND_STRATEGIES = {"ema_pullback", "supertrend_momentum", "trend_ema"}
 MEAN_REVERSION_WORDS = ("reversion a la media", "bollinger")
+TREND_ONLY_WORDS = ("pullback", "momentum", "ruptura", "breakout", "supertrend")
 
 
 def relevant(rule: dict, strategy: str = None) -> bool:
     """Trend-following signals never get the rules written about mean reversion / Bollinger: they only add noise to the AI check."""
-    if strategy not in TREND_STRATEGIES:
-        return True
     text = unicodedata.normalize("NFKD", rule.get("text") or "").encode("ascii", "ignore").decode().lower()
-    return not any(w in text for w in MEAN_REVERSION_WORDS)
+    about_mr = any(w in text for w in MEAN_REVERSION_WORDS)
+    if strategy in TREND_STRATEGIES:
+        return not about_mr
+    if strategy == "mean_reversion":  # the inverse: no pullback / momentum-breakout rules, unless the rule also talks about mean reversion
+        return about_mr or not any(w in text for w in TREND_ONLY_WORDS)
+    return True
 
 
 async def active(db, symbol: str = None, side: str = None, strategy: str = None) -> List[dict]:

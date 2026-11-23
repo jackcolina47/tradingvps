@@ -36,7 +36,7 @@ STRATEGY_INFO = {
 
 MODES = {
     "strict": dict(trend_rsi=(50, 70), trend_macd=True, trend_ema200=True, trend_min_score=5, adx_conf=20, vol_conf=1.0,
-                   mr_adx=25, mr_rsi=35, turtle_vol=1.5, turtle_adx=20, st_adx=20, pb_adx=20, pb_rsi=(40, 65), xc_adx=20, xc_ema200=True, xc_stack=True),
+                   mr_adx=22, mr_rsi=35, mr_range=True, turtle_vol=1.5, turtle_adx=20, st_adx=20, pb_adx=20, pb_rsi=(40, 65), xc_adx=20, xc_ema200=True, xc_stack=True),
     "relaxed": dict(trend_rsi=(45, 75), trend_macd=True, trend_ema200=True, trend_min_score=4, adx_conf=15, vol_conf=0.8,
                     mr_adx=30, mr_rsi=40, turtle_vol=1.2, turtle_adx=15, st_adx=15, pb_adx=15, pb_rsi=(35, 70), xc_adx=15, xc_ema200=True, xc_stack=False),
     "minimal": dict(trend_rsi=(40, 80), trend_macd=False, trend_ema200=False, trend_min_score=4, adx_conf=10, vol_conf=0.6,
@@ -127,26 +127,68 @@ def trend_ema(df, i, htf=None, params=None, m=None) -> Optional[dict]:
     return _signal(side, r, sl, tp, "trend_ema", reasons, score, key_ts)
 
 
+MR_REJECTION_WICK = 0.4   # re-entry candle of the wrong colour still counts with a rejection wick ≥ 40 % of its range
+MR_MAX_BREAK_VOL = 2.0    # the candle that pierced the band with more relative volume than this = real breakout, not exhaustion
+MR_TP_BUFFER_ATR = 0.2    # TP this far in front of the 20-period mean or the nearest opposing swing
+MR_MIN_RR = 1.3
+
+
+def _opposing_swing(df, i, long: bool, ref: float, lookback: int = 60, k: int = 3):
+    """Nearest confirmed pivot high above (long) / pivot low below (short) the entry in the last `lookback` candles."""
+    col = df["high" if long else "low"].values
+    best = None
+    for j in range(max(k, i - lookback), i - k + 1):
+        win = col[j - k:j + k + 1]
+        if long and col[j] >= win.max() and col[j] > ref:
+            best = col[j] if best is None else min(best, col[j])
+        elif not long and col[j] <= win.min() and col[j] < ref:
+            best = col[j] if best is None else max(best, col[j])
+    return None if best is None else float(best)
+
+
 def mean_reversion(df, i, htf=None, params=None, m=None) -> Optional[dict]:
     r, p = df.iloc[i], df.iloc[i - 1]
     if r["adx"] >= m["mr_adx"]:
         return None
     atr = r["atr"]
     sl_k = _k(params, "sl_atr", 1.5)
-    if p["close"] < p["bb_low"] and r["close"] > r["bb_low"] and p["rsi"] < m["mr_rsi"]:
+    strict = bool(m.get("mr_range"))  # real ranges only: RSI extreme (inclusive), re-entry candle in our favour, no explosive breakout, TP with margin
+    rsi_lo, rsi_hi = (p["rsi"] <= m["mr_rsi"], p["rsi"] >= 100 - m["mr_rsi"]) if strict else (p["rsi"] < m["mr_rsi"], p["rsi"] > 100 - m["mr_rsi"])
+    if p["close"] < p["bb_low"] and r["close"] > r["bb_low"] and rsi_lo:
         side, sl, tp = "long", r["close"] - sl_k * atr, r["bb_mid"]
-    elif p["close"] > p["bb_up"] and r["close"] < r["bb_up"] and p["rsi"] > 100 - m["mr_rsi"]:
+    elif p["close"] > p["bb_up"] and r["close"] < r["bb_up"] and rsi_hi:
         side, sl, tp = "short", r["close"] + sl_k * atr, r["bb_mid"]
     else:
         return None
-    if abs(tp - r["close"]) < abs(r["close"] - sl):
+    long = side == "long"
+    extra = []
+    if strict:
+        rng = r["high"] - r["low"]
+        wick = (min(r["open"], r["close"]) - r["low"]) if long else (r["high"] - max(r["open"], r["close"]))
+        turned = (r["close"] > r["open"]) if long else (r["close"] < r["open"])
+        if not (turned or (rng > 0 and wick / rng >= MR_REJECTION_WICK)) or p["vol_ratio"] > MR_MAX_BREAK_VOL:
+            return None
+        swing = _opposing_swing(df, i, long, r["close"])
+        target = tp if swing is None else (min(tp, swing) if long else max(tp, swing))
+        tp = target - MR_TP_BUFFER_ATR * atr if long else target + MR_TP_BUFFER_ATR * atr
+        extra = [f"Vela de reingreso {'verde' if long else 'roja'}" if turned else f"Rechazo {'inferior' if long else 'superior'} en la vela de reingreso",
+                 f"Volumen de la perforación {p['vol_ratio']:.2f}× (≤ {MR_MAX_BREAK_VOL:g}×: agotamiento, no ruptura)",
+                 f"TP {MR_TP_BUFFER_ATR:g}×ATR antes de {'la media de 20' if target == r['bb_mid'] else 'el swing contrario más cercano'}"]
+    reward = (tp - r["close"]) if long else (r["close"] - tp)
+    if reward < (MR_MIN_RR if strict else 1.0) * abs(r["close"] - sl):
         return None
+    sig = _mr_signal(side, r, p, sl, tp, m, extra)
+    sig["indicators"].update(bb_upper=sig["indicators"].get("bb_up"), bb_lower=sig["indicators"].get("bb_low"))  # explicit names for the AI (bb_mid is already there)
+    return sig
+
+
+def _mr_signal(side, r, p, sl, tp, m, extra):
     long = side == "long"
     reasons = [
         f"Reingreso a Bollinger desde banda {'inferior' if long else 'superior'}",
         f"RSI previo {p['rsi']:.1f} en {'sobreventa' if long else 'sobrecompra'}",
         f"ADX {r['adx']:.1f}: mercado lateral",
-        "Objetivo en la media de 20 periodos",
+        *(extra or ["Objetivo en la media de 20 periodos"]),
     ]
     score = 4 + (1 if r["vol_ratio"] >= m["vol_conf"] else 0)
     return _signal(side, r, sl, tp, "mean_reversion", reasons, score, r["ts"], tp_mode="fixed")
@@ -376,7 +418,7 @@ def atr_params(settings) -> dict:
 def apply_atr_levels(sig: dict, levels) -> dict:
     """SL = price ∓ sl_k × ATR, TP = price ± tp_k × ATR. With no usable ATR the strategy's own levels are kept."""
     atr = sig.get("atr") or 0
-    if not levels or sig.get("exit_mode") == "cross" or not atr > 0 or not sig["price"] > 0:
+    if not levels or sig.get("exit_mode") == "cross" or sig.get("strategy") == "mean_reversion" or not atr > 0 or not sig["price"] > 0:  # mean reversion keeps its own target (the mean)
         return sig
     sl_k, tp_k = levels
     d = 1 if sig["side"] == "long" else -1

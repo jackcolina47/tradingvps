@@ -693,3 +693,9 @@
 
 ## Iteración 115 · Descargar / borrar registros (Bybit y HotForex)
 - `GET /logs/export?hours=24|48|72` (shared_routes): líneas de log + señales con `ai_stage` (fase 0/1/2). `Terminal.jsx` con prop `exportable`: periodo, formato TXT/CSV, «Descargar» y «Borrar todo» con confirmación (usa el `DELETE /logs` existente). Activo en Bybit (`App.js`) y HotForex; Pepperstone y Lab conservan «Limpiar».
+
+## Iteración 116 · mean_reversion afinada para rangos 1H (Bybit y HotForex)
+- `strategies.py` modo strict (`mr_range`): ADX < 22, RSI previo ≤ 35 / ≥ 65, vela de reingreso a favor (o mecha de rechazo ≥ 40 %), volumen de la vela que perfora ≤ 2,0×, TP 0,2×ATR antes de bb_mid o del swing contrario más cercano (`_opposing_swing`), R:R ≥ 1,3. Relajados/Mínimos sin cambios. `apply_atr_levels` ya no pisa los niveles de mean_reversion. Indicadores con `bb_upper`/`bb_lower` (+ `bb_mid`).
+- `ai_rules.relevant`: mean_reversion no recibe reglas de pullback/momentum/ruptura/breakout/supertrend (salvo que hablen también de reversión/Bollinger).
+- Régimen macro: verificado que hoy NO bloquea mean_reversion: en Bybit `regime_block` de BTC no se llama en el flujo de entrada (solo-reglas) y en HotForex `_market_gates` se omite en rules_only. Sin cambios. OJO: el interruptor «Filtro régimen» de Bybit no tiene efecto en las entradas (test iter46 `test_b_regime_blocks_short_term` falla desde antes).
+- Tests: `tests/test_iter116_mean_reversion.py` (13). Backtest 1h: EURUSD 16 ops (4 TP, 10 SL); BTCUSDT 0 ops.
