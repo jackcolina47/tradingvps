@@ -82,6 +82,9 @@ def _atr_levels(r, long, params, sl_def, tp_def):
     return sl, tp
 
 
+MIN_TREND_ADX = 20  # ema_pullback / supertrend_momentum never trade a sideways market (ADX 10-19), whatever the «Criterios de entrada» mode
+
+
 def _structure(df, i, long: bool) -> bool:
     """Active short/medium-term structure: close beyond the EMA50, EMA9 beyond the EMA21 and the EMA21 sloping the same way."""
     r, slope = df.iloc[i], df.iloc[i]["ema21"] - df.iloc[i - 1]["ema21"]
@@ -107,7 +110,7 @@ def trend_ema(df, i, htf=None, params=None, m=None) -> Optional[dict]:
     trend_ok = _structure(df, i, long)  # active short/medium-term structure: no wait for the slow EMA50/EMA200 (or EMA200) confirmation after a sharp turn
     rsi_ok = _rsi_ok(r["rsi"], m["trend_rsi"], long)
     macd_ok = (r["macd_hist"] > 0 if long else r["macd_hist"] < 0) if m["trend_macd"] else True
-    if not (aligned and trend_ok and rsi_ok and macd_ok) or _against_htf(htf, long):
+    if not (aligned and trend_ok and rsi_ok and macd_ok and r["adx"] >= MIN_TREND_ADX) or _against_htf(htf, long):
         return None
     reasons = [
         f"Cruce {'alcista' if long else 'bajista'} EMA9/EMA21",
@@ -223,10 +226,9 @@ def breakout_turtle(df, i, htf=None, params=None, m=None) -> Optional[dict]:
     return _signal(side, r, sl, tp, "breakout_turtle", reasons, score, r["ts"])
 
 
-MIN_TREND_ADX = 20  # ema_pullback / supertrend_momentum never trade a sideways market (ADX 10-19), whatever the «Criterios de entrada» mode
 
 
-IMPULSE = dict(vol=1.8, range_atr=1.5, lookback=10, adx=22, sl_atr=1.8, tp_atr=3.2)
+IMPULSE = dict(vol=1.8, range_atr=1.5, lookback=10, adx=22, sl_atr=1.8, tp_atr=3.2, htf_free_vol=2.0)  # volume ≥ 2.0× = regime break: the 4H trend filter is ignored
 
 
 def _impulse(df, i, htf=None) -> Optional[dict]:
@@ -245,15 +247,16 @@ def _impulse(df, i, htf=None) -> Optional[dict]:
         long = False
     else:
         return None
-    if _against_htf(htf, long):
+    against = _against_htf(htf, long)
+    if against and r["vol_ratio"] < q["htf_free_vol"]:
         return None
     d = 1 if long else -1
-    reasons = [f"Impulso rápido: vela de ruptura {'alcista' if long else 'bajista'} de {(r['high'] - r['low']) / atr:.1f}×ATR con volumen {r['vol_ratio']:.1f}×",
+    reasons = [*([f"Ruptura de régimen (volumen ≥ {q['htf_free_vol']:g}×): entra aunque la tendencia del marco superior aún sea contraria"] if against else []), f"Impulso rápido: vela de ruptura {'alcista' if long else 'bajista'} de {(r['high'] - r['low']) / atr:.1f}×ATR con volumen {r['vol_ratio']:.1f}×",
                f"Cierra {'por encima del máximo' if long else 'por debajo del mínimo'} de las últimas {q['lookback']} velas y {'sobre' if long else 'bajo'} la EMA50",
                f"ADX {r['adx']:.1f}", f"SL {q['sl_atr']:g}×ATR · TP {q['tp_atr']:g}×ATR (niveles fijos del impulso)"]
     sig = _signal("long" if long else "short", r, r["close"] - d * q["sl_atr"] * atr, r["close"] + d * q["tp_atr"] * atr, "supertrend_momentum", reasons,
                   5 + (1 if _with_htf(htf, long) else 0), r["ts"])
-    return {**sig, "trigger": "impulse"}
+    return {**sig, "trigger": "impulse", **({"htf_override": True} if against else {})}
 
 
 def supertrend_momentum(df, i, htf=None, params=None, m=None) -> Optional[dict]:

@@ -54,3 +54,21 @@ def test_impulse_short():
         r["ema50"] = 99.8
     df = _df(rows)
     assert st.supertrend_momentum(df, len(df) - 1, None, None, S)["side"] == "short"
+
+
+def test_impulse_ignores_htf_only_with_volume_2x():
+    df = _df(_impulse_rows())                                    # volume 2.0×, long, 4H bearish
+    sig = st.supertrend_momentum(df, len(df) - 1, -1, None, S)
+    assert sig and sig["htf_override"] and "Ruptura de régimen" in sig["reasons"][0]
+    df = _df(_impulse_rows(vol_ratio=1.9))
+    assert st.supertrend_momentum(df, len(df) - 1, -1, None, S) is None and st.supertrend_momentum(df, len(df) - 1, 1, None, S) is not None
+    assert "htf_override" not in st.supertrend_momentum(_df(_impulse_rows()), 14, 1, None, S)
+
+
+def test_htf_still_blocks_pullback_and_trend_ema_and_adx_floor():
+    prev = {**BASE, "low": 100.9, "ema21": 100.95}
+    assert st.ema_pullback(_df([prev, prev, BASE]), 2, -1, None, S) is None
+    before = {**BASE, "ema9": 100.9, "ema21": 100.95}
+    assert st.trend_ema(_df([before, before, BASE]), 2, -1, None, S) is None
+    assert st.trend_ema(_df([before, before, {**BASE, "adx": 19.9}]), 2, None, None, S) is None
+    assert st.trend_ema(_df([before, before, {**BASE, "adx": 20.0}]), 2, None, None, S) is not None
