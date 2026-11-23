@@ -48,11 +48,12 @@ class TestDetection:
         df.loc[df.index[-9], "vol_ratio"] = 9.0
         assert _metrics(df)["turn"] is None
 
-    def test_adx_not_rising_no_turn(self):
+    def test_adx_below_20_no_turn(self):
         df = _frame(1)
-        df.loc[df.index[-2], "adx"] = float(df["adx"].iloc[-3])
-        m = _metrics(df)
-        assert m["adx_slope"] != "SUBIENDO" and m["turn"] is None
+        df.loc[df.index[-2], "adx"] = 19.9
+        assert _metrics(df)["turn"] is None
+        df.loc[df.index[-2], "adx"] = 20.0
+        assert _metrics(df)["turn"] == "GIRO_ALCISTA_CONFIRMADO"
 
     def test_price_back_below_swing_no_turn(self):
         df = _frame(1)
@@ -143,12 +144,15 @@ class TestDetectionBoundaries:
         assert _metrics(df)["turn"] is None
 
     def test_impulse_outside_window_no_turn(self):
-        """Impulse at i-5 (just outside the 5-candle window i-4..i) must not trigger."""
+        """Impulse at i-6 (just outside the 6-candle window i-5..i) must not trigger; at i-5 it does."""
         df = _frame(1, impulse_vol=1.0)
         i = len(df) - 2
-        df.loc[df.index[i - 5], "vol_ratio"] = 10.0   # outside window
-        df.loc[df.index[i - 5], "open"] = float(df["close"].iloc[i - 5]) - 0.5
+        df.loc[df.index[i - 6], "vol_ratio"] = 10.0   # outside window
+        df.loc[df.index[i - 6], "open"] = float(df["close"].iloc[i - 6]) - 0.5
         assert _metrics(df)["turn"] is None
+        df.loc[df.index[i - 5], "vol_ratio"] = 10.0   # oldest candle of the window
+        df.loc[df.index[i - 5], "open"] = float(df["close"].iloc[i - 5]) - 0.5
+        assert _metrics(df)["turn"] == "GIRO_ALCISTA_CONFIRMADO"
 
     def test_impulse_candle_wrong_color_no_turn(self):
         """Strong-volume candle but bearish-coloured (close < open): bullish turn must not fire."""
@@ -159,23 +163,23 @@ class TestDetectionBoundaries:
         df.loc[df.index[i - 1], "open"] = float(df["close"].iloc[i - 1]) + 0.5
         assert _metrics(df)["turn"] is None
 
-    def test_adx_plana_no_turn(self):
-        """adx_slope PLANA blocks turn."""
+    def test_adx_plana_keeps_turn(self):
+        """The tag survives the pause: a flat ADX >= 20 no longer blocks the turn."""
         df = _frame(1)
         i = len(df) - 2
         # Flatten ADX around i
         df.loc[df.index[i - 2:i + 1], "adx"] = 25.0
         m = _metrics(df)
-        assert m["adx_slope"] == "PLANA" and m["turn"] is None
+        assert m["adx_slope"] == "PLANA" and m["turn"] == "GIRO_ALCISTA_CONFIRMADO"
 
-    def test_adx_bajando_no_turn(self):
+    def test_adx_bajando_keeps_turn(self):
         df = _frame(1)
         i = len(df) - 2
         df.loc[df.index[i - 2], "adx"] = 40.0
         df.loc[df.index[i - 1], "adx"] = 30.0
         df.loc[df.index[i], "adx"] = 20.0
         m = _metrics(df)
-        assert m["adx_slope"] == "BAJANDO" and m["turn"] is None
+        assert m["adx_slope"] == "BAJANDO" and m["turn"] == "GIRO_ALCISTA_CONFIRMADO"
 
     def test_window_excludes_forming_candle(self):
         """The 5-candle window ends at i (= len-2), the forming candle at len-1 must NOT be inspected."""
@@ -383,7 +387,7 @@ class TestIntegrationTurn:
         await funnel.run(eng, _settings())
         assert stage2_called["n"] == 0
         risk_logs = [t for lvl, t in eng.logs if lvl == "RISK"]
-        assert any("cruce EMA9/21" in t for t in risk_logs)
+        assert any("contra el giro de estructura" in t and "GIRO_ALCISTA_CONFIRMADO" in t for t in risk_logs)
         assert not eng.opened
 
     @pytest.mark.asyncio
@@ -414,3 +418,40 @@ class TestIntegrationTurn:
         assert not eng.opened
         risk_logs = [t for lvl, t in eng.logs if lvl == "RISK"]
         assert any("sobreextendido en techo" in t for t in risk_logs)
+
+
+async def _blocked(monkeypatch, side, **cfg):
+    await _force_in_hours(monkeypatch)
+    eng = FakeEngine(mtf=True, funnel_rich=True)
+    _patch_turn_metrics(monkeypatch, **cfg)
+    monkeypatch.setattr(funnel, "_mtf", _mtf_bearish2)
+    calls = []
+
+    async def fake_stage1(kind, tf, rows, limit, usage_kind):
+        return {"candidates": [{"symbol": "BTCUSDT", "side": side, "reason": "x"}], "model": "fast", "ms": 1}
+
+    async def fake_stage2(kind, symbol, tf, cand, m, *a, **kw):
+        calls.append(cand["side"])
+        return {"decision": "PASS", "confidence": 30, "sl": None, "tp": None, "rule": None, "reasoning": "x", "model": "deep", "ms": 1}
+    monkeypatch.setattr(funnel, "stage1", fake_stage1)
+    monkeypatch.setattr(funnel, "stage2", fake_stage2)
+    await funnel.run(eng, _settings())
+    return calls, [t for lvl, t in eng.logs if lvl == "RISK"]
+
+
+@pytest.mark.asyncio
+async def test_rebound_short_blocked_on_bullish_turn_even_when_overextended(monkeypatch):
+    calls, risk = await _blocked(monkeypatch, "short", rsi=75, dist_ema20_atr=3.0)
+    assert calls == [] and any("contra el giro de estructura" in t for t in risk)
+
+
+@pytest.mark.asyncio
+async def test_long_blocked_on_bearish_turn(monkeypatch):
+    calls, risk = await _blocked(monkeypatch, "long", turn="GIRO_BAJISTA_CONFIRMADO", fast_cross="BAJISTA")
+    assert calls == [] and any("GIRO_BAJISTA_CONFIRMADO" in t for t in risk)
+
+
+@pytest.mark.asyncio
+async def test_short_passes_on_bearish_turn(monkeypatch):
+    calls, _ = await _blocked(monkeypatch, "short", turn="GIRO_BAJISTA_CONFIRMADO", fast_cross="BAJISTA")
+    assert calls == ["short"]

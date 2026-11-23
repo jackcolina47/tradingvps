@@ -29,7 +29,8 @@ SL_BUFFER_ATR = 0.25                        # safety margin added behind an AI s
 SWING_BARS, RANGE_BARS, RANGE_CROSSES = 20, 15, 3
 # range-edge path: a sideways pair (ADX < 18 or RANGO / CHOPPY) still reaches the AI when the price sits on a tested edge of the range
 RANGE_ZONE_ATR, RANGE_TOUCHES, RANGE_RSI, RANGE_ROOM_ATR, RANGE_TP_GAP_ATR = 0.35, 2, (38, 62), 1.8, 0.25
-TURN_VOLUME, TURN_BARS = 2.0, 5   # structural turn: break of the last swing + an impulse candle this strong within the last 5 closed candles
+TURN_VOLUME, TURN_BARS, TURN_ADX = 2.0, 6, 20   # structural turn: break of the last swing + ADX >= 20 + an impulse candle this strong within the last 6 closed candles
+TURN_SIDE = {"GIRO_ALCISTA_CONFIRMADO": "long", "GIRO_BAJISTA_CONFIRMADO": "short"}
 RANGE_SIDE = {"EXTREMO_OFERTA": "short", "EXTREMO_DEMANDA": "long"}
 
 
@@ -93,7 +94,7 @@ def _rich(df: pd.DataFrame, i: int, atr: float, price: float, activity: pd.Serie
     above = (close.iloc[i - RANGE_BARS + 1:i + 1] > df["ema20"].iloc[i - RANGE_BARS + 1:i + 1]).values
     crosses = int((above[1:] != above[:-1]).sum())
     turn = None
-    if activity is not None and slope == "SUBIENDO":   # early structural turn of the entry timeframe, whatever 4H / 1H still say
+    if activity is not None and adx[i] >= TURN_ADX:   # early structural turn of the entry timeframe, whatever 4H / 1H still say
         last = df.iloc[i - TURN_BARS + 1:i + 1]
         strong = activity.iloc[i - TURN_BARS + 1:i + 1].values >= TURN_VOLUME
         if e9 > e21 and price > sh and (strong & (last["close"] > last["open"]).values).any():
@@ -479,6 +480,13 @@ async def run(engine, settings) -> int:
             await engine.log("ERROR", f"Embudo · filtro rápido sin respuesta: {str(e)[:140]}")
             return 0
         for c in list(s1["candidates"]):
+            turn = eligible[c["symbol"]].get("turn")
+            if turn and TURN_SIDE[turn] != c["side"]:   # confirmed structural turn: the opposite side never reaches the strong model
+                s1["candidates"].remove(c)
+                why = f"{c['side'].upper()} contra el giro de estructura de {tf} ({turn})"
+                _note(engine, c["symbol"], 1, "DESCARTADO", why)
+                await engine.log("RISK", f"{c['symbol']}: candidato {why} · descartado sin IA potente")
+                continue
             ext = overextended(eligible[c["symbol"]])
             if ext and c["side"] != OVEREXT_KEEP[ext][1]:   # stretched pair kept alive for the rebound only: the late side is dropped
                 s1["candidates"].remove(c)

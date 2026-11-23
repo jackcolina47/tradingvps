@@ -718,6 +718,12 @@ Petición explícita del usuario (sustituye a «bloquear contra 4H sin gastar IA
 - Sin filtros duros nuevos: el LONG con giro contra 4H entra como contratendencia (TP de la IA, R:R ≥ 1,5). Si sigue sobreextendido en techo, el filtro existente lo descarta como tardío y solo admite el SHORT de rebote.
 - Tested: testing_agent iteration_107 — 311 passed + 16 skipped (1 flaky de red conocido). `tests/test_iter108_structural_turn.py` (31).
 
+## Iteración 120 (2026-11) — Giro estructural: lado opuesto bloqueado + etiqueta persistente
+- `_rich`: el giro exige ADX ≥ 20 (`TURN_ADX`) en vez de pendiente SUBIENDO; ventana de la vela de impulso = 6 velas cerradas (`TURN_BARS`).
+- `run`: primer filtro tras el Paso 1 — candidato del lado contrario al giro (`TURN_SIDE`) descartado sin Paso 2, también el SHORT de rebote en techo sobreextendido. Log RISK «contra el giro de estructura».
+- Tested: pytest 315 passed + 16 skipped (tests de iter108 actualizados + 3 nuevos). Sin testing agent.
+- Nota: la etiqueta sigue exigiendo precio > último swing high; si el retroceso vuelve por debajo del nivel roto, desaparece.
+
 ### Pendiente
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.
