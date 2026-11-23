@@ -368,7 +368,7 @@ async def run(engine, settings) -> int:
         return 0
     await _say(engine, "gate", "SCAN", f"Embudo IA activo · ventana «{hours['window']}» · {state['free']} hueco(s) libre(s)")
 
-    eligible = {}
+    eligible, dropped = {}, []
     for symbol, m in rows.items():
         if symbol in state["open"]:
             continue
@@ -380,6 +380,7 @@ async def run(engine, settings) -> int:
         why = stage0(m)
         if why:
             _note(engine, symbol, 0, "DESCARTADO", why)
+            dropped.append(f"{symbol} ({why})")
             continue
         if getattr(engine, "funnel_mtf", None):
             try:
@@ -387,6 +388,7 @@ async def run(engine, settings) -> int:
             except Exception as e:
                 logger.exception(f"funnel mtf {symbol}")
                 _note(engine, symbol, 0, "DESCARTADO", f"Sin datos de 4H/1H · {str(e)[:100]}")
+                dropped.append(f"{symbol} (sin datos de 4H/1H)")
                 continue
             m["bias"] = BIAS_SIDE.get(m["mtf"]["4h"]["trend"])
             engine.analysis[symbol]["htf"] = {"MIXTA": "NEUTRAL"}.get(m["mtf"]["4h"]["trend"], m["mtf"]["4h"]["trend"])
@@ -394,8 +396,11 @@ async def run(engine, settings) -> int:
         why = overext_discard(m, (m.get("mtf") or {}).get("4h", {}).get("trend"))
         if why:
             _note(engine, symbol, 0, "DESCARTADO", why)
+            dropped.append(f"{symbol} ({why})")
             continue
         eligible[symbol] = m
+    if dropped:
+        await _say(engine, "stage0", "FILTER", f"Fase 0 (sin IA) · {tf} · {len(dropped)} descartado(s), {len(eligible)} pasan al modelo rápido · " + " | ".join(dropped))
     if not eligible:
         return 0
     fp = {s: (m["candle_ts"], m["price"]) for s, m in eligible.items()}
@@ -430,6 +435,8 @@ async def run(engine, settings) -> int:
         for symbol in eligible:
             if symbol not in picked:
                 _note(engine, symbol, 1, "DESCARTADO", f"El filtro rápido no ve entrada ({s1['model']})")
+        if len(picked) < len(eligible):
+            await engine.log("FILTER", f"Fase 1 (modelo rápido) · sin entrada en: {', '.join(s for s in eligible if s not in picked)}")
         await engine.log("SCAN", f"Embudo {'4H/1H → ' if getattr(engine, 'funnel_mtf', None) else ''}{tf} · {len(rows)} pares → {len(eligible)} tras filtro técnico → {len(picked)} candidato(s) del modelo rápido"
                                  + (f": {', '.join(c['symbol'] + ' ' + c['side'].upper() for c in s1['candidates'])}" if picked else "") + f" · {s1['model']} · {s1['ms']} ms")
     found = 0

@@ -694,6 +694,12 @@ Petición explícita del usuario (sustituye a «bloquear contra 4H sin gastar IA
 - `funnel.run`: tras el Paso 1, SHORT con `fast_cross` ALCISTA o LONG con BAJISTA se descarta sin Paso 2 (`FAST_CROSS_SIDE`), log RISK «contra el cruce EMA9/21». Excepciones: `counter_trend` (contra 4H) y lado de rebote de un par sobreextendido.
 - Tested: testing_agent iteration_105 — 249 passed + 16 skipped (`tests/test_iter106_fast_cross_filter.py`, 14 nuevos).
 
+## Iteración 116 (2026-11) — Registro del bot: descarga 24/48/72 h (TXT/CSV) y borrado con confirmación (3 bots)
+- `GET /logs/export?hours=24|48|72&fmt=txt|csv` en `routers/shared_routes.py` (los 3 bots): todas las líneas del periodo con columna/etiqueta de fase (`log_phase`: 0, 1, 2). Cabecera `X-Log-Lines`.
+- `funnel.run`: nuevo nivel de log `FILTER` — una línea por disparo con los pares descartados en Fase 0 y su motivo (solo si cambia) y otra con los pares que el modelo rápido no eligió. Antes esos descartes no se guardaban.
+- `Terminal.jsx`: barra con desplegables de periodo y formato, botón Descargar y «Borrar todo» con diálogo de confirmación (usa el `DELETE /logs` existente).
+- Tested: curl en los 3 bots + Playwright (descarga real en los 3 bots, cancelar/confirmar borrado, 390 px). pytest completo. Sin testing agent.
+
 ### Pendiente
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.

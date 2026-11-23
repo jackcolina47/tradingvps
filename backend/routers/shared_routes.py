@@ -1,5 +1,9 @@
 """Endpoints shared by both bots (session, password, Telegram/AI connection tests, trade detail/notes/candles). Registered on each protected router."""
 import time
+import csv
+import io
+from datetime import datetime, timezone, timedelta
+from fastapi.responses import Response
 from typing import Optional, List
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
@@ -22,6 +26,20 @@ from deps import store
 from models import Trade, Signal, AVAILABLE_SYMBOLS
 from fx.symbols import SPECS
 
+
+
+def log_phase(level: str, message: str) -> str:
+    """Funnel phase a log line belongs to: 0 = technical filter, 1 = fast model, 2 = strong model."""
+    low = message.lower()
+    if level == "FILTER":
+        return "1" if "fase 1" in low else "0"
+    if level == "AI_EVAL" or "modelo potente" in low or "ia potente" in low:
+        return "2"
+    if "modelo rápido" in low or "filtro rápido" in low or "candidato" in low:
+        return "1"
+    if low.startswith("embudo") or "fuera del horario" in low or "evento rojo" in low:
+        return "0"
+    return ""
 
 
 class TradeNote(BaseModel):
@@ -73,6 +91,25 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
     @router.get("/auth/me")
     async def auth_me():
         return {"ok": True}
+
+    @router.get("/logs/export")
+    async def export_logs(hours: int = 24, fmt: str = "txt"):
+        """Every log line of the last 24 / 48 / 72 h (funnel phases 0, 1 and 2 included) as a .txt or .csv file."""
+        if hours not in (24, 48, 72) or fmt not in ("txt", "csv"):
+            raise HTTPException(400, "Usa hours = 24, 48 o 72 y fmt = txt o csv")
+        since = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+        rows = [(d["ts"], d["level"], log_phase(d["level"], d["message"]), d["message"]) async for d in engine.db.logs.find({"ts": {"$gte": since}}).sort("_id", 1)]
+        if fmt == "csv":
+            buf = io.StringIO()
+            w = csv.writer(buf, delimiter=";")
+            w.writerow(["fecha_utc", "nivel", "fase", "mensaje"])
+            w.writerows((ts[:19].replace("T", " "), lv, ph, msg.replace("\n", " ")) for ts, lv, ph, msg in rows)
+            body, media = "\ufeff" + buf.getvalue(), "text/csv; charset=utf-8"
+        else:
+            head = f"{label} · registro de las últimas {hours} h · {len(rows)} líneas · horas en UTC\n\n"
+            body = head + "\n".join(f"{ts[:19].replace('T', ' ')} [{lv}]{' [FASE ' + ph + ']' if ph else ''} {msg}" for ts, lv, ph, msg in rows) + "\n"
+            media = "text/plain; charset=utf-8"
+        return Response(body, media_type=media, headers={"X-Log-Lines": str(len(rows)), "Access-Control-Expose-Headers": "X-Log-Lines"})
 
     @router.get("/ai-rules")
     async def ai_rules_list():
