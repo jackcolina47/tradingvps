@@ -28,7 +28,7 @@ Disparo en :00/:15/:30/:45 + 8 s (`funnel.next_trigger`), solo dentro del horari
 - FX: con la cuenta MetaApi desplegada usa velas y volumen de ticks del bróker; con Yahoo usa el rango de la vela.
 
 ## Horario y eventos rojos (`trade_guard.py`)
-Hora de Nueva York, todos los días. FX: 03:00–04:00, 08:00–12:00, 19:00–00:00 (y mercado forex abierto). Cripto: 03:00–05:00, 08:30–12:00, 19:00–23:00.
+Hora de Nueva York, todos los días. FX: 03:00–04:00, 08:00–12:00, 19:00–00:00 (y mercado forex abierto). Cripto (Bybit): 24 horas, todos los días, sin ventanas.
 Calendario de eventos rojos descargado 1 vez al día. Bloqueo de entradas ±15 min en los pares afectados (FX: pares con la divisa; cripto: eventos USD).
 15 min antes: posiciones afectadas en ganancia → breakeven; en pérdida → cierre con motivo `NOTICIA`. En Bybit se cancelan las órdenes límite pendientes de los pares afectados.
 Herramienta `get_guard` y campo `horario_y_eventos_rojos` del snapshot.

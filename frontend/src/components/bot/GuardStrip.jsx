@@ -33,7 +33,7 @@ export default function GuardStrip({ guard }) {
       </span>
       <span data-testid="guard-countdown" className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-slate-400">
         <Clock className="h-3 w-3" />
-        {hours.in_hours ? "Cierra en" : `${hours.next_window || "Próxima ventana"} en`} <span className="num text-slate-100">{fmtLeft(left)}</span>
+        {hours.in_hours && !hours.next_change ? "Opera siempre" : <>{hours.in_hours ? "Cierra en" : `${hours.next_window || "Próxima ventana"} en`} <span className="num text-slate-100">{fmtLeft(left)}</span></>}
         <span className="text-slate-600">· NY {hours.ny_time}</span>
       </span>
       {blocked.length > 0 ? (
@@ -50,7 +50,7 @@ export default function GuardStrip({ guard }) {
         {hours.windows.map((w) => (
           <span key={w.name} data-testid={`guard-window-${w.start.replace(":", "")}`} title={`${w.name} · hora de Nueva York · todos los días`}
             className={`rounded-sm border px-2 py-0.5 font-mono text-[10px] ${hours.window === w.name ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300" : "border-[#1E293B] text-slate-500"}`}>
-            <span className="num">{w.start}–{w.end}</span> <span className="opacity-70">{w.name}</span>
+            {w.start !== w.end && <span className="num">{w.start}–{w.end} </span>}<span className="opacity-70">{w.name}</span>
           </span>
         ))}
       </div>

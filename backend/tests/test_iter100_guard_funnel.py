@@ -53,16 +53,9 @@ class TestHours:
         assert tg.in_hours("fx", self._ny(23, 59)) is True
         assert tg.in_hours("fx", self._ny(2, 59)) is False
 
-    def test_crypto_windows_exact(self):
-        assert tg.in_hours("crypto", self._ny(3, 0)) is True
-        assert tg.in_hours("crypto", self._ny(5, 0)) is False
-        assert tg.in_hours("crypto", self._ny(8, 30)) is True
-        assert tg.in_hours("crypto", self._ny(8, 29)) is False
-        assert tg.in_hours("crypto", self._ny(11, 59)) is True
-        assert tg.in_hours("crypto", self._ny(12, 0)) is False
-        assert tg.in_hours("crypto", self._ny(19, 0)) is True
-        assert tg.in_hours("crypto", self._ny(22, 59)) is True
-        assert tg.in_hours("crypto", self._ny(23, 0)) is False
+    def test_crypto_always_open(self):
+        for h, m in ((0, 0), (5, 0), (8, 29), (12, 0), (16, 0), (23, 0), (23, 59)):
+            assert tg.in_hours("crypto", self._ny(h, m)) is True
 
     def test_fx_closed_on_weekend(self):
         # Saturday 10:00 NY: FX market closed (Fri 17 NY -> Sun 17 NY)
@@ -264,13 +257,13 @@ class TestGuardAPI:
         hrs = data["hours"]
         for k in ("in_hours", "window", "next_window", "next_change", "seconds_left", "ny_time", "windows"):
             assert k in hrs
-        assert len(hrs["windows"]) == 3
+        assert len(hrs["windows"]) == (3 if kind == "fx" else 1)
         # windows should match expected per spec
         got = sorted([(w["start"], w["end"]) for w in hrs["windows"]])
         if kind == "fx":
             assert got == sorted([("03:00", "04:00"), ("08:00", "12:00"), ("19:00", "00:00")])
         else:
-            assert got == sorted([("03:00", "05:00"), ("08:30", "12:00"), ("19:00", "23:00")])
+            assert got == [("00:00", "00:00")] and hrs["in_hours"] is True and hrs["next_change"] is None
 
     def test_guard_requires_auth(self):
         r = requests.get(f"{BASE_URL}/api/guard", timeout=15)

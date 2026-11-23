@@ -21,7 +21,7 @@ PROTECT_RETRY_SEC = 30
 # (name, start minute, end minute) in New York local time
 WINDOWS = {
     "fx": [("Tokio + Londres", 180, 240), ("Londres + Nueva York", 480, 720), ("Sídney + Tokio", 1140, 1440)],
-    "crypto": [("Apertura de Londres", 180, 300), ("Solape con Wall Street", 510, 720), ("Cierre diario / Asia", 1140, 1380)],
+    "crypto": [("24 horas", 0, 1440)],   # Bybit trades around the clock, every day
 }
 
 
@@ -66,7 +66,9 @@ def hours_status(kind: str, now: datetime = None) -> dict:
     ny = now.astimezone(NY)
     midnight = ny.replace(hour=0, minute=0, second=0, microsecond=0)
     win = active_window(kind, now)
-    if win:
+    if win and win[2] - win[1] >= 1440:
+        change, nxt = None, None   # always open: nothing to count down to
+    elif win:
         change, nxt = (midnight + timedelta(minutes=win[2])).astimezone(timezone.utc), None
     else:
         change = None

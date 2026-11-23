@@ -23,7 +23,7 @@ Hora de Nueva York, todos los días.
 | Bot | Ventanas |
 | --- | --- |
 | FX | 03:00–04:00 · 08:00–12:00 · 19:00–00:00 |
-| Bybit | 03:00–05:00 · 08:30–12:00 · 19:00–23:00 |
+| Bybit | 24 horas, todos los días |
 
 El calendario de eventos rojos se descarga una vez al día. Los pares afectados quedan bloqueados ±15 min; 15 min antes las posiciones en ganancia pasan a breakeven y las que pierden se cierran. En Bybit se cancelan las órdenes límite pendientes de los pares afectados.
 

@@ -19,8 +19,7 @@ def test_fx_windows(h, m, ok):
     assert tg.in_hours("fx", ny(18, h, m)) is ok
 
 
-@pytest.mark.parametrize("h,m,ok", [(3, 0, True), (4, 59, True), (5, 0, False), (8, 0, False), (8, 29, False), (8, 30, True), (11, 59, True), (12, 0, False),
-                                    (19, 0, True), (22, 59, True), (23, 0, False)])
+@pytest.mark.parametrize("h,m,ok", [(0, 0, True), (3, 0, True), (5, 0, True), (8, 29, True), (12, 0, True), (16, 30, True), (23, 0, True), (23, 59, True)])
 def test_crypto_windows(h, m, ok):
     assert tg.in_hours("crypto", ny(18, h, m)) is ok
 
@@ -33,7 +32,9 @@ def test_weekends():
 
 def test_hours_status_countdown():
     st = tg.hours_status("crypto", ny(18, 6))
-    assert not st["in_hours"] and st["next_window"] == "Solape con Wall Street" and st["seconds_left"] == 150 * 60
+    assert st["in_hours"] and st["window"] == "24 horas" and st["next_change"] is None and st["seconds_left"] is None
+    st = tg.hours_status("fx", ny(18, 6))
+    assert not st["in_hours"] and st["next_window"] == "Londres + Nueva York" and st["seconds_left"] == 120 * 60
     st = tg.hours_status("fx", ny(18, 9))
     assert st["in_hours"] and st["window"] == "Londres + Nueva York" and st["seconds_left"] == 3 * 3600
     st = tg.hours_status("fx", ny(20, 13))   # Friday afternoon → next tradable window is Sunday 19:00

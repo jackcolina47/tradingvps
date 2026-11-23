@@ -6,7 +6,7 @@ export function buildFeatures(bot) {
   const market = fx ? "forex y metales (oro, plata y 10 pares mayores/cruces)" : "futuros perpetuos USDT de Bybit";
   const broker = pep ? "tu cuenta MetaTrader de Pepperstone a través de MetaApi.cloud" : fx ? "tu cuenta HFM (HotForex) a través de MetaApi.cloud" : "tu cuenta de Bybit (API V5 firmada)";
   const cur = fx ? "USD" : "USDT";
-  const hours = fx ? "03:00–04:00, 08:00–12:00 y 19:00–00:00" : "03:00–05:00, 08:30–12:00 y 19:00–23:00";
+  const hours = fx ? "03:00–04:00, 08:00–12:00 y 19:00–00:00" : "las 24 horas (sin ventanas)";
   const hero = {
     title: `${name}: un embudo de IA que opera solo en las horas buenas y se aparta de las noticias`,
     text: `Analiza ${market} cada minuto. Un filtro técnico gratuito descarta lo que no merece atención, un modelo rápido elige como mucho 3 candidatos y un modelo potente los estudia como un trader profesional y responde BUY, SELL o PASS con un porcentaje de confianza. Solo se abre la operación si esa confianza supera el umbral que tú eliges. El tamaño siempre lo fija el riesgo por operación (% del capital). Empieza en paper trading y pasa a modo REAL sobre ${broker} cuando las métricas lo avalen.`,
