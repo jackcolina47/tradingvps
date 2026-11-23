@@ -1,0 +1,33 @@
+{
+  "summary": "Iter108 structural-turn path validated. Expanded /app/backend/tests/test_iter108_structural_turn.py from 12 → 31 tests (all green). Added: (A) boundary unit cases (fast_cross BAJISTA blocks bullish turn, exact 2.0× passes, 1.99× fails, impulse at i-5 is outside the 5-candle window, wrong-color impulse candle fails, adx_slope PLANA/BAJANDO blocks, forming candle at i+1 is NOT inspected); (B) robustness (60-candle frame, NaN vol_ratio inside window, ATR=0 → no exception, turn key still present); (C) prompts (DEEP_SYSTEM.format with crypto/15m/levels keys runs without KeyError and contains the new GIRO_ALCISTA/GIRO_BAJISTA_CONFIRMADO + '2.5 ATR' instructions; TURN_FAST_SYSTEM.format(tf='15m') is well-formed; funnel.stage1 includes TURN_FAST_SYSTEM only when at least one row has turn, verified by patching _chat/_ask); (D) integration via FakeEngine(mtf=True, funnel_rich=True) with 4H BAJISTA / 1H BAJISTA and _patch_turn_metrics (fast_cross ALCISTA, turn=GIRO_ALCISTA_CONFIRMADO): (i) stage1 LONG + stage2 BUY 80% with AI tp giving R:R=1.75 → opens; (ii) same but tp=None → Signal CONTRA_4H, RISK log 'contratendencia sin recorrido', no open; (iii) tp with R:R=1.0 → CONTRA_4H, no open; (iv) stage1 SHORT with fast_cross ALCISTA (on-side with 4H BAJISTA) → dropped by the EMA9/21 filter in funnel.run before stage2 is invoked, RISK log 'contra el cruce EMA9/21'; (v) overextended techo (RSI 75, dist 3.0) + 4H BAJISTA + turn LONG candidate: pair stays alive only for the SHORT rebound, the LONG is dropped as late ('sobreextendido en techo'), stage2 never called, no exception (documented current behaviour). Full regression: 311 passed + 16 skipped + 1 failed. The single failure is tests/test_iter101_cleanup_retry.py::TestSettingsPut::test_risk_atr_toggles[/api] with a 15-second ConnectTimeout to the preview URL (the exact flake flagged in /app/memory/testing_notes.md). Post-run check of GET /api/settings, /api/fx/settings, /api/pepper/settings confirms atr_levels_enabled/breakeven_enabled/trailing_enabled/partial_tp_enabled are all True on the three bots — no manual restore needed. ruff --select F821,E9 clean on the new tests. No LLM tokens spent (stage1/stage2/_mtf/_chat/_ask all patched).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/settings PUT (via tests/test_iter101_cleanup_retry.py)", "issue": "Flaky 15-s ConnectTimeout to preview URL during test_risk_atr_toggles[/api]. Known issue (noted in /app/memory/testing_notes.md iter76). Toggles were verified True after the run; no state corruption this time."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter108_structural_turn.py",
+    "/app/test_reports/pytest/iter108.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Implementation matches the specification exactly: funnel.TURN_VOLUME=2.0, TURN_BARS=5, and _rich(df, i, atr, price, activity) returns m['turn'] only inside a `slope == 'SUBIENDO'` guard. The 5-candle window uses df.iloc[i - TURN_BARS + 1:i + 1] and activity.iloc[i - TURN_BARS + 1:i + 1], so the forming candle at i+1 is correctly excluded.",
+    "Color filter is correctly applied: bullish turn requires `(strong & (last['close'] > last['open'])).any()`, symmetric for bearish. The boundary test with impulse_vol=1.99 / 2.0 confirms strict >= TURN_VOLUME.",
+    "_row_txt prints `giro_estructura_{tf}: {turn or 'NINGUNO'}` only inside the rich block; the plain engine branch (rich=False) never emits the field — verified by TestDetection.test_plain_engine_has_no_field.",
+    "stage1 appends TURN_FAST_SYSTEM.format(tf=tf) only when any row has `turn`. The composition is conditional-and-independent of RANGE_FAST_SYSTEM and MTF_SYSTEM, verified by patching _chat to capture the composed `system` string.",
+    "DEEP_SYSTEM contains the new ridge instruction (NO comprar en la cresta de una vela expansiva > 2.5 ATR, exigir 1 vela de retroceso, TP antes de la siguiente oferta 1H/4H con R:R >= 1.5, simétrico bajista) and .format(market, tf, levels) still works with no stray single braces (all templating braces for JSON stay double-escaped).",
+    "Integration: in funnel.run a candidate with a confirmed turn against a bearish 4H gets marked counter_trend=True (existing branch, lines 488-490); the EMA9/21 cross filter (lines 500-505) still removes an on-side-with-4H LONG/SHORT that fights its own fast_cross because `not counter_trend and not ext and not range_edge` evaluates True. No new hard filter was introduced, consistent with the request."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter108_structural_turn.py"
+  ],
+  "success_rate": {"backend": "99.7% (311/312 passed + 16 skipped; 1 known-flaky timeout)", "frontend": "n/a (backend only)"},
+  "test_credentials": "Panel password: BlackCat2233@ (from /app/memory/test_credentials.md).",
+  "seed_data_creation": "None. No real LLM tokens spent. No settings mutated by the new tests (FakeEngine + monkeypatched metrics/stage1/stage2/_mtf/_chat/_ask).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "test_iter108_structural_turn.py now has 31 tests organised in: TestDetection (9 original) + TestText (2 original) + TestDetectionBoundaries (8 new) + TestRobustness (3 new) + TestPrompts (3 new) + TestIntegrationTurn (5 new) + test_long_turn_against_bearish_4h_reaches_strong_model (original module-level). Helpers: _frame(direction, impulse_vol, breakout, n), _metrics, _mtf_bearish2, _patch_turn_metrics. Integration tests reuse FakeEngine/_settings/_force_in_hours from test_iter103_bybit_hardening. The flaky /api/settings timeout in test_iter101 is unrelated to iter108 and already documented in /app/memory/testing_notes.md (iter76).",
+  "rca of the issue": "Not a bug: the new structural-turn detector works as specified. Early turn of the entry TF is detected independently of 4H/1H and reaches the strong model as counter_trend, where the existing COUNTER_MIN_RR>=1.5 gate on the AI's TP decides whether it opens or is recorded as CONTRA_4H. The only observed test failure is the recurring 15-s ConnectTimeout on /api/settings during test_iter101_cleanup_retry — a preview-environment network flake, not a regression."
+}

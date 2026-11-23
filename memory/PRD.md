@@ -712,6 +712,12 @@ Petición explícita del usuario (sustituye a «bloquear contra 4H sin gastar IA
 - `funnel._deep`: toda línea de log del modelo potente sobre un candidato de rango lleva «RANGO (EXTREMO_…)»; `_record` guarda `context.funnel.range_edge` también en PASS/CONTRA_4H/BAJA_CONFIANZA. `AiSignals.jsx`: insignia «Rango».
 - `performance.by_setup` → `by_setup` en /performance: trades del embudo por tendencia / rango / contratendencia (join por signal_id). Tabla «Por tipo de operación» en Rendimiento (3 bots).
 
+## Iteración 119 (2026-11) — Giro estructural temprano en la temporalidad de entrada (3 bots, `funnel_rich`)
+- `_rich(..., activity)` → `m["turn"]`: GIRO_ALCISTA_CONFIRMADO = EMA9 > EMA21 + precio > último swing high (20 velas) + vela de impulso alcista con actividad ≥ 2,0× en las últimas 5 cerradas + pendiente_adx SUBIENDO; simétrico GIRO_BAJISTA_CONFIRMADO. Sin volumen real usa rango de vela.
+- `_row_txt`: `giro_estructura_<tf>: ...|NINGUNO`. `TURN_FAST_SYSTEM` (Paso 1, solo si algún par tiene giro) y línea nueva en `DEEP_SYSTEM` (textos del usuario + simétrico bajista).
+- Sin filtros duros nuevos: el LONG con giro contra 4H entra como contratendencia (TP de la IA, R:R ≥ 1,5). Si sigue sobreextendido en techo, el filtro existente lo descarta como tardío y solo admite el SHORT de rebote.
+- Tested: testing_agent iteration_107 — 311 passed + 16 skipped (1 flaky de red conocido). `tests/test_iter108_structural_turn.py` (31).
+
 ### Pendiente
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.
