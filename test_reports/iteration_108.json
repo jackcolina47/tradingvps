@@ -1,0 +1,30 @@
+{
+  "summary": "Iter109: MIN_VOLUME lowered from 0.8 → 0.55 in funnel.py. Created /app/backend/tests/test_iter109_min_volume.py (18 tests, all green) covering: (A) constants (MIN_VOLUME==0.55, MIN_ADX==18, TURN_VOLUME/TURN_BARS/TURN_ADX = 2.0/6/20 intact); (B) stage0 & trend_gate on volume path with adx 25 → activity 0.54 discarded with reason containing 'volumen' and '0.55'; 0.55/0.6/0.78/0.8/1.0/2.0 all pass; activity_kind='rango' with activity 0.3 passes (ADX only); adx 17.9 still discards even with activity 2.0 (ADX reason wins); (C) range-edge path unchanged: lateral (adx 12) on a valid supply edge with activity 0.3 still passes stage0 via range_edge bypass; centre of range (no edge) stays blocked; (D) integration with FakeEngine (stage1/stage2 patched; no real tokens) — with adx 25, patched activity 0.6× on BTCUSDT the pair reaches stage1 (previously discarded at 0.8); with 0.5× it is dropped in stage 0 and the aggregated FILTER log mentions 'BTCUSDT' + 'volumen'. Full regression `python -m pytest tests -q -n 0`: 330 passed + 16 skipped (= 312 previous + 18 new), zero failures. No flaky /api/settings timeout this run. Post-run GET /api/settings, /api/fx/settings, /api/pepper/settings confirms atr_levels_enabled/breakeven_enabled/trailing_enabled/partial_tp_enabled all True on the three bots — no restore needed. ruff --select F821,E9 clean on the new tests. No LLM tokens, no POST /guard/refresh, no settings mutated.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter109_min_volume.py",
+    "/app/test_reports/pytest/iter109.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Change is exactly the one requested: funnel.py line 26 reads `MIN_ADX, MIN_VOLUME = 18, 0.55`. No other filter in stage0/trend_gate was touched; range_edge (RANGE_ZONE_ATR=0.35, RANGE_TOUCHES=2, RANGE_RSI=(38,62), RANGE_ROOM_ATR=1.8, RANGE_TP_GAP_ATR=0.25) and the structural turn (TURN_VOLUME=2.0, TURN_BARS=6, TURN_ADX=20) remain intact.",
+    "trend_gate preserves precedence: ADX check runs before the volume check, so ADX 17.9 with activity 2.0 still returns the 'sin tendencia (ADX …)' reason — verified in TestStage0VolumeThreshold.test_low_adx_still_discards_even_with_high_volume.",
+    "Repo sweep for stale '0.8×' / '0,8×' volume references in /app/backend, /app/backend/tests, /app/frontend/src and /app/README.md returned zero matches — previous iteration already updated the iter103 assertion to 0.55 and the iter100 TestStage0 to the new boundaries (0.54 discarded, 0.55 passes). Nothing else to clean up.",
+    "The volume-filter message format `volumen débil ({m['activity']}× < {MIN_VOLUME}×)` uses the mutable MIN_VOLUME constant, so future tweaks to the constant propagate automatically to logs/panel reasons. Good.",
+    "trend_gate only fires on the volume path when `activity_kind == 'volumen'`, so FX on Yahoo (no reliable broker volume, activity_kind='rango') continues to depend on ADX alone — confirmed by TestStage0VolumeThreshold.test_non_volume_kind_ignores_activity."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter109_min_volume.py"
+  ],
+  "success_rate": {"backend": "100% (330/330 passed + 16 skipped; 0 failed)", "frontend": "n/a (backend only)"},
+  "test_credentials": "Panel password: BlackCat2233@ (from /app/memory/test_credentials.md).",
+  "seed_data_creation": "None. FakeEngine + monkeypatched metrics/stage1/stage2 only — no DB writes, no LLM calls, no settings mutated.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "test_iter109_min_volume.py is organised in: TestConstants (3), TestStage0VolumeThreshold (parametrised, 11 total), TestRangeEdgeUnchanged (2), TestFunnelRunIntegration (2). It reuses FakeEngine/_settings/_force_in_hours from test_iter103_bybit_hardening.py. Helper `_patch_activity(monkeypatch, target_price, activity)` forces funnel.metrics to return a given activity for the row whose price equals target_price (BTCUSDT=100.0, ETHUSDT=50.0 in FakeMarket). The iter101 /api/settings timeout flake did NOT reproduce this run; the four toggles remain True on all three bots. No restore performed because none was needed.",
+  "rca of the issue": "Not a bug. Specification change: after expansive 6×–12× volume candles the 20-candle mean stays inflated and the stage0 pre-filter was discarding clean continuations whose relative volume sat at 0.55×–0.78×. Lowering MIN_VOLUME to 0.55 keeps the quietness guard but makes those continuations eligible for the fast model. No other filter was altered; ADX, range-edge and structural-turn behaviour are preserved and covered by dedicated regression tests."
+}
