@@ -700,6 +700,14 @@ Petición explícita del usuario (sustituye a «bloquear contra 4H sin gastar IA
 - `Terminal.jsx`: barra con desplegables de periodo y formato, botón Descargar y «Borrar todo» con diálogo de confirmación (usa el `DELETE /logs` existente).
 - Tested: curl en los 3 bots + Playwright (descarga real en los 3 bots, cancelar/confirmar borrado, 390 px). pytest completo. Sin testing agent.
 
+## Iteración 117 (2026-11) — Vía de Extremo de Rango (3 bots)
+- `funnel.range_edge(m)`: par lateral (ADX < 18 o régimen RANGO / CHOPPY) a ≤ 0,35 ATR de una oferta/demanda con ≥ 2 toques, RSI ≥ 62 / ≤ 38 y ≥ 1,8 ATR hasta la zona opuesta → `m["range_edge"]` EXTREMO_OFERTA / EXTREMO_DEMANDA. `stage0` lo deja pasar (salta ADX y volumen); `trend_gate` = puerta anterior.
+- `_row_txt`: `oportunidad_rango: ...`; `RANGE_FAST_SYSTEM` (Paso 1) y línea de rango en `DEEP_SYSTEM` (texto del usuario).
+- Tras Paso 1: lado del borde → `c["range_edge"]`, exento del filtro EMA9/21; lado contrario en par que solo pasó por la vía de rango → descartado sin Paso 2.
+- `_deep`: TP de rango = el de la IA si queda dentro del rango, si no `range_target` (zona opuesta ∓ 0,25 ATR), nunca más lejos que el normal; R:R < 1,0 (añadido por el agente, no pedido) → Signal PASS «de rango sin recorrido». Contra 4H sigue exigiendo R:R ≥ 1,5. `context.funnel.range_edge`, source `rango`.
+- Tested: testing_agent iteration_106 — 281 passed + 16 skipped (`tests/test_iter107_range_edge.py`, 32).
+- Menor sin corregir: el log AI_EVAL dice «SL/TP de la IA» (no «RANGO») cuando la IA fija SL y TP dentro del rango.
+
 ### Pendiente
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.

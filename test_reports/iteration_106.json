@@ -1,0 +1,33 @@
+{
+  "summary": "Iter107 range-edge path validated. Added 18 integration tests to /app/backend/tests/test_iter107_range_edge.py on top of the existing 14 unit tests (32 total, all green). Coverage: (a) valid supply/demand edges reach stage2 with cand.range_edge preserved + SCAN log of range-edge path; (b) middle of range not eligible → stage1 not called; (c) wrong side in range-only pair → RISK log 'solo se admite SHORT/LONG', no stage2; (d) trending regression: adx=25 keeps EMA9/21 cross filter; (e) levels matrix: atr_levels_enabled=True + no-room → Signal PASS 'de rango sin recorrido'; AI tp beyond zone → clipped to range_target in res mutation (source stays 'ia' because AI also provides sl); atr_levels_enabled=True + AI tp=None + room → source='rango', tp=demand.high+0.25×ATR, SL=price+2×ATR, AI_EVAL log contains 'RANGO'; AI tp inside range + AI sl adjusted + buffer → opens with sl=ai_sl+0.25×ATR, context.funnel.range_edge='EXTREMO_OFERTA'; (f) counter-trend against 4H ALCISTA with range edge: without room → CONTRA_4H Signal no-open, with room → opens; (g) regime 'RANGO / CHOPPY' + ADX 22 + weak volume + valid edge passes stage0; same ADX 22 without regime + weak volume → blocked by volume gate. Unit metrics→zones→range_edge pipeline exercised with a synthetic oscillating DataFrame. Also added guards for missing keys (no 'regime', demand None, supply None) and non-edge sideways pairs. Full regression: 281 passed + 16 skipped (was 263+16; +18 new tests). No LLM tokens spent (stage1/stage2/_mtf patched). Settings toggles atr_levels_enabled/breakeven_enabled/trailing_enabled/partial_tp_enabled are True on all three bots (verified via GET /api/settings, /api/fx/settings, /api/pepper/settings).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "funnel._deep AI_EVAL log", "issue": "Cuando un trade de rango se abre con niveles de la IA (source='ia', AI tp dentro del rango y no clipado por el edge block secundario), la línea AI_EVAL muestra 'SL/TP de la IA' en lugar de 'RANGO (EXTREMO_OFERTA)'. El Signal sí guarda context.funnel.range_edge, pero el log operativo no delata que la decisión vino de la vía de rango. Solo es visibilidad de log; la ejecución es correcta."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter107_range_edge.py",
+    "/app/test_reports/pytest/iter107.xml"
+  ],
+  "action_items": [
+    "Opcional: en funnel._deep (línea ~600) ampliar la etiqueta 'RANGO' del AI_EVAL para incluir también source=='ia' cuando edge está presente, para que todos los trades de rango se identifiquen en el log aunque la IA fije tanto SL como TP dentro del rango."
+  ],
+  "critical_code_review_comments": [
+    "La implementación de la vía de extremo de rango es consistente con la petición: range_edge() exige ADX<18 o régimen choppy + zona a ≤0.35 ATR con ≥2 toques + RSI extremo + recorrido ≥1.8 ATR al otro lado; stage0() delega en trend_gate() salvo cuando m['range_edge'] está presente; el candidato recibe c['range_edge'] solo si el lado coincide con RANGE_SIDE[edge]; el lado contrario en par de rango puro se descarta con 'solo se admite ...'; en _deep el TP se recorta a range_target cuando la IA apunta más allá; si R:R<MIN_RR se registra Signal PASS con 'de rango sin recorrido'.",
+    "range_edge() usa m.get('regime') y m.get('supply')/m.get('demand') de forma segura: no lanza KeyError con motores no-rich ni con zonas None. Solo accede a zone['touches']/'dist_atr' dentro de edge() tras comprobar que la zona existe.",
+    "range_target() asume que la zona opuesta existe; se llama solo desde _deep cuando edge está activo (lo que implica ambas zonas no-None por construcción de range_edge). Correcto, sin división por cero.",
+    "Observación menor (no bloquea, ya comentada arriba): AI_EVAL no etiqueta 'RANGO' cuando source='ia' para un trade de rango aprobado."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter107_range_edge.py"
+  ],
+  "success_rate": {"backend": "100% (281/281 passed + 16 skipped)", "frontend": "n/a (backend only)"},
+  "test_credentials": "Panel password: BlackCat2233@ (de /app/memory/test_credentials.md).",
+  "seed_data_creation": "Ninguna. Sin tokens LLM reales (stage1/stage2/_mtf parcheados con monkeypatch).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Los tests de integración de la vía de rango reutilizan FakeEngine/_settings/_force_in_hours del test_iter103_bybit_hardening y el patrón _patch_metrics_* (override de m['supply']/m['demand']/m['adx']/m['rsi']/m['fast_cross']/m['regime'] por símbolo via precio). Las claves relevantes del Signal persistido viven en context.funnel: 'range_edge', 'levels' ('atr'|'ia'|'contra'|'rango'), 'counter_trend'. Para cubrir el gap de log mencionado, basta cambiar la ternaria de AI_EVAL en funnel._deep para que `edge` (ya accesible en el scope) pise la etiqueta 'SL/TP de la IA'.",
+  "rca of the issue": "No hay bug en la lógica pedida por el usuario; solo un detalle menor de observabilidad: cuando la IA fija SL+TP ambos dentro del rango sin requerir clip, la etiqueta AI_EVAL dice 'SL/TP de la IA' en lugar de 'RANGO (edge)', aunque el trade sí se marca correctamente como de rango en context.funnel.range_edge y se trata como tal en el resto del flujo."
+}
