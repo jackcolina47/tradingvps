@@ -54,10 +54,17 @@ def test_edges_and_rejection_wick_and_swing_target():
     assert st.mean_reversion(df, len(df) - 1, None, None, S)["tp"] == pytest.approx(101.0 - 0.08)
 
 
-def test_other_modes_keep_legacy_behaviour_and_atr_levels_do_not_override():
-    df = _df(green=False, vol_prev=3.0, adx=24.0)
-    sig = st.mean_reversion(df, len(df) - 1, None, None, st.MODES["relaxed"])
-    assert sig and sig["tp"] == pytest.approx(101.2)
+@pytest.mark.parametrize("mode", ["relaxed", "minimal"])
+def test_range_filters_apply_in_every_mode(mode):
+    m = st.MODES[mode]
+    for kw in (dict(adx=22.0), dict(rsi_prev=35.1), dict(vol_prev=2.01), dict(green=False), dict(mid=100.7)):
+        df = _df(**kw)
+        assert st.mean_reversion(df, len(df) - 1, None, None, m) is None, kw
+    df = _df()
+    assert st.mean_reversion(df, len(df) - 1, None, None, m)["tp"] == pytest.approx(101.2 - 0.08)
+
+
+def test_atr_levels_do_not_override():
     df = _df()
     sig = st.evaluate(df, len(df) - 1, "mean_reversion", None, {"atr_levels": (2.0, 4.0)}, "strict")
     assert sig["tp"] == pytest.approx(101.2 - 0.08) and "atr_levels" not in sig

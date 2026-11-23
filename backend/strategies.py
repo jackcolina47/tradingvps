@@ -38,9 +38,9 @@ MODES = {
     "strict": dict(trend_rsi=(50, 70), trend_macd=True, trend_ema200=True, trend_min_score=5, adx_conf=20, vol_conf=1.0,
                    mr_adx=22, mr_rsi=35, mr_range=True, turtle_vol=1.5, turtle_adx=20, st_adx=20, pb_adx=20, pb_rsi=(40, 65), xc_adx=20, xc_ema200=True, xc_stack=True),
     "relaxed": dict(trend_rsi=(45, 75), trend_macd=True, trend_ema200=True, trend_min_score=4, adx_conf=15, vol_conf=0.8,
-                    mr_adx=30, mr_rsi=40, turtle_vol=1.2, turtle_adx=15, st_adx=15, pb_adx=15, pb_rsi=(35, 70), xc_adx=15, xc_ema200=True, xc_stack=False),
+                    mr_adx=22, mr_rsi=35, mr_range=True, turtle_vol=1.2, turtle_adx=15, st_adx=15, pb_adx=15, pb_rsi=(35, 70), xc_adx=15, xc_ema200=True, xc_stack=False),
     "minimal": dict(trend_rsi=(40, 80), trend_macd=False, trend_ema200=False, trend_min_score=4, adx_conf=10, vol_conf=0.6,
-                    mr_adx=35, mr_rsi=45, turtle_vol=1.0, turtle_adx=10, st_adx=10, pb_adx=10, pb_rsi=(30, 75), xc_adx=0, xc_ema200=False, xc_stack=False),
+                    mr_adx=22, mr_rsi=35, mr_range=True, turtle_vol=1.0, turtle_adx=10, st_adx=10, pb_adx=10, pb_rsi=(30, 75), xc_adx=0, xc_ema200=False, xc_stack=False),
 }
 MODE_INFO = {
     "strict": {"name": "Estrictos", "desc": "Umbrales originales: todas las confirmaciones deben coincidir"},

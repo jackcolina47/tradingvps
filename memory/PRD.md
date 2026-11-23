@@ -706,3 +706,4 @@
 - Log nivel `FILTER` («señal X generada y DESCARTADA · entrada tardía/spread») en Bybit y HotForex.
 - Tests `tests/test_iter117_fast_turns.py`. Hallazgo: en las últimas 24 h de BTCUSDT/SOLUSDT las señales nuevas existen (impulso 13:00, pullback BTC 03:00) pero el filtro de tendencia 4H (`htf_filter`) las bloquea por ir contra el 4H.
 - Iter 117b: el impulso rápido ignora el filtro 4H solo con volumen ≥ 2,0× (`htf_free_vol`, marca `htf_override`); entre 1,8× y 2,0× sigue respetándolo. `trend_ema` con ADX ≥ 20. Verificado con velas reales: impulso largo 23/11 13:00 UTC en BTCUSDT y SOLUSDT pasa con 4H bajista; pullback y trend_ema contra 4H siguen bloqueados.
+- Iter 117c: los filtros de rango de mean_reversion (`mr_adx=22`, `mr_rsi=35`, `mr_range`) aplican ahora en Estrictos, Relajados y Mínimos.
