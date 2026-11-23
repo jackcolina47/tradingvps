@@ -278,7 +278,8 @@ class SignalsMixin:
         base = dict(symbol=symbol, side=sig["side"], strategy=sig["strategy"], timeframe=tf, price=sig["price"], sl=sig["sl"], tp=sig["tp"],
                     score=sig["score"], reasons=sig["reasons"], indicators=sig["indicators"], key=key, context=context, horizon=horizon)
         if block:
-            await self.log("RISK", f"{symbol}: señal descartada · {block}")
+            late_kind = "entrada tardía" in block or "spread demasiado abierto" in block
+            await self.log("FILTER" if late_kind else "RISK", f"{symbol}: señal {sig['strategy']} {sig['side'].upper()} {'generada y DESCARTADA' if late_kind else 'descartada'} · {block}")
             res = await self.db.signals.insert_one(Signal(**base, ai_decision=kind, note=f"Bloqueada por {BLOCK_BY.get(kind, 'riesgo')}: {block}").to_mongo())
             if kind != "MERCADO":
                 await open_shadow(self, str(res.inserted_id), symbol, sig, settings, kind, acc, risk_factor=risk_factor, note=block)
@@ -364,7 +365,7 @@ class SignalsMixin:
         if approve:
             late = await self._entry_guard(symbol, sig) if guard else ""
             if late:  # checked again right before the market order: the price / spread may have moved during the rules check
-                await self.log("RISK", f"{symbol}: señal descartada · {late}")
+                await self.log("FILTER", f"{symbol}: señal {sig['strategy']} {sig['side'].upper()} generada y DESCARTADA · {late}")
                 await self.db.signals.update_one({"_id": res.inserted_id}, {"$set": {"note": f"No ejecutada: {late}"}})
                 await open_shadow(self, sid, symbol, sig, settings, "NO_EJECUTADA", acc, signal.ai_confidence, signal.ai_risk, risk_factor, note=late)
                 return

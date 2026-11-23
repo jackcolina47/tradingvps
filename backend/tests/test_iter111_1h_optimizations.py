@@ -40,7 +40,7 @@ def test_active_filters_per_bot_bank():
 def _pb_df(adx=22.0, ema9=101.2, ema21=101.0):
     base = dict(open=101.1, high=101.6, low=101.05, close=101.5, ema9=ema9, ema10=101.1, ema20=101.0, ema21=ema21, ema50=100.0, ema200=99.0, rsi=55.0, adx=adx, atr=1.0,
                 vol_ratio=1.0, macd_hist=0.1, bb_up=103.0, bb_mid=101.0, bb_low=99.0, st=100.0, st_dir=1, ts=2)
-    prev = {**base, "low": 100.9, "ts": 1}
+    prev = {**base, "low": 100.9, "ts": 1, "ema21": ema21 - 0.05}   # EMA21 rising (iter117: structure needs its slope)
     return pd.DataFrame([prev, prev, base])
 
 

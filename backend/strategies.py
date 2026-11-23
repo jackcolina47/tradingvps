@@ -82,6 +82,12 @@ def _atr_levels(r, long, params, sl_def, tp_def):
     return sl, tp
 
 
+def _structure(df, i, long: bool) -> bool:
+    """Active short/medium-term structure: close beyond the EMA50, EMA9 beyond the EMA21 and the EMA21 sloping the same way."""
+    r, slope = df.iloc[i], df.iloc[i]["ema21"] - df.iloc[i - 1]["ema21"]
+    return bool(r["close"] > r["ema50"] and r["ema9"] > r["ema21"] and slope > 0) if long else bool(r["close"] < r["ema50"] and r["ema9"] < r["ema21"] and slope < 0)
+
+
 def trend_ema(df, i, htf=None, params=None, m=None) -> Optional[dict]:
     r = df.iloc[i]
     cross = None
@@ -98,15 +104,14 @@ def trend_ema(df, i, htf=None, params=None, m=None) -> Optional[dict]:
     side, key_ts = cross
     long = side == "long"
     aligned = r["ema9"] > r["ema21"] if long else r["ema9"] < r["ema21"]
-    ref = r["ema200"] if m["trend_ema200"] else r["ema50"]
-    trend_ok = r["close"] > ref if long else r["close"] < ref
+    trend_ok = _structure(df, i, long)  # active short/medium-term structure: no wait for the slow EMA50/EMA200 (or EMA200) confirmation after a sharp turn
     rsi_ok = _rsi_ok(r["rsi"], m["trend_rsi"], long)
     macd_ok = (r["macd_hist"] > 0 if long else r["macd_hist"] < 0) if m["trend_macd"] else True
     if not (aligned and trend_ok and rsi_ok and macd_ok) or _against_htf(htf, long):
         return None
     reasons = [
         f"Cruce {'alcista' if long else 'bajista'} EMA9/EMA21",
-        f"Precio {'sobre' if long else 'bajo'} EMA{200 if m['trend_ema200'] else 50}",
+        f"Precio {'sobre' if long else 'bajo'} EMA50 y EMA21 con pendiente {'positiva' if long else 'negativa'}",
         f"RSI {r['rsi']:.1f} en zona de momentum",
     ]
     if m["trend_macd"]:
@@ -221,6 +226,36 @@ def breakout_turtle(df, i, htf=None, params=None, m=None) -> Optional[dict]:
 MIN_TREND_ADX = 20  # ema_pullback / supertrend_momentum never trade a sideways market (ADX 10-19), whatever the «Criterios de entrada» mode
 
 
+IMPULSE = dict(vol=1.8, range_atr=1.5, lookback=10, adx=22, sl_atr=1.8, tp_atr=3.2)
+
+
+def _impulse(df, i, htf=None) -> Optional[dict]:
+    """«Impulso rápido»: a closed breakout candle (volume ≥ 1.8×, range ≥ 1.5 ATR) through the high/low of the last 10 candles with ADX ≥ 22 fires at once,
+    even if the price crossed the EMA50 on that same candle and the Supertrend has not flipped yet. Fixed SL 1.8×ATR / TP 3.2×ATR."""
+    q = IMPULSE
+    if i < q["lookback"] + 1:
+        return None
+    r, atr = df.iloc[i], df.iloc[i]["atr"]
+    if not atr > 0 or r["vol_ratio"] < q["vol"] or r["high"] - r["low"] < q["range_atr"] * atr or r["adx"] < q["adx"]:
+        return None
+    prev = df.iloc[i - q["lookback"]:i]
+    if r["close"] > prev["high"].max() and r["close"] > r["open"] and r["close"] > r["ema50"]:
+        long = True
+    elif r["close"] < prev["low"].min() and r["close"] < r["open"] and r["close"] < r["ema50"]:
+        long = False
+    else:
+        return None
+    if _against_htf(htf, long):
+        return None
+    d = 1 if long else -1
+    reasons = [f"Impulso rápido: vela de ruptura {'alcista' if long else 'bajista'} de {(r['high'] - r['low']) / atr:.1f}×ATR con volumen {r['vol_ratio']:.1f}×",
+               f"Cierra {'por encima del máximo' if long else 'por debajo del mínimo'} de las últimas {q['lookback']} velas y {'sobre' if long else 'bajo'} la EMA50",
+               f"ADX {r['adx']:.1f}", f"SL {q['sl_atr']:g}×ATR · TP {q['tp_atr']:g}×ATR (niveles fijos del impulso)"]
+    sig = _signal("long" if long else "short", r, r["close"] - d * q["sl_atr"] * atr, r["close"] + d * q["tp_atr"] * atr, "supertrend_momentum", reasons,
+                  5 + (1 if _with_htf(htf, long) else 0), r["ts"])
+    return {**sig, "trigger": "impulse"}
+
+
 def supertrend_momentum(df, i, htf=None, params=None, m=None) -> Optional[dict]:
     r = df.iloc[i]
     flip = None
@@ -230,7 +265,7 @@ def supertrend_momentum(df, i, htf=None, params=None, m=None) -> Optional[dict]:
             flip = ("long" if a["st_dir"] == 1 else "short", int(a["ts"]))
             break
     if not flip:
-        return None
+        return _impulse(df, i, htf)
     side, key_ts = flip
     long = side == "long"
     still = r["st_dir"] == (1 if long else -1)
@@ -253,8 +288,7 @@ def ema_pullback(df, i, htf=None, params=None, m=None) -> Optional[dict]:
     r, p = df.iloc[i], df.iloc[i - 1]
     if r["adx"] < max(m["pb_adx"], MIN_TREND_ADX):
         return None
-    up = r["ema50"] > r["ema200"] and r["close"] > r["ema50"] and r["ema9"] > r["ema21"]   # fast EMAs aligned with the trade
-    down = r["ema50"] < r["ema200"] and r["close"] < r["ema50"] and r["ema9"] < r["ema21"]
+    up, down = _structure(df, i, True), _structure(df, i, False)  # close vs EMA50, EMA9 vs EMA21 and EMA21 slope (EMA50 may still be on the wrong side of EMA200)
     if up and p["low"] <= p["ema21"] and r["close"] > r["ema21"] and r["close"] > r["open"] and _rsi_ok(r["rsi"], m["pb_rsi"], True):
         side = "long"
     elif down and p["high"] >= p["ema21"] and r["close"] < r["ema21"] and r["close"] < r["open"] and _rsi_ok(r["rsi"], m["pb_rsi"], False):
@@ -265,7 +299,7 @@ def ema_pullback(df, i, htf=None, params=None, m=None) -> Optional[dict]:
     if _against_htf(htf, long):
         return None
     reasons = [
-        f"Tendencia {'alcista' if long else 'bajista'}: EMA50 {'sobre' if long else 'bajo'} EMA200 y EMA9 {'sobre' if long else 'bajo'} EMA21",
+        f"Estructura {'alcista' if long else 'bajista'}: precio {'sobre' if long else 'bajo'} EMA50, EMA9 {'sobre' if long else 'bajo'} EMA21 y EMA21 {'subiendo' if long else 'bajando'}",
         f"Retroceso tocó la EMA21 y la vela cierra de nuevo {'por encima' if long else 'por debajo'}",
         f"RSI {r['rsi']:.1f} sin sobreextensión",
         f"ADX {r['adx']:.1f}",
@@ -418,7 +452,7 @@ def atr_params(settings) -> dict:
 def apply_atr_levels(sig: dict, levels) -> dict:
     """SL = price ∓ sl_k × ATR, TP = price ± tp_k × ATR. With no usable ATR the strategy's own levels are kept."""
     atr = sig.get("atr") or 0
-    if not levels or sig.get("exit_mode") == "cross" or sig.get("strategy") == "mean_reversion" or not atr > 0 or not sig["price"] > 0:  # mean reversion keeps its own target (the mean)
+    if not levels or sig.get("exit_mode") == "cross" or sig.get("strategy") == "mean_reversion" or sig.get("trigger") == "impulse" or not atr > 0 or not sig["price"] > 0:  # mean reversion keeps its own target (the mean)
         return sig
     sl_k, tp_k = levels
     d = 1 if sig["side"] == "long" else -1

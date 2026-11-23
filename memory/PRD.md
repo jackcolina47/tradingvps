@@ -699,3 +699,9 @@
 - `ai_rules.relevant`: mean_reversion no recibe reglas de pullback/momentum/ruptura/breakout/supertrend (salvo que hablen también de reversión/Bollinger).
 - Régimen macro: verificado que hoy NO bloquea mean_reversion: en Bybit `regime_block` de BTC no se llama en el flujo de entrada (solo-reglas) y en HotForex `_market_gates` se omite en rules_only. Sin cambios. OJO: el interruptor «Filtro régimen» de Bybit no tiene efecto en las entradas (test iter46 `test_b_regime_blocks_short_term` falla desde antes).
 - Tests: `tests/test_iter116_mean_reversion.py` (13). Backtest 1h: EURUSD 16 ops (4 TP, 10 SL); BTCUSDT 0 ops.
+
+## Iteración 117 · Giros rápidos (Bybit y HotForex)
+- `strategies._structure`: ema_pullback y trend_ema usan close vs EMA50 + EMA9 vs EMA21 + pendiente de EMA21 (ya no EMA50 vs EMA200 ni close vs EMA200 en strict). ADX ≥ 20 se mantiene en ema_pullback; trend_ema sigue sin piso de ADX.
+- `strategies._impulse` (dentro de supertrend_momentum, `trigger="impulse"`): vela con volumen ≥ 1,8×, rango ≥ 1,5 ATR, cierre fuera del máx/mín de 10 velas, ADX ≥ 22, lado correcto de EMA50 → señal sin giro de Supertrend, SL 1,8×ATR / TP 3,2×ATR fijos (no los pisa el ATR dinámico).
+- Log nivel `FILTER` («señal X generada y DESCARTADA · entrada tardía/spread») en Bybit y HotForex.
+- Tests `tests/test_iter117_fast_turns.py`. Hallazgo: en las últimas 24 h de BTCUSDT/SOLUSDT las señales nuevas existen (impulso 13:00, pullback BTC 03:00) pero el filtro de tendencia 4H (`htf_filter`) las bloquea por ir contra el 4H.

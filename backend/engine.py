@@ -854,7 +854,7 @@ class TradingEngine:
                         price=sig["price"], sl=sig["sl"], tp=sig["tp"], score=sig["score"], reasons=sig["reasons"],
                         indicators=sig["indicators"], ai_decision="SIN_IA", key=key, context=context)
         if block:
-            await self.log("RISK", f"{symbol}: señal descartada · {block}")
+            await self.log("FILTER" if "entrada tardía" in block else "RISK", f"{symbol}: señal {sig['strategy']} {sig['side'].upper()} {'generada y DESCARTADA' if 'entrada tardía' in block else 'descartada'} · {block}")
             signal.ai_decision, signal.note = "BLOQUEADA", f"Bloqueada por riesgo: {block}"
             res = await self.db.signals.insert_one(signal.to_mongo())
             await open_shadow(self, str(res.inserted_id), symbol, sig, settings, "BLOQUEADA", acc["equity"], horizon=horizon)
@@ -895,7 +895,7 @@ class TradingEngine:
         sid = str(res.inserted_id)
         late = price_action.late_entry(sig["side"], sig["price"], self.market.tickers.get(symbol, {}).get("price"), sig.get("atr")) if approve and guard else ""
         if late:  # the price ran while the rules were being checked: nothing is sent to the exchange
-            await self.log("RISK", f"{symbol}: señal descartada · {late}")
+            await self.log("FILTER", f"{symbol}: señal {sig['strategy']} {sig['side'].upper()} generada y DESCARTADA · {late}")
             await self.db.signals.update_one({"_id": res.inserted_id}, {"$set": {"note": f"No ejecutada: {late}"}})
             await open_shadow(self, sid, symbol, sig, settings, "NO_EJECUTADA", acc["equity"], horizon=horizon)
         elif approve:

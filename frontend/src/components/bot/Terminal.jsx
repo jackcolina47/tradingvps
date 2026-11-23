@@ -7,6 +7,7 @@ import { fmtTime, http, errMsg } from "@/lib/api";
 const LEVEL_CLS = {
   INFO: "text-slate-400",
   SCAN: "text-sky-400",
+  FILTER: "text-yellow-300",
   SIGNAL: "text-amber-400",
   AI_EVAL: "text-purple-400",
   ORDER: "text-emerald-400",
