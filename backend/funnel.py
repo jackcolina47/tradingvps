@@ -29,6 +29,7 @@ SL_BUFFER_ATR = 0.25                        # safety margin added behind an AI s
 SWING_BARS, RANGE_BARS, RANGE_CROSSES = 20, 15, 3
 # range-edge path: a sideways pair (ADX < 18 or RANGO / CHOPPY) still reaches the AI when the price sits on a tested edge of the range
 RANGE_ZONE_ATR, RANGE_TOUCHES, RANGE_RSI, RANGE_ROOM_ATR, RANGE_TP_GAP_ATR = 0.35, 2, (38, 62), 1.8, 0.25
+TURN_VOLUME, TURN_BARS = 2.0, 5   # structural turn: break of the last swing + an impulse candle this strong within the last 5 closed candles
 RANGE_SIDE = {"EXTREMO_OFERTA": "short", "EXTREMO_DEMANDA": "long"}
 
 
@@ -78,7 +79,7 @@ def zones(df: pd.DataFrame, i: int, atr: float, price: float, k: int = 3, lookba
     return {"demand": nearest(lows, True), "supply": nearest(highs, False)} if atr > 0 else {"demand": None, "supply": None}
 
 
-def _rich(df: pd.DataFrame, i: int, atr: float, price: float) -> dict:
+def _rich(df: pd.DataFrame, i: int, atr: float, price: float, activity: pd.Series = None) -> dict:
     """Extra context for the learned rules: fast EMAs, ADX slope, last swings and range regime."""
     close, adx, hi, lo = df["close"], df["adx"].values, df["high"].values, df["low"].values
     e9, e21 = float(close.ewm(span=9, adjust=False).mean().iloc[i]), float(close.ewm(span=21, adjust=False).mean().iloc[i])
@@ -91,10 +92,18 @@ def _rich(df: pd.DataFrame, i: int, atr: float, price: float) -> dict:
     sl = float(lo[lows[-1]]) if lows else float(lo[start:i + 1].min())
     above = (close.iloc[i - RANGE_BARS + 1:i + 1] > df["ema20"].iloc[i - RANGE_BARS + 1:i + 1]).values
     crosses = int((above[1:] != above[:-1]).sum())
+    turn = None
+    if activity is not None and slope == "SUBIENDO":   # early structural turn of the entry timeframe, whatever 4H / 1H still say
+        last = df.iloc[i - TURN_BARS + 1:i + 1]
+        strong = activity.iloc[i - TURN_BARS + 1:i + 1].values >= TURN_VOLUME
+        if e9 > e21 and price > sh and (strong & (last["close"] > last["open"]).values).any():
+            turn = "GIRO_ALCISTA_CONFIRMADO"
+        elif e9 < e21 and price < sl and (strong & (last["close"] < last["open"]).values).any():
+            turn = "GIRO_BAJISTA_CONFIRMADO"
     return {"rich": True, "ema9": round(e9, 8), "ema21": round(e21, 8), "fast_cross": "ALCISTA" if e9 > e21 else "BAJISTA", "adx_slope": slope,
             "swing_high": round(sh, 8), "swing_high_atr": round((sh - price) / atr, 2) if atr else 0,
             "swing_low": round(sl, 8), "swing_low_atr": round((price - sl) / atr, 2) if atr else 0,
-            "ema20_crosses": crosses, "regime": "RANGO / CHOPPY" if crosses >= RANGE_CROSSES else None}
+            "ema20_crosses": crosses, "regime": "RANGO / CHOPPY" if crosses >= RANGE_CROSSES else None, "turn": turn}
 
 
 def metrics(df: pd.DataFrame, i: int, has_volume: bool, price: float, rich: bool = False) -> dict:
@@ -102,7 +111,8 @@ def metrics(df: pd.DataFrame, i: int, has_volume: bool, price: float, rich: bool
     row = df.iloc[i]
     atr = float(row["atr"])
     rng = (df["high"] - df["low"])
-    activity = float(row["vol_ratio"]) if has_volume else float(rng.iloc[i] / max(rng.iloc[i - 20:i].mean(), 1e-12))
+    act = df["vol_ratio"] if has_volume else rng / rng.rolling(20).mean().shift(1).clip(lower=1e-12)
+    activity = float(act.iloc[i])
     e20, e50, e200 = float(row["ema20"]), float(row["ema50"]), float(row["ema200"])
     trend = "ALCISTA" if e20 > e50 > e200 else "BAJISTA" if e20 < e50 < e200 else "MIXTA"
     z = zones(df, i, atr, price)
@@ -111,7 +121,7 @@ def metrics(df: pd.DataFrame, i: int, has_volume: bool, price: float, rich: bool
             "adx": round(float(row["adx"]), 1), "atr": round(atr, 8), "atr_pct": round(atr / price * 100, 3) if price else 0,
             "activity": round(activity, 2), "activity_kind": "volumen" if has_volume else "rango",
             "dist_ema20_atr": round((price - e20) / atr, 2) if atr else 0, "demand": z["demand"], "supply": z["supply"], "candle_ts": int(row["ts"]),
-            **(_rich(df, i, atr, price) if rich else {})}
+            **(_rich(df, i, atr, price, act) if rich else {})}
 
 
 def range_edge(m: dict) -> str | None:
@@ -204,6 +214,12 @@ RANGE_FAST_SYSTEM = (
     "Para ese par propón únicamente SHORT si es EXTREMO_OFERTA o LONG si es EXTREMO_DEMANDA, y solo si ves rechazo en el borde; no exijas tendencia, ADX alto ni alineación de EMAs."
 )
 
+TURN_FAST_SYSTEM = (
+    " GIRO ESTRUCTURAL: si un par tiene giro_estructura_{tf}: GIRO_ALCISTA_CONFIRMADO (aunque 4H y 1H sigan marcando BAJISTA), deja de proponer SHORT y evalúalo como "
+    "candidato LONG (contratendencia temprana) si el precio está haciendo un retroceso ordenado hacia la EMA 9/EMA 21 o consolidando en el tercio superior tras la ruptura. "
+    "Aplica la misma lógica inversa para GIRO_BAJISTA_CONFIRMADO."
+)
+
 MTF_SYSTEM = (
     " ANÁLISIS MULTITEMPORAL: cada par trae además su estructura en 4H y en 1H. Evalúa primero 4H (estructura y dirección de fondo), después 1H "
     "(confirmación: tendencia, momentum y si el precio está en una zona útil) y usa la tabla de {tf} solo como gatillo de entrada. "
@@ -232,6 +248,7 @@ def _row_txt(symbol: str, m: dict) -> str:
             + (f"\n   EMA9 {m['ema9']:.6g}, EMA21 {m['ema21']:.6g} · cruce_emas_rapidas: {m['fast_cross']} ({'EMA9 > EMA21' if m['fast_cross'] == 'ALCISTA' else 'EMA9 < EMA21'}) | "
                f"pendiente_adx: {m['adx_slope']} | último swing high ({SWING_BARS} velas) {m['swing_high']:.6g} (a {m['swing_high_atr']:+} ATR) · "
                f"último swing low {m['swing_low']:.6g} (a {m['swing_low_atr']:+} ATR)"
+               + f" | giro_estructura_{m.get('tf', 'tf')}: {m.get('turn') or 'NINGUNO'}"
                + (f" | regimen_{m.get('tf', 'tf')}: {m['regime']} ({m['ema20_crosses']} cruces de EMA20 en {RANGE_BARS} velas): exige extremos claros de oferta/demanda" if m["regime"] else "")
                if m.get("rich") else "")
             + (f"\n   oportunidad_rango: {m['range_edge']} (mercado lateral: solo {RANGE_SIDE[m['range_edge']].upper()} desde este borde, objetivo antes de la zona opuesta)" if m.get("range_edge") else "")
@@ -241,7 +258,8 @@ def _row_txt(symbol: str, m: dict) -> str:
 async def stage1(kind: str, tf: str, rows: dict, limit: int, usage_kind: str) -> dict:
     mtf = any(m.get("mtf") for m in rows.values())
     system = (FAST_SYSTEM.format(market=MARKET[kind], tf=tf, n=limit) + (MTF_SYSTEM.format(tf=tf) if mtf else "")
-              + (RANGE_FAST_SYSTEM if any(m.get("range_edge") for m in rows.values()) else ""))
+              + (RANGE_FAST_SYSTEM if any(m.get("range_edge") for m in rows.values()) else "")
+              + (TURN_FAST_SYSTEM.format(tf=tf) if any(m.get("turn") for m in rows.values()) else ""))
     prompt = "\n".join(_row_txt(s, m) for s, m in rows.items()) + f"\n\n¿Qué pares (máx. {limit}) merecen el análisis completo?"
     t0 = time.monotonic()
 
@@ -279,6 +297,9 @@ DEEP_SYSTEM = (
     "Si la operación va en contra de la tendencia mayor de 4H (rebote técnico), el Take Profit debe fijarse obligatoriamente antes de la primera EMA relevante "
     "(EMA 20 o EMA 50 de 4H/1H) o bloque de oferta/demanda previo, asegurando una toma de beneficios rápida: en ese caso devuelve SIEMPRE `tp` como precio, "
     "con al menos 1.5 veces la distancia del stop. "
+    "Cuando evalúes un candidato con GIRO_ALCISTA_CONFIRMADO contra una tendencia 4H bajista: NO compres en la cresta de una vela expansiva (> 2.5 ATR); exige al menos "
+    "1 vela de retroceso o pausa/consolidación que respete la EMA 9 o el soporte roto, y proyecta el TP antes de la siguiente zona de oferta de 1H/4H manteniendo un R:R >= 1.5. "
+    "Aplica lo simétrico a GIRO_BAJISTA_CONFIRMADO contra una tendencia 4H alcista (no vendas en el suelo de una vela expansiva; TP antes de la siguiente demanda). "
     "Si el par está en régimen RANGO / CHOPPY o marcado como EXTREMO_OFERTA / EXTREMO_DEMANDA (con ADX < 20), busca rechazos en los bordes del rango "
     "(velas con mecha de rechazo o giro de RSI) y coloca el Take Profit 0.25 ATR antes de la zona opuesta del rango, sin exigir rupturas ni alineación de EMAs de tendencia. "
     "`confidence` es tu estimación honesta (0-100) de la probabilidad de que la operación alcance el objetivo antes que el stop; no la infles. "
