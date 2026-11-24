@@ -153,6 +153,7 @@ def test_learning_adds_rule_and_counts_misses(monkeypatch):
         async def check(symbol, tf, sig, ctx, rules):
             return {"violates": True, "rule": rules[0], "reason": "r", "model": "m", "ms": 1}
         monkeypatch.setattr(ai_funnel, "rules_check", check)
+        await db.shadow_trades.insert_one({"rule_id": (await ai_rules.list_rules(db))[0]["id"], "pnl": 4.0, "kind": "REGLA"})
         for _ in range(ai_rules.MAX_MISSES):
             w = _trade(8.0)
             w.signal_id = sid
@@ -214,7 +215,7 @@ def test_levels_applied_on_open(monkeypatch):
         await ai_rules.add(db, ai_rules.RuleIn(text="Stop detrás del último swing"))
 
         async def ok(symbol, tf, sig, ctx, rules):
-            return {"violates": False, "rule": None, "reason": "swing en 97", "sl": 97.0, "tp": None, "model": "m", "ms": 1}
+            return {"violates": False, "rule": None, "reason": "swing en 97", "sl": 97.0, "tp": 105.0, "model": "m", "ms": 1}
         monkeypatch.setattr(ai_funnel, "rules_check", ok)
         await e._handle_signal("BTCUSDT", dict(SIG), await e.get_settings(), DF, 1, "4h")
         s = await db.signals.find_one({})

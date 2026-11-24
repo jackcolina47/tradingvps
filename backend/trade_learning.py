@@ -104,8 +104,10 @@ async def _check_winner(engine, trade: Trade, currency: str = "USDT"):
     res = await ai_funnel.rules_check(trade.symbol, signal["timeframe"], sig, ctx, active, **({} if currency == "USDT" else {"market": FX_MARKET}))
     if res["violates"]:
         r = await ai_rules.miss(engine.db, res["rule"]["id"])
-        off = " · regla APAGADA automáticamente" if not r["enabled"] else ""
-        await engine.log("AI_EVAL", f"{trade.symbol}: operación ganadora ({trade.pnl:+.2f} {currency}) que la regla «{r['text']}» habría bloqueado · {r['misses']}/{ai_rules.MAX_MISSES} fallos{off}")
+        if not r:
+            return
+        off = " · regla APAGADA automáticamente" if r["auto_off"] else ""
+        await engine.log("AI_EVAL", f"{trade.symbol}: operación ganadora ({trade.pnl:+.2f} {currency}) que la regla «{r['text']}» habría bloqueado · {r['misses']} fallos (mín. {ai_rules.MAX_MISSES}) · balance en sombras {r['shadow_pnl']:+.2f}{off}")
         if off:
             await ai_rules.event(engine.db, "DESACTIVAR", r["text"], f"habría bloqueado {r['misses']} operaciones ganadoras", {"trade_id": trade.id, "symbol": trade.symbol, "pnl": trade.pnl})
             await engine.tg(f"📚 <b>Regla apagada</b>: habría bloqueado {r['misses']} operaciones ganadoras\n«{r['text']}»", "ai")

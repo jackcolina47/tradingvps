@@ -1,11 +1,36 @@
+import logging
 from datetime import datetime, timezone
+import ai_rules
 from models import now_iso
 from risk import FEE_RATE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules
+
+
+logger = logging.getLogger("shadow")
 
 
 def shadow_be(rules: dict, d: dict, price: float) -> bool:
     """Same rule as real positions: breakeven is an independent toggle."""
     return bool(rules["breakeven_enabled"])
+
+async def rule_feedback(engine, d: dict, reason: str, net: float, currency: str = "USDT"):
+    """A signal blocked by a rule whose shadow reached its target with a net profit is a miss for that rule."""
+    if not d.get("rule_id") or reason != "TP" or net <= 0:
+        return
+    try:
+        r = await ai_rules.miss(engine.db, d["rule_id"])
+        if not r:
+            return
+        off = " · regla APAGADA automáticamente" if r["auto_off"] else ""
+        msg = (f"[SHADOW FEEDBACK] {d['symbol']} {d['side'].upper()}: la señal bloqueada por la regla «{r['text']}» habría cerrado en TP ({net:+.2f} {currency}) · "
+               f"{r['misses']} fallos (mín. {ai_rules.MAX_MISSES}) · balance en sombras {r['shadow_pnl']:+.2f}{off}")
+        logger.info(msg)
+        await engine.log("AI_EVAL", msg)
+        if off:
+            await ai_rules.event(engine.db, "DESACTIVAR", r["text"], f"bloqueó {r['misses']} ganadoras y sus sombras suman {r['shadow_pnl']:+.2f} {currency}", {"symbol": d["symbol"], "pnl": round(net, 2)})
+            await engine.tg(f"📚 <b>Regla apagada</b>: bloqueó {r['misses']} ganadoras y sus sombras suman {r['shadow_pnl']:+.2f} {currency}\n«{r['text']}»", "ai")
+    except Exception:
+        logger.exception("shadow feedback")
+
 
 MAX_AGE_H = 72
 KINDS = ("RECHAZADA", "BAJA_CONFIANZA", "FILTRO_IA", "BLOQUEADA", "NOTICIAS", "FUNDING", "REGIMEN", "ROTACION", "RR_BAJO", "SPREAD", "ERROR", "NO_EJECUTADA", "REGLA")
@@ -52,6 +77,7 @@ async def monitor_shadows(engine, tickers: dict, rules):
                          fees=round(d["fees"] + exit_fee, 4), reason=reason, closed_at=now_iso())
             await engine.db.shadow_trades.insert_one(trade)
             await engine.db.shadow_positions.delete_one({"_id": d["_id"]})
+            await rule_feedback(engine, d, reason, net)
             continue
         upd = {"mark_price": price, "unrealized_pnl": round(pnl(d["side"], d["entry_price"], price, d["qty"]), 4)}
         if rules["trailing_enabled"] or rules["breakeven_enabled"]:

@@ -129,6 +129,25 @@ def apply_levels(sig: dict, sl, tp, min_rr: float = 1.0, spread: float = 0.0, di
     return f"SL {sl0:.6g} → {new_sl:.6g} · TP {tp0:.6g} → {new_tp:.6g} (R:R {reward / risk:.2f})"
 
 
+RULE_MIN_RR = 1.5
+MAJORS = ("BTCUSDT", "ETHUSDT")
+
+
+def high_conviction(sig: dict, d1_trend: str) -> bool:
+    return (sig.get("score") or 0) >= 5 and d1_trend == ("ALCISTA" if sig["side"] == "long" else "BAJISTA")
+
+
+def apply_rule_levels(sig: dict, sl, tp, spread: float = 0.0, digits: int = None):
+    """Levels proposed by the rules check: only applied when the stop is not tighter than the strategy one and R:R stays >= 1.5; otherwise the strategy levels are kept."""
+    d = 1 if sig["side"] == "long" else -1
+    price, risk0 = sig["price"], abs(sig["price"] - sig["sl"])
+    risk = (price - sl) * d if sl is not None else risk0
+    reward = (tp - price) * d if tp is not None else abs(sig["tp"] - price)
+    if risk < risk0 * (1 - 1e-9) or reward <= 0 or reward / risk < RULE_MIN_RR:
+        return None
+    return apply_levels(sig, sl, tp, RULE_MIN_RR, spread, digits)
+
+
 RULES_SYSTEM = (
     "Eres el filtro de reglas de un bot de trading de {market}. Recibes una señal de entrada y una lista numerada de REGLAS "
     "aprendidas de operaciones pasadas. Tu ÚNICA tarea es decidir si la señal incumple claramente alguna regla con los datos recibidos. "
@@ -137,6 +156,12 @@ RULES_SYSTEM = (
     "Además, si la señal pasa y alguna regla habla de dónde colocar el stop o el objetivo (stop demasiado ajustado, detrás de un swing, objetivo antes de una "
     "resistencia, etc.) y con los datos recibidos procede aplicarla, propón el SL y/o TP ajustados como precios; en cualquier otro caso deja sl y tp en null "
     "y se usarán los niveles por defecto de la estrategia. "
+    "ALTA CONVICCIÓN: cuando la señal viene marcada «ALTA CONVICCIÓN: SÍ» (5 o más confirmaciones y tendencia diaria 1D alineada con la dirección) y la regla "
+    "que aplicaría solo advierte de un swing, soporte/resistencia o nivel cercano, NO rechaces la señal: responde violates=false y propón un tp y/o sl "
+    "ajustado que respete esa estructura (objetivo antes del nivel, stop detrás del swing). "
+    "PARES PRINCIPALES: cuando la señal viene marcada «PAR PRINCIPAL DE ALTA LIQUIDEZ: SÍ» (BTCUSDT, ETHUSDT), una regla genérica (sin «(solo SÍMBOLO)») "
+    "aprendida en altcoins volátiles no la veta por pequeños roces de volumen (volumen algo por debajo o por encima de lo que pide la regla): solo la "
+    "incumple si la diferencia es clara y amplia. "
     'Responde EXCLUSIVAMENTE con JSON válido, sin texto adicional: {{"violates":true|false,"rule":número de la regla incumplida (0 si ninguna),'
     '"reason":"máx. 25 palabras en español citando el dato concreto que incumple la regla, o por qué ajustas los niveles; vacío si pasa sin cambios",'
     '"sl":número o null,"tp":número o null}}'
@@ -166,9 +191,11 @@ async def rules_check(symbol: str, timeframe: str, sig: dict, ctx: dict, rules: 
     chat._probe = False
     lines = "\n".join(f"{i}. {r['text']}" + (f" (solo {r['symbol']})" if r.get("symbol") else "") for i, r in enumerate(rules, 1))
     pa = ctx.get("price_action") or {}
+    d1 = ctx.get("d1_trend") or pa.get("d1_trend") or "N/D"
     prompt = (
         f"SEÑAL: {sig['side'].upper()} {symbol} | {sig['strategy']} | TF {timeframe} | horizonte {ctx.get('horizon', 'short')} | R:R {rr(sig):.2f}\n"
         f"Entrada {sig['price']} · SL {sig['sl']} · TP {sig['tp']}\n"
+        f"Tendencia 1D: {d1} | ALTA CONVICCIÓN: {'SÍ' if high_conviction(sig, d1) else 'NO'} | PAR PRINCIPAL DE ALTA LIQUIDEZ: {'SÍ' if symbol in MAJORS else 'NO'}\n"
         f"Confirmaciones ({sig['score']}): {'; '.join(sig['reasons'])}\n"
         f"Indicadores: {json.dumps(sig['indicators'])}\n"
         f"Tendencia TF superior ({ctx.get('htf_tf')}): {ctx.get('htf_trend')} | cambio 24h {ctx.get('change_24h') or 0:.2f}% | funding {ctx.get('funding_rate')}\n"

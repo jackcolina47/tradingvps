@@ -707,3 +707,10 @@
 - Tests `tests/test_iter117_fast_turns.py`. Hallazgo: en las últimas 24 h de BTCUSDT/SOLUSDT las señales nuevas existen (impulso 13:00, pullback BTC 03:00) pero el filtro de tendencia 4H (`htf_filter`) las bloquea por ir contra el 4H.
 - Iter 117b: el impulso rápido ignora el filtro 4H solo con volumen ≥ 2,0× (`htf_free_vol`, marca `htf_override`); entre 1,8× y 2,0× sigue respetándolo. `trend_ema` con ADX ≥ 20. Verificado con velas reales: impulso largo 23/11 13:00 UTC en BTCUSDT y SOLUSDT pasa con 4H bajista; pullback y trend_ema contra 4H siguen bloqueados.
 - Iter 117c: los filtros de rango de mean_reversion (`mr_adx=22`, `mr_rsi=35`, `mr_range`) aplican ahora en Estrictos, Relajados y Mínimos.
+
+## Iteración 118 · Niveles estructurales en alta convicción y poda de reglas por sombras (Bybit y HotForex)
+- `ai_funnel.RULES_SYSTEM` + prompt de `rules_check`: línea «Tendencia 1D | ALTA CONVICCIÓN: SÍ/NO | PAR PRINCIPAL DE ALTA LIQUIDEZ: SÍ/NO» (`high_conviction`: score ≥ 5 y 1D alineada; `MAJORS` = BTCUSDT, ETHUSDT). Alta convicción + regla de swing/nivel → violates=false con tp/sl ajustado; reglas genéricas no vetan BTC/ETH por roces pequeños de volumen.
+- `ai_funnel.apply_rule_levels` (usado en `engine.py` y `fx/engine_signals.py`, ruta solo-reglas): aplica sl/tp de la IA solo si R:R ≥ 1,5 y el stop no es más corto que el original; si no, niveles de la estrategia y nota en `ai_reasoning`.
+- `shadow.rule_feedback` (Bybit y `fx/shadow.py`): sombra con `rule_id` que cierra en TP con net > 0 → `ai_rules.miss` + log `[SHADOW FEEDBACK]`; si se apaga, evento DESACTIVAR + Telegram.
+- `ai_rules.miss`: apaga solo con misses ≥ 3 Y suma de pnl de sus sombras > 0; devuelve `auto_off` y `shadow_pnl`. Afecta también a `_check_winner` de trade_learning.
+- Labs y Pepperstone no usan la ruta de reglas: sin cambios. Tests `tests/test_iter118_rule_levels_shadow_feedback.py` (5) + iter89 ajustado. Llamada real al modelo verificada (BTCUSDT alta convicción → TP ajustado antes del swing).

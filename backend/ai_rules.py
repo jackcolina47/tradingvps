@@ -56,11 +56,19 @@ async def hit(db, rule_id: str) -> None:
     await db.ai_rules.update_one({"_id": ObjectId(rule_id)}, {"$inc": {"hits": 1}})
 
 
-async def miss(db, rule_id: str) -> dict:
+async def miss(db, rule_id: str) -> Optional[dict]:
+    """Counts one winner the rule blocked. Switched off only with MAX_MISSES misses AND a losing shadow balance (its blocked signals won more than they lost)."""
+    if not ObjectId.is_valid(rule_id):
+        return None
     doc = await db.ai_rules.find_one_and_update({"_id": ObjectId(rule_id)}, {"$inc": {"misses": 1}}, return_document=True)
-    if doc.get("misses", 0) >= MAX_MISSES and doc.get("enabled", True):
+    if not doc:
+        return None
+    agg = await db.shadow_trades.aggregate([{"$match": {"rule_id": rule_id}}, {"$group": {"_id": None, "pnl": {"$sum": "$pnl"}}}]).to_list(1)
+    shadow_pnl = agg[0]["pnl"] if agg else 0.0
+    auto_off = doc.get("misses", 0) >= MAX_MISSES and shadow_pnl > 0 and doc.get("enabled", True)
+    if auto_off:
         doc = await db.ai_rules.find_one_and_update({"_id": doc["_id"]}, {"$set": {"enabled": False}}, return_document=True)
-    return _pub(doc)
+    return {**_pub(doc), "auto_off": auto_off, "shadow_pnl": round(shadow_pnl, 2)}
 
 
 TREND_STRATEGIES = {"ema_pullback", "supertrend_momentum", "trend_ema"}

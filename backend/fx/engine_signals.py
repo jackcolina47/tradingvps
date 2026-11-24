@@ -303,10 +303,12 @@ class SignalsMixin:
                     else:
                         signal.ai_decision, signal.ai_reasoning = "APROBADA", f"No incumple ninguna de las {len(rules)} reglas aprendidas"
                         signal.ai_adjusted_sl, signal.ai_adjusted_tp = res["sl"], res["tp"]
-                        change = ai_funnel.apply_levels(sig, res["sl"], res["tp"], 1.0, SPECS[symbol]["spread"], SPECS[symbol]["digits"])
+                        change = ai_funnel.apply_rule_levels(sig, res["sl"], res["tp"], SPECS[symbol]["spread"], SPECS[symbol]["digits"])
                         if change:
                             signal.sl, signal.tp, signal.default_sl, signal.default_tp, signal.ai_levels_applied = sig["sl"], sig["tp"], sig["default_sl"], sig["default_tp"], True
                             signal.ai_reasoning += f" · niveles ajustados por lo aprendido: {change}" + (f" · {res['reason']}" if res["reason"] else "")
+                        elif res["sl"] or res["tp"]:
+                            signal.ai_reasoning += f" · ajuste propuesto descartado (R:R menor a {ai_funnel.RULE_MIN_RR} o stop más corto): se usan los niveles de la estrategia"
                 except Exception as e:
                     logger.exception("rules check")
                     approve, shadow_kind, signal.ai_decision = False, "BLOQUEADA", "BLOQUEADA"
