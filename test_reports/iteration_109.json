@@ -1,0 +1,31 @@
+{
+  "summary": "Iter110 — Exact R:R by regime. Reviewed /app/backend/tests/test_iter110_exact_rr.py (17 tests, all green on their own). Added /app/backend/tests/test_iter110_monitor_partial.py with 6 new runtime tests that exercise the PRIORITY item (position manager on the real _manage_paper_position of both engines): (1) crypto monitor — a rr_target=2.0 long on BTCUSDT at +1R (102) triggers partial_done=True and qty reduced; a rr_target=1.0 long on ETHUSDT at +0.9R (50.9) stays partial_done=False with qty intact; moving it to the 1:1 TP (51) closes full with reason=TP. (2) Position.rr_target round-trips through Mongo (to_mongo/from_mongo) for both 1.0 and 2.0 values. (3) FX monitor on EURUSD — same invariant: 2:1 position partials at +1R, 1:1 stays untouched below TP and closes with reason=TP when price reaches the 1:1 target. (4) Maker pipeline — maker.queue_entry stores the sig verbatim in pending_entries (rr_target=1.0 preserved); when the paper limit fills, maker._finish → engine.open_position is called with the same sig and entry_type='maker'. (5) performance.by_setup classifies a signal with context.funnel.range_trade=True and range_edge=None as 'rango'. (6) funnel.DEEP_SYSTEM.format(market=,tf=,levels=) does not raise KeyError. Full regression `python -m pytest tests -q -n 0`: 343 passed + 16 skipped (= 337 pre + 6 new), zero failures. ruff check --select F821,E9,F841 on the new file: clean. Post-run GET /api/settings, /api/fx/settings, /api/pepper/settings confirms atr_levels_enabled / breakeven_enabled / trailing_enabled / partial_tp_enabled = True on the three bots (no restore needed). Bots stayed PAPER and stopped, no LLM tokens burnt, no POST /guard/refresh, no settings mutated, no real signals/positions/orders left behind.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter110_exact_rr.py",
+    "/app/backend/tests/test_iter110_monitor_partial.py",
+    "/app/test_reports/pytest/iter110.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "funnel.TREND_RR=2.0, RANGE_RR=1.0, RR_FREE_PCT=0.85, RANGE_ROOM_GAP_ATR=0.2 — constants in place (funnel.py:34).",
+    "funnel.stop_level and funnel.rr_block are the only places that compute the final SL / room check and both are honoured in _deep (funnel.py:608-615); the AI's own `tp` is never passed into the signal — tp = price ± rr × dist is the only source.",
+    "sig['rr_target'] is set in funnel._deep (funnel.py:628) and context.funnel.rr_target / range_trade are serialised (funnel.py:638). performance.by_setup already matches range_edge OR range_trade for the 'rango' bucket (performance.py:147).",
+    "Position.rr_target is Optional[float] (models.py:287), persisted through to_mongo and reloaded through from_mongo — verified at runtime, not just by reflection.",
+    "engine._manage_paper_position (engine.py:342), engine._manage_live_position (engine.py:463), fx/engine_positions._manage_paper_position (fx/engine_positions.py:66) and fx/engine_positions._manage_live_position (fx/engine_positions.py:232) all guard the partial-close with `rr_target != 1.0` — confirmed by the file-grep assertion AND by exercising the method on actual Position instances for crypto and FX.",
+    "engine.open_position (engine.py:632,649) and fx/engine_positions.open_position (fx/engine_positions.py:415,435) both plumb rr_target=sig.get('rr_target') into Position.",
+    "maker.queue_entry stores `sig` verbatim in pending_entries (maker.py:35) — the maker pipeline preserves rr_target end-to-end; verified via monitor_pending → _finish → engine.open_position with a paper fill.",
+    "No stale `atr_tp_mult` or `sig.get('tp')` recomputations remain in the funnel execution path: engine.py:605, maker.py:33 / maker.py:41, shadow.py:21, fx/engine_positions.py:355 and fx/shadow.py:28 all compute tp as `entry + (sig['tp'] - sig['price'])`, which preserves the exact R:R distance set by funnel._deep. No fix needed.",
+    "funnel.levels(...) (funnel.py:185) is dead code now that _deep uses stop_level + rr × dist; no caller outside of itself. Not a bug, but it can be removed in a later cleanup — currently imported by nobody (grep: zero non-test hits).",
+    "DEEP_SYSTEM.format(market=, tf=, levels=) does not KeyError — only three placeholders and funnel.stage2 passes all three (funnel.py:358).",
+    "conftest.py's autouse `_free_path_to_target` fixture correctly scopes the neutralisation of funnel.rr_block to NON-iter110 modules; the new test_iter110_monitor_partial.py has 'iter110' in its name so the room check is NOT monkeypatched there."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter110_monitor_partial.py"],
+  "success_rate": {"backend": "100% (343/343 passed + 16 skipped; 0 failed)", "frontend": "n/a (backend only)"},
+  "test_credentials": "Panel password: BlackCat2233@ (from /app/memory/test_credentials.md).",
+  "seed_data_creation": "None. All tests use in-memory doubles (no DB writes, no LLM calls). Test fixture-created engines are discarded on teardown; no pending_entries / signals / positions / shadow / logs / account rows touched in the real Mongo.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Two iter110 test files cover the exact-R:R work: test_iter110_exact_rr.py (unit: stop_level, rr_block, funnel.run integration with FakeEngine from iter103) and test_iter110_monitor_partial.py (runtime: _manage_paper_position for crypto and FX, Mongo round-trip of rr_target, maker.queue_entry→monitor_pending→open_position, performance.by_setup, DEEP_SYSTEM.format). The new file reuses lightweight engine stubs (StubCryptoEngine subclasses TradingEngine and overrides __init__/log/_announce_partial/close_position; StubFxEngine mixes PositionsMixin with _SimpleDB and _FakeMarket). The iter101 /api/settings timeout flake did NOT reproduce this run; the four partial/breakeven/trailing/atr-levels toggles stayed True on all three bots. No restore performed."
+}
