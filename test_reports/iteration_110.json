@@ -1,0 +1,28 @@
+{
+  "summary": "Backend-only regression and targeted tests for iter111 precision changes in /app/backend/funnel.py. Verified: (1) pullback_block() EMA9/21 lock (4H+1H alignment, no opposite giro_estructura, close beyond EMA50, within 0.5 ATR of EMA20/EMA50, swing-high/low not broken) returns None only when all conditions hold, Spanish reason strings otherwise; (2) rr_block() uses 75% for 4H zones and 50% for entry (15m) micro-zones, old 85% case now passes, range 1:1 rule unchanged; (3) DEEP_SYSTEM prompt includes brake-candle rule (forbids BUY on bearish close without lower absorption wick, SELL on bullish close without upper rejection wick) and still formats with market/tf/levels; (4) SL_ATR_BAND=(1.1,4.0) applied in stop_level()/levels() before 0.25 ATR buffer and in stage2 prompt text 'entre 1.1 y 4 ATR'. End-to-end funnel.run flow for pullback candidates (both long and short) reaches stage2 with cand['pullback']=True and 'retroceso ordenado' SCAN log; lock failures emit RISK log 'cruce EMA9/21 ... descartado sin IA potente' without stage2. Counter_trend / over-extended / range_edge exceptions preserved; MIXTA 4H discarded. Full pytest run: 381 passed, 16 skipped (matches main agent baseline). iter111 file: 38 passed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter111_precision.py",
+    "/app/backend/tests/test_iter110_exact_rr.py",
+    "/app/backend/tests/test_iter106_fast_cross_filter.py",
+    "/app/backend/tests/test_iter103_bybit_hardening.py",
+    "/app/backend/tests/test_iter100_guard_funnel.py",
+    "/app/backend/tests/conftest.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "funnel.py line 187: pullback_block uses min(abs(price-ema20), abs(price-ema50)) > 0.5*ATR for the 'within 0.5 ATR of EMA20 or EMA50' lock — correct and symmetric for long/short, no sign bug.",
+    "funnel.py line 209/220: SL_ATR_BAND check uses inclusive bounds [1.1, 4.0]*ATR before adding 0.25 ATR buffer — matches request. Note (as flagged by main agent) exact-boundary float comparisons like (100-98.9) < 1.1 can be float-sensitive; not a functional bug but worth knowing when designing tests.",
+    "rr_block() correctly selects per-timeframe threshold via iteration over (entry_tf, 4h) with RR_FREE_ENTRY=0.50 and RR_FREE_4H=0.75; range branch uses the +0.2 ATR gap unchanged.",
+    "DEEP_SYSTEM prompt still safely consumes .format(market=, tf=, levels=) with no stray single braces."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "n/a"},
+  "test_credentials": "not needed (no HTTP tests executed; pure backend logic with mocked stage1/stage2 via existing FakeEngine helpers).",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter111 precision changes are fully implemented and covered by /app/backend/tests/test_iter111_precision.py (38 tests, all green). Full backend regression: 381 passed, 16 skipped. No frontend testing performed (not requested). Reuse helpers from test_iter103_bybit_hardening.py (FakeEngine, _settings, _force_in_hours) for new funnel tests.",
+  "rca of the issue": "n/a — no defects found."
+}

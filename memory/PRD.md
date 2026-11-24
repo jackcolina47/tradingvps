@@ -738,6 +738,13 @@ Decisión del usuario: contratendencia = 2:1 como tendencia (sustituye al TP cor
 - Prompts: el modelo potente ya no fija TP. `funnel.levels()` queda sin uso en producción (solo tests antiguos): retirar. `atr_tp_mult` sin efecto en el embudo.
 - Tests: `tests/test_iter110_exact_rr.py`; `tests/conftest.py` neutraliza `rr_block` en tests antiguos (sus velas sintéticas tienen zonas a 0,5 ATR); eliminados 9 tests de las reglas de TP sustituidas.
 
+## Iteración 124 (2026-11) — 4 ajustes de precisión del embudo (3 bots)
+- Retroceso ordenado: `funnel.pullback_block(m, side)`; un candidato contra el cruce EMA9/21 pasa al modelo potente (`cand["pullback"]`, log SCAN «retroceso ordenado») si 4H **y** 1H apoyan el lado, no hay giro en contra, el cierre respeta la EMA50, el precio está a ≤ 0,5 ATR (`PULLBACK_ZONE_ATR`) de EMA20/EMA50 y no rompió el último swing de 20 velas. Si falla, se descarta con el motivo del candado.
+- `rr_block`: `RR_FREE_4H` 0,75 frente a zonas de 4H y `RR_FREE_ENTRY` 0,50 frente a micro-zonas del TF de entrada (antes 0,85 para ambas). Rango sin cambios.
+- `DEEP_SYSTEM`: regla «VELA DE FRENO OBLIGATORIA» (no BUY tras vela bajista activa sin mecha inferior; no SELL tras vela alcista activa sin mecha superior).
+- `SL_ATR_BAND = (1.1, 4.0)` (antes del buffer de 0,25 ATR); el prompt de niveles lee la banda de la constante.
+- Tests: `tests/test_iter111_precision.py` (38) + umbrales actualizados en iter100/103/110. Suite: 381 passed, 16 skipped. testing_agent `iteration_110.json` sin incidencias.
+
 ### Pendiente
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.
