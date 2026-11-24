@@ -715,3 +715,13 @@
 - `ai_rules.miss`: apaga solo con misses ≥ 3 Y suma de pnl de sus sombras > 0; devuelve `auto_off` y `shadow_pnl`. Afecta también a `_check_winner` de trade_learning.
 - Labs y Pepperstone no usan la ruta de reglas: sin cambios. Tests `tests/test_iter118_rule_levels_shadow_feedback.py` (5) + iter89 ajustado. Llamada real al modelo verificada (BTCUSDT alta convicción → TP ajustado antes del swing).
 - Iter 118b: `MAJORS` += EURUSD, GBPUSD, XAUUSD (HotForex). `ai_rules.list_rules` devuelve `blocked_won`, `blocked_lost`, `misses_left`, `max_misses`; `LearnedRulesSection.jsx` → `RuleBalance` (línea «Sombras: ganaron/perdieron · fallos N/3 · estado») y TXT de descarga actualizado.
+
+## Iteración 119 · Auditoría (revisión funcional + seguridad) y correcciones
+- Quitado por obsoleto: «Filtro de régimen de BTC» y «Rotación semanal» (Bybit/Labs). Borrados `backend/regime.py`, `RegimePanel.jsx` (no se usaba), rutas `/market/context` (cripto) y `/rotation/refresh`, campos `btc_regime_*`/`rotation_*` de `Settings`/`SettingsUpdate` (los guardados en Mongo se ignoran), contexto y claves de la revisión IA, docs. Las etiquetas REGIMEN/ROTACION se conservan solo para mostrar histórico. El régimen USD de fx NO se tocó.
+- `backend/maintenance.py`: índices al arrancar en todos los bots (signals.key/created_at/ai_decision, trades.closed_at, logs.ts, equity.ts, shadow_trades.rule_id/closed_at); `trade_totals` (caché del agregado de operaciones, se invalida al cerrar/reiniciar, refresco 60 s); `RecentKeys` (signal_keys acotado a 5000); `claim_partial` (parcial paper atómico: sin doble abono si la posición se cerró a mano).
+- Limpieza de datos antiguos SOLO manual: `GET /api/maintenance`, `POST /api/maintenance/cleanup {confirm:true}` + bloque «Datos antiguos» en Copias de seguridad. Borra logs > 30 días y reduce equidad > 14 días a un punto por hora. Señales, sombras y operaciones no se podan (las usan estadísticas y reglas).
+- `backup.py`: escritura en hilo aparte y cesión del bucle cada 200 documentos.
+- `deploy/docker-compose.yml`: `mem_limit` (mongo 450m, backend 600m, web 128m; variables MONGO_MEM/BACKEND_MEM/WEB_MEM) y `--wiredTigerCacheSizeGB 0.25`.
+- CORS: `allow_credentials=False` (el token va en cabecera). `python-jose` eliminado de requirements.
+- Decisiones del usuario: factores de tamaño al 100 % son intencionales; bloqueo global de login se deja como está.
+- Tests: `tests/test_iter119_maintenance.py` (6); iter45/iter46 adaptados (sin régimen/rotación).

@@ -318,8 +318,8 @@ for _eng, _st, _nw in FX_BOTS:
     app.include_router(fx_routes.build_router(_eng, _st, _nw))
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_credentials=False,  # the session token travels in the Authorization header, never in cookies
+    allow_origins=[o.strip() for o in os.environ["CORS_ORIGINS"].split(",")],
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["Content-Disposition", "X-Package-Version"],

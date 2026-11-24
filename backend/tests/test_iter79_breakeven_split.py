@@ -112,6 +112,7 @@ class _Coll:
 
     async def update_one(self, flt, upd, **kw):
         self.calls.append((flt, upd))
+        return type("R", (), {"modified_count": 1})()
 
 
 class _DB:

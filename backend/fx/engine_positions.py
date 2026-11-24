@@ -3,6 +3,7 @@ open/close with sizing and all the MetaApi failure paths."""
 import time
 import asyncio
 import trade_learning
+import maintenance
 from datetime import datetime, timezone
 from bson import ObjectId
 from models import Position, Trade, now_iso
@@ -38,6 +39,8 @@ class PositionsMixin:
                 part = risk.partial_lots(p.qty, EMA_PARTIAL_PCT)
                 be = self._ema_be(p)
                 net = 0.0
+                if part > 0 and not await maintenance.claim_partial(self.db, ObjectId(p.id)):
+                    return
                 if part > 0:
                     fee = risk.spread_cost(p.symbol, part, tickers)
                     gross = risk.pnl(p.symbol, p.side, p.entry_price, price, part, tickers)
@@ -66,6 +69,8 @@ class PositionsMixin:
         updates.update(mark_price=price, unrealized_pnl=round(risk.pnl(p.symbol, p.side, p.entry_price, price, p.qty, tickers), 4))
         if rules["partial_tp_enabled"] and not p.partial_done and p.mfe_r >= rules["partial_tp_r"] and not rollover:
             part = risk.partial_lots(p.qty, rules["partial_tp_pct"])
+            if part > 0 and not await maintenance.claim_partial(self.db, ObjectId(p.id)):
+                return
             if part > 0:
                 fee = risk.spread_cost(p.symbol, part, tickers)
                 gross = risk.pnl(p.symbol, p.side, p.entry_price, price, part, tickers)
@@ -109,6 +114,8 @@ class PositionsMixin:
                     fee = abs((await self.broker.close_partial(p.order_id, part, p.link_id)).get("commission") or 0) if p.live else risk.spread_cost(p.symbol, part, tickers)
                     gross = risk.pnl(p.symbol, p.side, p.entry_price, price, part, tickers)
                     if not p.live:
+                        if not await maintenance.claim_partial(self.db, ObjectId(p.id)):
+                            return
                         await self.db.account.update_one({"_id": "main"}, {"$inc": {"balance": gross - fee}})
                     rest = round(p.qty - part, 8)
                     updates.update(qty=rest, margin=round(p.margin * rest / p.qty, 6), partial_gross=round(p.partial_gross + gross, 6), partial_fees=round(p.partial_fees + fee, 6),
@@ -338,6 +345,7 @@ class PositionsMixin:
                       sl=p.sl, tp=p.tp, initial_sl=p.initial_sl, atr=p.atr, breakeven=p.breakeven, signal_id=p.signal_id, order_id=p.order_id,
                       exit_mode=p.exit_mode, tags=[EMA_TEST_TAG] if p.exit_mode == "cross" and not self.profile.ema_only else [])
         res = await self.db.trades.insert_one(trade.to_mongo())
+        self._trade_totals = None
         trade.id = str(res.inserted_id)
         if self.profile.rules_only and trade.exit_mode != "cross" and trade.strategy != "manual":
             asyncio.create_task(self._learn(trade))

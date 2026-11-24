@@ -1,10 +1,9 @@
 import time
 import asyncio
 import logging
-from models import SettingsUpdate, AVAILABLE_SYMBOLS, STRATEGY_KEYS, CRYPTO_STRATEGY_KEYS, ENTRY_ORDER_TYPES, REGIME_SMAS, now_iso
+from models import SettingsUpdate, AVAILABLE_SYMBOLS, STRATEGY_KEYS, CRYPTO_STRATEGY_KEYS, ENTRY_ORDER_TYPES, now_iso
 from performance import maker_stats, excursion_stats
 from risk import trade_rules
-import regime
 from performance import performance
 from plan import backtest_stats
 from ai_advisor import advise, label as ai_label
@@ -18,7 +17,7 @@ import notify
 logger = logging.getLogger("review")
 ALLOWED_AI_KEYS = {"symbols", "disabled_strategies", "risk_per_trade", "max_positions", "leverage", "ai_min_confidence",
                    "trailing_enabled", "breakeven_enabled", "htf_filter", "symbol_params"}
-CRYPTO_AI_KEYS = ALLOWED_AI_KEYS | {"btc_regime_filter", "btc_regime_sma", "rotation_enabled", "entry_order_type", "max_long_positions",
+CRYPTO_AI_KEYS = ALLOWED_AI_KEYS | {"entry_order_type", "max_long_positions",
                                     "be_start_r", "trail_start_r", "trail_atr_mult", "partial_tp_enabled", "partial_tp_r", "partial_tp_pct"}
 EXIT_RANGES = {"be_start_r": (0.5, 3.0), "trail_start_r": (0.5, 3.0), "trail_atr_mult": (0.5, 3.0), "partial_tp_r": (0.5, 3.0), "partial_tp_pct": (25, 75)}
 LABELS = {"symbols": "Pares", "strategy": "Estrategia", "disabled_strategies": "Estrategias apagadas", "risk_per_trade": "Riesgo/op %",
@@ -68,15 +67,8 @@ async def build_context(engine, db, settings, acc: dict, with_backtest: bool) ->
     if engine.news and engine.news.latest:
         ctx["noticias"] = {"mercado": engine.news.latest["market"], "alertas": engine.news.latest.get("alerts", [])[:5]}
     ctx["evolucion"] = await evolution.ai_context(engine)
-    if hasattr(settings, "btc_regime_filter"):
+    if hasattr(settings, "entry_order_type"):
         try:
-            ctx["regimen_btc"] = {**await regime.btc_regime(engine.market, settings.btc_regime_sma), "filtro_activo": settings.btc_regime_filter,
-                                  "_explicacion": "Filtro de régimen: con BTC bajo su SMA diaria solo se permiten cortos (y viceversa). Las señales bloqueadas van a Sombra con kind REGIMEN: "
-                                                  "si con ≥ 30 sombras REGIMEN el pnl sombra es claramente positivo el filtro está dejando escapar ganancias; si es negativo, protege."}
-            rot = await regime.current_rotation(engine, settings)
-            ctx["rotacion_semanal"] = {"activa": settings.rotation_enabled, "calculada": rot["computed_at"], "dias": rot["lookback_days"], "ranking": rot["ranking"],
-                                       "_explicacion": "Rotación por momentum (ponderado por volumen): tercio ganador solo largos, tercio perdedor solo cortos, mitad menos líquida al 75 % de tamaño. "
-                                                       "Las señales en contra van a Sombra con kind ROTACION."}
             ctx["entradas_maker"] = {**await maker_stats(db), "tipo_actual": settings.entry_order_type, "velas_espera": settings.maker_wait_bars,
                                      "_explicacion": "Entradas con orden límite post-only (0,02 %) frente a mercado (0,055 %): fill_rate = % de señales llenadas como maker; "
                                                      "market_fallbacks = pasaron a mercado tras esperar. by_entry_type en rendimiento_real compara el PnL de cada tipo."}
@@ -87,7 +79,7 @@ async def build_context(engine, db, settings, acc: dict, with_backtest: bool) ->
                                                       "mfe_tp_pct = % del camino al TP que llegó a recorrer. near_miss = cerradas sin tocar el TP tras alcanzar ≥ 70 % de él (rebotes). "
                                                       "partial = operaciones con cierre parcial ejecutado (partial_tp_pct % cerrado a +partial_tp_r R; el resto sigue con trailing)."}
         except Exception as e:
-            logger.warning(f"contexto régimen/rotación: {e}")
+            logger.warning(f"contexto de entradas/salidas: {e}")
     wf_latest = await db.wf_checks.find_one({"_id": "latest"}, {"_id": 0, "ran_at": 1, "results": 1})
     if wf_latest and wf_latest.get("results"):
         ctx["walk_forward_pares_aplicados"] = {"revisado": wf_latest["ran_at"], "pares": {s: {k: r[k] for k in ("verdict", "wfe", "oos", "previous_verdict")}
@@ -143,9 +135,7 @@ async def apply_ai_changes(engine, res: dict, before: dict, settings, *, policy:
         patch.pop("ai_news_weight")
     if "entry_order_type" in patch and patch["entry_order_type"] not in ENTRY_ORDER_TYPES:
         patch.pop("entry_order_type")
-    if "btc_regime_sma" in patch and patch["btc_regime_sma"] not in REGIME_SMAS:
-        patch.pop("btc_regime_sma")
-    for k in ("btc_regime_filter", "rotation_enabled", "partial_tp_enabled", "rollover_guard", "vol_filter_enabled", "seasonality_bias", "usd_regime_filter", "fomc_rule"):
+    for k in ("partial_tp_enabled", "rollover_guard", "vol_filter_enabled", "seasonality_bias", "usd_regime_filter", "fomc_rule"):
         if k in patch and not isinstance(patch[k], bool):
             patch.pop(k)
     for k, (lo, hi) in (("vol_min_pct", (0, 50)), ("vol_high_pct", (60, 100)), ("currency_exposure_limit", (1, 6)), ("seasonality_size_factor", (0.25, 1.0))):

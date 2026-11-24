@@ -22,7 +22,6 @@ async def _run(db):
     from indicators import build_df
     from strategies import _signal
     from bson import ObjectId
-    import regime
     import maker
 
     eng = TradingEngine(db)
@@ -33,7 +32,7 @@ async def _run(db):
     await eng.market.fetch_tickers()
     s = await eng.get_settings()
     s.ai_enabled = False
-    s.entry_order_type, s.btc_regime_filter, s.rotation_enabled = "market", False, False
+    s.entry_order_type = "market"
     s.max_positions, s.max_long_positions = 1, 1
     out = {}
     start_oid = ObjectId()
@@ -90,41 +89,7 @@ async def _run(db):
         out["d"] = {"dec": sd_["ai_decision"], "note": sd_.get("note"), "pos": bool(pd_), "shadow": shd and shd["kind"]}
         await drop_all_qa()
 
-        # (b) BTC regime
-        s.max_positions, s.max_long_positions, s.btc_regime_filter = 10, 6, True
-        rg = await regime.btc_regime(eng.market, s.btc_regime_sma)
-        out["regime"] = rg["state"]
-        bad = "short" if rg["state"] == "ALCISTA" else "long"
-        sr, pr, shr = await inject(A, bad)
-        out["reg_short"] = {"dec": sr["ai_decision"], "note": sr.get("note"), "pos": bool(pr), "shadow": shr and shr["kind"]}
-        sl_, pl_, shl = await inject(B, bad, "multi_horizon", "long")
-        out["reg_long_h"] = {"dec": sl_["ai_decision"], "note": sl_.get("note"), "pos": bool(pl_)}
-        await drop_all_qa()
-        s.btc_regime_filter = False
-
-        # (c) rotation
-        rot = await regime.current_rotation(eng, s)
-        rk = rot["ranking"]
-        out["ranking"] = [(r["symbol"], r["bias"], r["size_factor"]) for r in rk]
-        L = next(r for r in rk if r["bias"] == "long")
-        S = next(r for r in rk if r["bias"] == "short")
-        s.rotation_enabled = True
-        s1, p1, _ = await inject(L["symbol"], "short")
-        s2, p2, _ = await inject(S["symbol"], "long")
-        out["rot"] = {"short_on_long": (s1["ai_decision"], s1.get("note"), bool(p1)), "long_on_short": (s2["ai_decision"], s2.get("note"), bool(p2))}
-        small = next((r for r in rk if r["size_factor"] == 0.75), None)
-        if small:
-            side = "short" if small["bias"] == "short" else "long"
-            s.rotation_enabled = False
-            _, q1, _ = await inject(small["symbol"], side)
-            await drop(q1)
-            s.rotation_enabled = True
-            oid = ObjectId()
-            _, q2, _ = await inject(small["symbol"], side)
-            lg = await db.logs.find_one({"_id": {"$gt": oid}, "level": "ORDER", "message": {"$regex": "^ABIERTA"}})
-            out["size"] = {"q1": q1 and q1["qty"], "q2": q2 and q2["qty"], "log": lg and lg["message"]}
-        await drop_all_qa()
-        s.rotation_enabled = False
+        s.max_positions, s.max_long_positions = 10, 6
 
         # (d) maker paper
         s.entry_order_type, s.maker_wait_bars = "maker", 1
@@ -205,31 +170,6 @@ def test_a_long_ignores_short_cap(e2e):
 def test_a_long_cap(e2e):
     d = e2e["d"]
     assert d["dec"] == "BLOQUEADA" and "máximo de posiciones de largo plazo alcanzado (1)" in d["note"] and not d["pos"], d
-
-
-def test_b_regime_blocks_short_term(e2e):
-    r = e2e["reg_short"]
-    assert r["dec"] == "REGIMEN" and r["note"].startswith("Bloqueada por régimen de BTC: ") and r["shadow"] == "REGIMEN" and not r["pos"], r
-
-
-def test_b_regime_not_for_long_horizon(e2e):
-    r = e2e["reg_long_h"]
-    assert r["dec"] != "REGIMEN", r
-
-
-def test_c_rotation(e2e):
-    r = e2e["rot"]
-    assert r["short_on_long"][0] == "ROTACION" and not r["short_on_long"][2]
-    assert r["long_on_short"][0] == "ROTACION" and not r["long_on_short"][2]
-
-
-def test_c_size_factor(e2e):
-    sz = e2e.get("size")
-    if not sz:
-        pytest.skip("no pair with size_factor 0.75")
-    assert sz["q1"] and sz["q2"]
-    assert 0.7 <= sz["q2"] / sz["q1"] <= 0.8, sz
-    assert "tamaño reducido al 75% por menor liquidez relativa del par" in sz["log"]
 
 
 def test_d_maker_queue(e2e):

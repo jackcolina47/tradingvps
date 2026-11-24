@@ -2,6 +2,7 @@
 document in MongoDB Extended JSON (ObjectId/datetime survive). Created from the panel, the nightly cron or deploy/backup.sh; restored
 from the panel (upload) or deploy/restore.sh. No mongodump/mongorestore needed."""
 import io
+import asyncio
 import os
 import gzip
 import json
@@ -74,20 +75,28 @@ async def dump(db) -> bytes:
         header = {"format": FORMAT, "version": VERSION, "created_at": datetime.now(timezone.utc).isoformat(), "db": db.name, "collections": counts}
         gz.write((json.dumps(header, ensure_ascii=False) + "\n").encode())
         for n in names:
+            i = 0
             async for doc in db[n].find({}):
                 gz.write((json_util.dumps({"c": n, "d": doc}, json_options=JSON_OPTS, ensure_ascii=False) + "\n").encode())
+                i += 1
+                if i % 200 == 0:
+                    await asyncio.sleep(0)  # lets the bots' loops run while a large collection is being compressed
     return buf.getvalue()
+
+
+def _write(path, data: bytes) -> list:
+    DIR.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(data)
+    tmp.replace(path)
+    return prune()
 
 
 async def create(db, source: str = "manual") -> dict:
     data = await dump(db)
-    DIR.mkdir(parents=True, exist_ok=True)
     name = f"{db.name}-{datetime.now(timezone.utc).strftime('%Y-%m-%d_%H%M%S')}.json.gz"
     path = DIR / name
-    tmp = path.with_name(name + ".tmp")
-    tmp.write_bytes(data)
-    tmp.replace(path)
-    removed = prune()
+    removed = await asyncio.to_thread(_write, path, data)
     rec = {**_entry(path), "source": source}
     await db.meta.update_one({"_id": "backup"}, {"$set": {"last_at": rec["created_at"], "filename": name, "size_mb": rec["size_mb"], "source": source}}, upsert=True)
     return {**rec, "removed": removed}

@@ -13,6 +13,7 @@ from risk import FEE_RATE, MAKER_FEE, SLIPPAGE, position_size, pnl, check_exit, 
 import price_action
 import ai_funnel
 import housekeeping
+import maintenance
 import position_review
 import ai_rules
 import trade_learning
@@ -24,7 +25,6 @@ from shadow import open_shadow, monitor_shadows
 import evolution
 import funding
 import cashflow
-import regime
 import maker
 import broker_health
 from broker_health import fmt_duration
@@ -67,7 +67,8 @@ class TradingEngine:
         self.last_scan = None
         self.next_scan_ts = None
         self.analysis = {}
-        self.signal_keys = set()
+        self.signal_keys = maintenance.RecentKeys()
+        self._trade_totals = None
         self.scan_event = asyncio.Event()
         self.tasks = []
         self._last_snapshot = 0.0
@@ -170,6 +171,7 @@ class TradingEngine:
         async with self.lock:
             for col in ("positions", "trades", "signals", "equity", "shadow_positions", "shadow_trades", "cash_flows", "pending_entries"):
                 await self.db[col].delete_many({})
+            self._trade_totals = None
             await self._new_account(initial)
         await self.log("INFO", f"Estadísticas reiniciadas · capital inicial ${initial:,.2f} USDT · modo {self.mode_label}")
 
@@ -192,13 +194,7 @@ class TradingEngine:
         w = await self._exchange_wallet()
         if w:
             balance, equity, available, unreal = w["wallet_balance"], w["equity"], w["available"], w["unrealised"]
-        agg = await self.db.trades.aggregate([{"$group": {
-            "_id": None, "n": {"$sum": 1}, "realized": {"$sum": "$pnl"},
-            "wins": {"$sum": {"$cond": [{"$gt": ["$pnl", 0]}, 1, 0]}},
-            "gw": {"$sum": {"$cond": [{"$gt": ["$pnl", 0]}, "$pnl", 0]}},
-            "gl": {"$sum": {"$cond": [{"$lte": ["$pnl", 0]}, "$pnl", 0]}},
-        }}]).to_list(1)
-        st = agg[0] if agg else {"n": 0, "realized": 0, "wins": 0, "gw": 0, "gl": 0}
+        st = await maintenance.trade_totals(self)
         daily = equity - acc["day_start_equity"]
         return {
             "initial_balance": acc["initial_balance"], "balance": round(balance, 2),
@@ -316,6 +312,8 @@ class TradingEngine:
                 part = partial_qty(p.symbol, p.qty, EMA_PARTIAL_PCT)
                 be = self._ema_be(p)
                 net = 0.0
+                if part > 0 and not await maintenance.claim_partial(self.db, ObjectId(p.id)):
+                    return
                 if part > 0:
                     exit_price = price * (1 - SLIPPAGE) if p.side == "long" else price * (1 + SLIPPAGE)
                     fee = exit_price * part * FEE_RATE
@@ -340,6 +338,8 @@ class TradingEngine:
         updates.update(mark_price=price, unrealized_pnl=round(pnl(p.side, p.entry_price, price, p.qty), 4))
         if rules["partial_tp_enabled"] and not p.partial_done and p.mfe_r >= rules["partial_tp_r"]:
             part = partial_qty(p.symbol, p.qty, rules["partial_tp_pct"])
+            if part > 0 and not await maintenance.claim_partial(self.db, ObjectId(p.id)):
+                return
             if part > 0:
                 exit_price = price * (1 - SLIPPAGE) if p.side == "long" else price * (1 + SLIPPAGE)
                 fee = exit_price * part * FEE_RATE
@@ -498,6 +498,7 @@ class TradingEngine:
                       sl=p.sl, tp=p.tp, initial_sl=p.initial_sl, atr=p.atr, breakeven=p.breakeven, signal_id=p.signal_id, order_id=p.order_id,
                       exit_mode=p.exit_mode, tags=[EMA_TEST_TAG] if p.exit_mode == "cross" else [])
         res = await self.db.trades.insert_one(trade.to_mongo())
+        self._trade_totals = None
         trade.id = str(res.inserted_id)
         return trade
 

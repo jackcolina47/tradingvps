@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from models import now_iso
 from fx.models import FxSettings
 import cashflow
+import maintenance
 from fx import plan as fx_plan
 from plan import last30_stats
 from fx.engine_core import logger, INITIAL_BALANCE, today
@@ -68,6 +69,7 @@ class AccountMixin:
         async with self.lock:
             for col in ("positions", "trades", "signals", "equity", "news_trades", "shadow_positions", "shadow_trades", "cash_flows", "pending_orders"):
                 await self.db[col].delete_many({})
+            self._trade_totals = None
             await self._new_account(initial)
         await self.log("INFO", f"Estadísticas reiniciadas · capital inicial ${initial:,.2f} · modo {self.mode_label}")
 
@@ -92,13 +94,7 @@ class AccountMixin:
         info = await self._broker_info()
         if info:
             balance, equity, available, unreal, used = info["balance"], info["equity"], info["available"], info["unrealised"], info["margin"]
-        agg = await self.db.trades.aggregate([{"$group": {
-            "_id": None, "n": {"$sum": 1}, "realized": {"$sum": "$pnl"},
-            "wins": {"$sum": {"$cond": [{"$gt": ["$pnl", 0]}, 1, 0]}},
-            "gw": {"$sum": {"$cond": [{"$gt": ["$pnl", 0]}, "$pnl", 0]}},
-            "gl": {"$sum": {"$cond": [{"$lte": ["$pnl", 0]}, "$pnl", 0]}},
-        }}]).to_list(1)
-        st = agg[0] if agg else {"n": 0, "realized": 0, "wins": 0, "gw": 0, "gl": 0}
+        st = await maintenance.trade_totals(self)
         daily = equity - acc["day_start_equity"]
         return {
             "initial_balance": acc["initial_balance"], "balance": round(balance, 2), "equity": round(equity, 2),

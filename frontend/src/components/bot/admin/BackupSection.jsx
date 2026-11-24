@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DatabaseBackup, Download, FileUp, Loader2, Plus, RotateCcw, Send } from "lucide-react";
+import { DatabaseBackup, Download, Eraser, FileUp, Loader2, Plus, RotateCcw, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Panel } from "../Panel";
@@ -14,6 +14,39 @@ const SOURCE = { manual: "desde el panel", auto: "automática" };
 
 // Global (both bots): backups live under /api/backup regardless of which dashboard is open.
 const EMPTY = { backups: [], last: {}, keep_days: 14, bots_running: { crypto: false, fx: false }, telegram: false, confirm_word: "RESTAURAR" };
+
+function DataCleanup() {
+  const [info, setInfo] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(() => api.get(`/maintenance`, { timeout: 20000 }).then((r) => setInfo(r.data)).catch(() => setInfo(null)), []);
+  useEffect(() => { load(); }, [load]);
+  if (!info) return null;
+  const n = (v) => v.toLocaleString("es-ES");
+  const nothing = !info.old_logs && !info.old_equity;
+  const clean = async () => {
+    if (!window.confirm(`Se eliminarán ${n(info.old_logs)} líneas de registro de más de ${info.log_days} días y la curva de equidad de más de ${info.equity_days} días se reducirá a un punto por hora, en todos los bots. Operaciones, señales, sombras y reglas no se tocan. No se puede deshacer. ¿Continuar?`)) return;
+    setBusy(true);
+    try {
+      const { data } = await api.post(`/maintenance/cleanup`, { confirm: true }, { timeout: 300000 });
+      toast.success(`Limpieza hecha · ${n(data.logs)} líneas de registro y ${n(data.equity)} puntos de equidad eliminados`);
+      await load();
+    } catch (e) { toast.error(errMsg(e)); } finally { setBusy(false); }
+  };
+  return (
+    <div data-testid="data-cleanup" className="rounded-sm border border-[#1E293B] bg-[#07090E] px-3 py-2.5">
+      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">Datos antiguos · todos los bots</p>
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+        <p data-testid="data-cleanup-summary" className="min-w-0 flex-1 text-[11px] leading-relaxed text-slate-400">
+          Guardados ahora: {n(info.logs)} líneas de registro · {n(info.equity)} puntos de equidad · {n(info.signals)} señales · {n(info.shadow_trades)} sombras.{" "}
+          {nothing ? "No hay nada antiguo que limpiar." : <span className="text-amber-200">Se pueden limpiar {n(info.old_logs)} líneas de registro de más de {info.log_days} días y reducir {n(info.old_equity)} puntos de equidad de más de {info.equity_days} días a uno por hora.</span>}
+        </p>
+        <Button data-testid="data-cleanup-button" size="sm" variant="outline" onClick={clean} disabled={busy || nothing} className={BTN_OUT}>
+          {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Eraser className="mr-1.5 h-3.5 w-3.5" />} Limpiar datos antiguos
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export default function BackupSection() {
   const [data, setData] = useState(null);
@@ -141,6 +174,7 @@ export default function BackupSection() {
           </table>
         </div>
       )}
+      <DataCleanup />
       <RestoreBackupDialog target={target} word={info.confirm_word} busy={busy === "restore"} progress={progress} botsRunning={running} onConfirm={restore} onClose={() => setTarget(null)} />
     </Panel>
   );

@@ -10,9 +10,10 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 import backup
+import maintenance
 import notify
 import migrations
-from deps import engine, db, store, fx_engine, pep_engine, news, FX_BOTS, ALL_ENGINES, ai_usage, protected_router
+from deps import engine, db, store, fx_engine, pep_engine, news, FX_BOTS, ALL_ENGINES, LABS, ai_usage, protected_router
 from routers import cron_routes
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,28 @@ class RestoreRequest(BaseModel):
 
 async def init():
     await db[backup.UPLOADS].create_index("at", expireAfterSeconds=UPLOAD_TTL_SEC)
+    await maintenance.ensure_all(EVERY_ENGINE)
+
+
+EVERY_ENGINE = (*ALL_ENGINES, *LABS)
+
+
+class CleanupRequest(BaseModel):
+    confirm: bool = False
+
+
+@router.get("/maintenance")
+async def maintenance_preview():
+    return await maintenance.preview(EVERY_ENGINE)
+
+
+@router.post("/maintenance/cleanup")
+async def maintenance_cleanup(req: CleanupRequest):
+    if not req.confirm:
+        raise HTTPException(400, "Confirma la limpieza")
+    out = await maintenance.prune(EVERY_ENGINE)
+    await engine.log("INFO", f"Limpieza de datos antiguos: {out['logs']} líneas de registro de más de {maintenance.LOG_DAYS} días y {out['equity']} puntos de equidad eliminados (todos los bots)")
+    return out
 
 
 async def _log_both(level: str, text: str):
@@ -46,7 +69,8 @@ async def reload_state():
     await init()
     for eng in ALL_ENGINES:
         eng.running = False
-        eng.signal_keys = set()
+        eng.signal_keys.clear()
+        eng._trade_totals = None
         async for s in eng.db.signals.find({}, {"key": 1}).sort("_id", -1).limit(500):
             if s.get("key"):
                 eng.signal_keys.add(s["key"])

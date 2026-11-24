@@ -369,11 +369,6 @@ def _layers_line(ctx) -> str:
     parts = []
     if ctx.get("horizon") == "long":
         parts.append("Operación de LARGO PLAZO (estrategia diaria/4h: SL y TP amplios, puede durar días o semanas)")
-    rg = ctx.get("btc_regime")
-    if rg and rg.get("state") in ("ALCISTA", "BAJISTA"):
-        parts.append(f"Régimen BTC diario: {rg['state']} (SMA{rg['sma']} {rg['distance_pct']:+.1f}%)")
-    if ctx.get("rotation_bias"):
-        parts.append(f"Sesgo de rotación semanal del par: {ctx['rotation_bias']}")
     return (" | ".join(parts) + "\n") if parts else ""
 
 
@@ -527,10 +522,7 @@ STRATEGY_KEYS_TXT = "trend_ema, mean_reversion, breakout_turtle, supertrend_mome
 CRYPTO_MARKET = {
     "desc": "un bot cuantitativo de futuros perpetuos USDT en modo paper trading", "lev": lambda v: f"{v}x",
     "strategy_keys": STRATEGY_KEYS_TXT + ", multi_horizon (Tendencia Multi-Horizonte, diaria, largo plazo), double_divergence (Divergencia doble RSI+MACD, 4h, largo plazo)",
-    "extra_rule": ("(7) Capas nuevas con evidencia académica a favor; mantenlas salvo prueba real en contra: btc_regime_filter (solo largos con BTC sobre su SMA diaria y "
-                   "solo cortos debajo; btc_regime_sma 50 o 200) → desactívalo o cambia la SMA solo si rendimiento_real.shadow.by_kind REGIMEN tiene ≥ 30 sombras con pnl claramente "
-                   "positivo (el filtro deja escapar ganancias); rotation_enabled (rotación semanal por momentum ponderado por volumen) → desactívala solo con ≥ 30 sombras ROTACION "
-                   "con pnl positivo; entry_order_type ('maker' = orden límite post-only al 0,02 %, 'market' = 0,055 %) → vuelve a 'market' solo si entradas_maker.fill_rate < 40 % y "
+    "extra_rule": ("(7) Capas de ejecución; mantenlas salvo prueba real en contra: entry_order_type ('maker' = orden límite post-only al 0,02 %, 'market' = 0,055 %) → vuelve a 'market' solo si entradas_maker.fill_rate < 40 % y "
                    "by_entry_type muestra que las entradas a mercado tras esperar (market_fallback) pierden claramente frente a las maker; max_long_positions (tope propio de las "
                    "operaciones de largo plazo, 1-6) → ajústalo solo con ≥ 10 operaciones de largo plazo cerradas (largo_plazo.by_horizon). Las estrategias de largo plazo se apagan "
                    "con disabled_strategies como las demás y requieren la misma evidencia real (≥ min_item_trades operaciones). "
@@ -540,7 +532,7 @@ CRYPTO_MARKET = {
                    "(muchas salidas por trailing/SL que alcanzaron ≥ 70 % del TP) acerca el cierre parcial (baja partial_tp_r) o aprieta el trailing (baja trail_atr_mult) o reduce el TP "
                    "vía symbol_params; si las salidas por TRAILING tienen avg_mfe_r alto pero pnl bajo el trailing va demasiado lejos; si avg_mae_r de las ganadoras es alto, el breakeven "
                    "llega demasiado pronto (sube be_start_r). Un cambio de ±0,25 R / ±0,25 ATR / ±10 % por revisión como máximo. "),
-    "extra_keys": (", btc_regime_filter (bool), btc_regime_sma (50|200), rotation_enabled (bool), entry_order_type ('market'|'maker'), max_long_positions (1-6), "
+    "extra_keys": (", entry_order_type ('market'|'maker'), max_long_positions (1-6), "
                    "be_start_r, trail_start_r, trail_atr_mult, partial_tp_enabled (bool), partial_tp_r, partial_tp_pct"),
 }
 FX_MARKET = {

@@ -96,7 +96,7 @@ async def _options(bot: str) -> dict:
                 "profiles": [{"level": p["level"], "name": p["name"], "settings": p["settings"]} for p in FX_PROFILES],
                 "config_keys": sorted(proposals.FX_CONFIG_KEYS | proposals.GLOBAL_CONFIG_KEYS), "actions": proposals.ACTIONS}
     return {"settings_keys": ranges, "symbols": AVAILABLE_SYMBOLS, "timeframes": TIMEFRAMES, "strategies": CRYPTO_STRATEGY_KEYS, "signal_modes": SIGNAL_MODES,
-            "entry_order_type": ENTRY_ORDER_TYPES, "btc_regime_sma": REGIME_SMAS,
+            "entry_order_type": ENTRY_ORDER_TYPES,
             "profiles": [{"level": p["level"], "name": p["name"], "settings": p["settings"]} for p in PROFILES],
             "config_keys": sorted(proposals.GLOBAL_CONFIG_KEYS), "actions": proposals.ACTIONS}
 

@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from bson import ObjectId
 from models import Position, LogEntry
 import notify
+import maintenance
 from fx.models import FxSettings
 from fx.market import FxMarket, market_open, closing_soon, friday_stage
 from fx import risk
@@ -52,7 +53,8 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
         self.last_scan = None
         self.next_scan_ts = None
         self.analysis = {}
-        self.signal_keys = set()
+        self.signal_keys = maintenance.RecentKeys()
+        self._trade_totals = None
         self.scan_event = asyncio.Event()
         self.tasks = []
         self._last_snapshot = 0.0

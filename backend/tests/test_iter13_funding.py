@@ -202,7 +202,7 @@ async def _engine_e2e(db):
     s = await eng.get_settings()
     s.ai_enabled = False
     s.max_positions = 10
-    s.btc_regime_filter, s.rotation_enabled, s.entry_order_type = False, False, "market"  # iter45 gates are covered by their own tests
+    s.entry_order_type = "market"  # iter45 gates are covered by their own tests
     open_syms = {p["symbol"] for p in await db.positions.find({}, {"symbol": 1}).to_list(100)}
     free = [x for x in s.symbols if x not in open_syms and x in eng.market.tickers]
     assert len(free) >= 2, f"need 2 free symbols, got {free}"

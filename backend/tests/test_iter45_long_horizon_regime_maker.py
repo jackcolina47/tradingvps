@@ -14,7 +14,6 @@ sys.path.insert(0, "/app/backend")
 load_dotenv("/app/backend/.env")
 load_dotenv("/app/frontend/.env")
 
-import regime  # noqa: E402
 import maker  # noqa: E402
 from indicators import build_df  # noqa: E402
 from strategies_slow import multi_horizon, double_divergence, scan_slow, SLOW_KEYS, SLOW_INFO, ensemble_votes  # noqa: E402
@@ -70,8 +69,8 @@ class TestRegistry:
 
     def test_settings_defaults_active(self):
         s = Settings()
-        assert s.btc_regime_filter and s.rotation_enabled and s.entry_order_type == "maker"
-        assert s.max_long_positions >= 1 and s.maker_wait_bars >= 1 and s.btc_regime_sma == 200
+        assert s.entry_order_type == "maker"
+        assert s.max_long_positions >= 1 and s.maker_wait_bars >= 1
         assert not set(SLOW_KEYS) & set(s.disabled_strategies)
 
     def test_settings_update_validates(self):
@@ -157,65 +156,6 @@ class TestDoubleDivergence:
         assert sig_t is not None and sig_t["side"] == sigs[i]["side"]
 
 
-# ---------- BTC regime ----------
-class TestRegime:
-    def test_regime_from_rows(self):
-        rows = klines([100.0] * 60 + [110.0] * 3)
-        r = regime.regime_from_rows(rows, 50)
-        assert r["state"] == "ALCISTA" and r["sma"] == 50 and r["distance_pct"] > 0
-        rows = klines([100.0] * 60 + [90.0] * 3)
-        assert regime.regime_from_rows(rows, 50)["state"] == "BAJISTA"
-
-    def test_regime_uses_closed_candles_only(self):
-        rows = klines([100.0] * 60 + [100.0, 100.0, 1000.0])
-        r = regime.regime_from_rows(rows, 50)
-        assert r["sma_value"] == 100.0
-
-    def test_insufficient_data(self):
-        r = regime.regime_from_rows(klines([100.0] * 20), 200)
-        assert r["state"] == "N/D" and regime.regime_block(r, "long") is None and regime.regime_block(r, "short") is None
-
-    def test_block_rules(self):
-        bull = {"state": "ALCISTA", "sma": 200, "distance_pct": 5.0}
-        bear = {"state": "BAJISTA", "sma": 200, "distance_pct": -5.0}
-        assert regime.regime_block(bull, "long") is None and "solo largos" in regime.regime_block(bull, "short")
-        assert regime.regime_block(bear, "short") is None and "solo cortos" in regime.regime_block(bear, "long")
-        assert regime.regime_block(None, "long") is None
-
-
-# ---------- rotation ----------
-class TestRotation:
-    def _rows(self):
-        syms = {"AAAUSDT": (0.03, 50.0), "BBBUSDT": (0.01, 500.0), "CCCUSDT": (0.0, 5000.0), "DDDUSDT": (-0.01, 20.0), "EEEUSDT": (-0.02, 700.0), "FFFUSDT": (-0.04, 9000.0)}
-        out = {}
-        for s, (d, v) in syms.items():
-            closes = [100 * (1 + d) ** k for k in range(12)]
-            out[s] = klines(closes, vol=v)
-        return out
-
-    def test_rank_bias_and_size(self):
-        rk = regime.rank(self._rows(), 7)
-        assert [r["symbol"] for r in rk] == ["AAAUSDT", "BBBUSDT", "CCCUSDT", "DDDUSDT", "EEEUSDT", "FFFUSDT"]
-        assert [r["bias"] for r in rk] == ["long", "long", "both", "both", "short", "short"]
-        assert [r["rank"] for r in rk] == [1, 2, 3, 4, 5, 6]
-        by = {r["symbol"]: r for r in rk}
-        assert by["FFFUSDT"]["size_factor"] == 1.0 and by["AAAUSDT"]["size_factor"] == 0.75 and by["DDDUSDT"]["size_factor"] == 0.75
-
-    def test_gate(self):
-        rot = {"ranking": regime.rank(self._rows(), 7)}
-        assert regime.rotation_gate(rot, "AAAUSDT", "long") == (None, 0.75)
-        blk, f = regime.rotation_gate(rot, "AAAUSDT", "short")
-        assert blk and "solo largos" in blk
-        blk, _ = regime.rotation_gate(rot, "FFFUSDT", "long")
-        assert blk and "solo cortos" in blk
-        assert regime.rotation_gate(rot, "CCCUSDT", "short") == (None, 1.0)
-        assert regime.rotation_gate(rot, "ZZZUSDT", "long") == (None, 1.0)
-
-    def test_rank_skips_short_history(self):
-        rows = {"AAAUSDT": klines([100.0] * 4)}
-        assert regime.rank(rows, 7) == []
-
-
 # ---------- maker ----------
 class TestMaker:
     def test_limit_price_and_fill(self):
@@ -251,28 +191,16 @@ class TestApi:
         assert m["long_horizon_keys"] == ["multi_horizon", "double_divergence"]
         assert set(SLOW_KEYS) <= set(m["strategy_keys"]) and "multi_horizon" in m["strategy_info"]
 
-    def test_market_context(self, client):
-        r = client.get(f"{BASE_URL}/api/market/context")
-        assert r.status_code == 200
-        d = r.json()
-        assert d["regime"]["state"] in ("ALCISTA", "BAJISTA", "N/D") and d["regime"]["sma"] == 200
-        assert d["rotation"]["ranking"] and {"symbol", "ret_pct", "volume_usd", "rank", "bias", "size_factor"} <= set(d["rotation"]["ranking"][0])
-        assert isinstance(d["pending_entries"], list) and d["entry_order_type"] in ("maker", "market")
-
-    def test_rotation_refresh(self, client):
-        r = client.post(f"{BASE_URL}/api/rotation/refresh")
-        assert r.status_code == 200 and r.json()["ranking"]
-
     def test_settings_roundtrip(self, client):
         cur = client.get(f"{BASE_URL}/api/settings").json()
         try:
-            r = client.put(f"{BASE_URL}/api/settings", json={"entry_order_type": "market", "max_long_positions": 3, "btc_regime_filter": False})
+            r = client.put(f"{BASE_URL}/api/settings", json={"entry_order_type": "market", "max_long_positions": 3})
             assert r.status_code == 200
             s = r.json()
-            assert s["entry_order_type"] == "market" and s["max_long_positions"] == 3 and s["btc_regime_filter"] is False
+            assert s["entry_order_type"] == "market" and s["max_long_positions"] == 3
             assert client.put(f"{BASE_URL}/api/settings", json={"entry_order_type": "bogus"}).status_code == 422
         finally:
-            client.put(f"{BASE_URL}/api/settings", json={k: cur[k] for k in ("entry_order_type", "max_long_positions", "btc_regime_filter")})
+            client.put(f"{BASE_URL}/api/settings", json={k: cur[k] for k in ("entry_order_type", "max_long_positions")})
 
     def test_performance_keys(self, client):
         d = client.get(f"{BASE_URL}/api/performance").json()

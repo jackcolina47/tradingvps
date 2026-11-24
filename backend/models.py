@@ -97,10 +97,6 @@ class Settings(BaseModel):
     plan_target_monthly: float = 1000.0
     plan_monthly_deposit: float = 0.0
     plan_phase: int = 0
-    btc_regime_filter: bool = True
-    btc_regime_sma: int = 200
-    rotation_enabled: bool = True
-    rotation_lookback_days: int = 7
     entry_order_type: str = "maker"
     maker_wait_bars: int = 2
     max_long_positions: int = 2
@@ -133,13 +129,6 @@ class Settings(BaseModel):
             raise ValueError("porcentaje de cierre parcial fuera de rango (25–75)")
         return v
 
-    @field_validator("btc_regime_sma")
-    @classmethod
-    def _regime_sma(cls, v):
-        if v not in REGIME_SMAS:
-            raise ValueError("SMA de régimen inválida (50 o 200)")
-        return v
-
     @field_validator("entry_order_type")
     @classmethod
     def _entry_type(cls, v):
@@ -156,11 +145,6 @@ class Settings(BaseModel):
     @classmethod
     def _max_long(cls, v):
         return min(6, max(1, int(v)))
-
-    @field_validator("rotation_lookback_days")
-    @classmethod
-    def _lookback(cls, v):
-        return min(30, max(3, int(v)))
 
     @field_validator("signal_mode")
     @classmethod
@@ -269,10 +253,6 @@ class SettingsUpdate(BaseModel):
     plan_target_monthly: Optional[float] = Field(default=None, ge=50, le=10_000_000)
     plan_monthly_deposit: Optional[float] = Field(default=None, ge=0, le=1_000_000)
     plan_phase: Optional[int] = Field(default=None, ge=0, le=4)
-    btc_regime_filter: Optional[bool] = None
-    btc_regime_sma: Optional[int] = None
-    rotation_enabled: Optional[bool] = None
-    rotation_lookback_days: Optional[int] = Field(default=None, ge=3, le=30)
     entry_order_type: Optional[str] = None
     maker_wait_bars: Optional[int] = Field(default=None, ge=1, le=3)
     max_long_positions: Optional[int] = Field(default=None, ge=1, le=6)

@@ -71,19 +71,10 @@ async def build_weekly(engine, db) -> dict:
 
 
 async def _market_block(engine, db, settings):
-    """Crypto only: BTC regime, weekly rotation leaders and pending maker entries (FX settings lack these fields)."""
-    if not hasattr(settings, "btc_regime_filter"):
+    """Crypto only: entry order type and pending maker entries (FX settings lack these fields)."""
+    if not hasattr(settings, "entry_order_type"):
         return None
-    import regime
-    try:
-        rg = await regime.btc_regime(engine.market, settings.btc_regime_sma)
-        rot = await regime.current_rotation(engine, settings)
-    except Exception:
-        return None
-    return {"regime": {**rg, "enabled": settings.btc_regime_filter},
-            "rotation": {"enabled": settings.rotation_enabled, "lookback_days": rot["lookback_days"], "computed_at": rot["computed_at"],
-                         "leaders": [r["symbol"] for r in rot["ranking"] if r["bias"] == "long"], "laggards": [r["symbol"] for r in rot["ranking"] if r["bias"] == "short"]},
-            "entry_order_type": settings.entry_order_type, "pending_entries": await db.pending_entries.count_documents({}), "max_long_positions": settings.max_long_positions}
+    return {"entry_order_type": settings.entry_order_type, "pending_entries": await db.pending_entries.count_documents({}), "max_long_positions": settings.max_long_positions}
 
 
 def _sym(k: str) -> str:
@@ -158,11 +149,7 @@ def format_weekly(w: dict, currency: str = "USDT", extra: str = None) -> str:
                      + (f" · salidas por trailing: {tr['trades']} con MFE {tr['avg_mfe_r']:.2f} R" if tr else "")
                      + (f" · cierres parciales: {exc['partial']['trades']} ({exc['partial']['pnl']:+.2f} {currency})" if exc["partial"]["trades"] else ""))
     if mkt:
-        rg, rot = mkt["regime"], mkt["rotation"]
-        dist = f" ({rg['distance_pct']:+.1f} %)" if rg.get("distance_pct") is not None else ""
-        lines.append(f"\n<b>Mercado</b>: BTC {rg['state']} vs SMA{rg['sma']} diaria{dist}{'' if rg['enabled'] else ' · filtro apagado'}"
-                     f" · rotación {rot['lookback_days']} d{'' if rot['enabled'] else ' (apagada)'}: líderes {', '.join(_sym(x) for x in rot['leaders']) or '—'} · rezagados {', '.join(_sym(x) for x in rot['laggards']) or '—'}"
-                     f" · entradas {'límite maker' if mkt['entry_order_type'] == 'maker' else 'a mercado'}" + (f" · {mkt['pending_entries']} en espera" if mkt["pending_entries"] else ""))
+        lines.append(f"\n<b>Entradas</b>: {'límite maker' if mkt['entry_order_type'] == 'maker' else 'a mercado'}" + (f" · {mkt['pending_entries']} en espera" if mkt["pending_entries"] else ""))
     mk = {r["key"]: r for r in w.get("by_entry_type") or []}
     if mk.get("maker") or mk.get("market_fallback"):
         m, f = mk.get("maker", {"trades": 0}), mk.get("market_fallback", {"trades": 0})

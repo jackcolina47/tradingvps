@@ -9,8 +9,7 @@ load_dotenv("/app/frontend/.env")
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL").rstrip("/")
 PASSWORD = "BlackCat2233@"
 KEYS = ["multi_horizon", "double_divergence"]
-SETTING_KEYS = ["entry_order_type", "btc_regime_filter", "btc_regime_sma", "rotation_enabled", "max_long_positions",
-                "maker_wait_bars", "rotation_lookback_days", "disabled_strategies"]
+SETTING_KEYS = ["entry_order_type", "max_long_positions", "maker_wait_bars", "disabled_strategies"]
 
 
 @pytest.fixture(scope="module")
@@ -46,35 +45,11 @@ def test_meta(s):
         assert info["name"] and info.get("rules") and info["horizon"] == "long"
 
 
-# --- market context
-def test_market_context(s):
-    r = s.get(f"{BASE_URL}/api/market/context", timeout=90)
-    assert r.status_code == 200, r.text
-    d = r.json()
-    rg = d["regime"]
-    assert rg["state"] in ("ALCISTA", "BAJISTA", "N/D")
-    for k in ("sma", "price", "sma_value", "distance_pct", "enabled"):
-        assert k in rg
-    rot = d["rotation"]
-    for k in ("ranking", "lookback_days", "computed_at", "next_at", "enabled"):
-        assert k in rot
-    assert len(rot["ranking"]) >= 1
-    for row in rot["ranking"]:
-        assert row["bias"] in ("long", "short", "both") and row["size_factor"] in (1, 1.0, 0.75)
-        assert {"symbol", "ret_pct", "volume_usd", "rank"} <= set(row)
-    assert isinstance(d["pending_entries"], list)
-    assert d["entry_order_type"] in ("maker", "market")
-    assert "maker_wait_bars" in d and "max_long_positions" in d
-    assert "_id" not in rot
-
-
-def test_rotation_refresh(s):
-    r = s.post(f"{BASE_URL}/api/rotation/refresh", timeout=90)
-    assert r.status_code == 200, r.text
-    d = r.json()
-    assert d["ranking"] and "_id" not in d
-    ranks = [x["ret_pct"] for x in d["ranking"]]
-    assert ranks == sorted(ranks, reverse=True)
+def test_regime_and_rotation_removed(s):
+    assert s.get(f"{BASE_URL}/api/market/context", timeout=30).status_code == 404
+    assert s.post(f"{BASE_URL}/api/rotation/refresh", timeout=30).status_code in (404, 405)
+    g = s.get(f"{BASE_URL}/api/settings", timeout=30).json()
+    assert not {"btc_regime_filter", "btc_regime_sma", "rotation_enabled", "rotation_lookback_days"} & set(g)
 
 
 def test_cancel_pending_empty(s):
@@ -83,25 +58,20 @@ def test_cancel_pending_empty(s):
 
 
 # --- settings validation
-@pytest.mark.parametrize("payload", [{"entry_order_type": "limit"}, {"btc_regime_sma": 100}, {"max_long_positions": 0},
-                                     {"max_long_positions": 7}, {"maker_wait_bars": 4}, {"maker_wait_bars": 0},
-                                     {"rotation_lookback_days": 2}, {"rotation_lookback_days": 31}])
+@pytest.mark.parametrize("payload", [{"entry_order_type": "limit"}, {"max_long_positions": 0},
+                                     {"max_long_positions": 7}, {"maker_wait_bars": 4}, {"maker_wait_bars": 0}])
 def test_settings_invalid(s, original, payload):
     r = s.put(f"{BASE_URL}/api/settings", json=payload, timeout=30)
     assert r.status_code == 422, (payload, r.status_code, r.text)
 
 
 def test_settings_valid_roundtrip(s, original):
-    p = {"entry_order_type": "market", "btc_regime_filter": False, "btc_regime_sma": 50, "rotation_enabled": False,
-         "max_long_positions": 3, "maker_wait_bars": 3, "rotation_lookback_days": 14}
+    p = {"entry_order_type": "market", "max_long_positions": 3, "maker_wait_bars": 3}
     r = s.put(f"{BASE_URL}/api/settings", json=p, timeout=60)
     assert r.status_code == 200, r.text
     g = s.get(f"{BASE_URL}/api/settings", timeout=30).json()
     for k, v in p.items():
         assert g[k] == v, k
-    ctx = s.get(f"{BASE_URL}/api/market/context", timeout=90).json()
-    assert ctx["regime"]["sma"] == 50 and ctx["regime"]["enabled"] is False
-    assert ctx["rotation"]["lookback_days"] == 14 and ctx["entry_order_type"] == "market"
 
 
 def test_disable_strategies(s, original):
@@ -146,10 +116,9 @@ def test_performance(s):
 def test_weekly(s):
     d = s.get(f"{BASE_URL}/api/weekly-summary", timeout=90).json()
     m = d["market"]
-    assert {"regime", "rotation", "entry_order_type", "pending_entries"} <= set(m)
-    assert "leaders" in m["rotation"] and "laggards" in m["rotation"]
+    assert {"entry_order_type", "pending_entries", "max_long_positions"} == set(m)
     text = d.get("text") or d.get("message") or ""
-    assert "<b>Mercado</b>: BTC" in text, text[:500]
+    assert "<b>Entradas</b>:" in text and "rotación" not in text, text[:500]
 
 
 def test_fx_weekly(s):

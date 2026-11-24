@@ -10,6 +10,8 @@ services:
     image: ${MONGO_IMAGE:-mongo:7}
     restart: unless-stopped
     <<: *logging
+    command: ["--wiredTigerCacheSizeGB", "${MONGO_CACHE_GB:-0.25}"]
+    mem_limit: ${MONGO_MEM:-450m}
     volumes:
       - mongo_data:/data/db
 
@@ -19,6 +21,7 @@ services:
       dockerfile: deploy/backend.Dockerfile
     restart: unless-stopped
     <<: *logging
+    mem_limit: ${BACKEND_MEM:-600m}
     env_file: backend.env
     environment:
       - BACKUP_DIR=/data/backups
@@ -37,6 +40,7 @@ services:
       dockerfile: deploy/frontend.Dockerfile
     restart: unless-stopped
     <<: *logging
+    mem_limit: ${WEB_MEM:-128m}
     environment:
       - SITE_ADDRESS=${SITE_ADDRESS:-:80}
     ports:
