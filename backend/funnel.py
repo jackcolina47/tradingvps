@@ -32,7 +32,8 @@ RANGE_ZONE_ATR, RANGE_TOUCHES, RANGE_RSI, RANGE_ROOM_ATR = 0.35, 2, (38, 62), 1.
 TURN_VOLUME, TURN_BARS, TURN_ADX = 2.0, 6, 20   # structural turn: break of the last swing + ADX >= 20 + an impulse candle this strong within the last 6 closed candles
 TURN_SIDE = {"GIRO_ALCISTA_CONFIRMADO": "long", "GIRO_BAJISTA_CONFIRMADO": "short"}
 TREND_RR, RANGE_RR = 2.0, 1.0   # exact reward:risk of every trade: trend / breakout / counter-trend vs range (edge tag or RANGO / CHOPPY regime)
-RR_FREE_PCT, RANGE_ROOM_GAP_ATR = 0.85, 0.2   # trend: no opposing zone before 85 % of the way to the target · range: target 0.2 ATR short of the opposite edge
+RR_FREE_4H, RR_FREE_ENTRY, RANGE_ROOM_GAP_ATR = 0.75, 0.50, 0.2   # trend: no 4H zone before 75 % of the way to the target, no entry-timeframe micro-zone before 50 % · range: target 0.2 ATR short of the opposite edge
+PULLBACK_ZONE_ATR = 0.5   # orderly pullback: the price must be testing the EMA20 or EMA50 of the entry timeframe within this distance
 RANGE_SIDE = {"EXTREMO_OFERTA": "short", "EXTREMO_DEMANDA": "long"}
 
 
@@ -45,7 +46,7 @@ def next_trigger(now: float = None) -> float:
 MAX_CANDIDATES = 3
 CONFIDENCE_LEVELS = (10, 20, 30, 40, 50, 60, 70, 80, 90)
 FAST_TIMEOUT_SEC, DEEP_TIMEOUT_SEC = 25, 75
-SL_ATR_BAND = (0.5, 4.0)   # an AI stop must sit between 0.5 and 4 ATR from the entry
+SL_ATR_BAND = (1.1, 4.0)   # an AI stop must sit between 1.1 and 4 ATR from the entry (before the safety buffer)
 MIN_RR = 1.0
 DEEP_COOLDOWN_SEC = 300    # guard against manual re-scans: a candidate goes back to the strong model on every 15-min trigger, never sooner than 5 min
 REPEAT_MOVE_ATR = 0.15     # stage 1 is not repeated while no eligible pair moved this much (in ATR) since the last call on the same candle
@@ -174,6 +175,22 @@ FAST_CROSS_SIDE = {"long": "ALCISTA", "short": "BAJISTA"}   # EMA9/21 cross each
 OVEREXT_KEEP = {"suelo": ("ALCISTA", "long"), "techo": ("BAJISTA", "short")}   # 4H trend that keeps the pair alive for a rebound, and the only side allowed
 
 
+def pullback_block(m: dict, side: str) -> str | None:
+    """Why a candidate against the EMA9/21 cross is NOT an orderly pullback in favour of 4H + 1H (None = it may reach the strong model)."""
+    d, want, mtf = (1 if side == "long" else -1), FAST_CROSS_SIDE[side], m.get("mtf") or {}
+    if any((mtf.get(tf) or {}).get("trend") != want for tf in ("4h", "1h")):
+        return "4H y 1H no apoyan el lado"
+    if m.get("turn") and TURN_SIDE[m["turn"]] != side:
+        return f"giro de estructura en contra ({m['turn']})"
+    if (m["close"] - m["ema50"]) * d <= 0:
+        return f"el cierre ya no respeta la EMA50 ({m['close']:.6g} vs {m['ema50']:.6g})"
+    if min(abs(m["price"] - m["ema20"]), abs(m["price"] - m["ema50"])) > PULLBACK_ZONE_ATR * m["atr"]:
+        return f"el precio no está testeando la EMA20/EMA50 (a más de {PULLBACK_ZONE_ATR} ATR)"
+    if (m["price"] - (m["swing_low"] if side == "long" else m["swing_high"])) * d < 0:
+        return f"el precio rompió el último swing {'low' if side == 'long' else 'high'} de {SWING_BARS} velas"
+    return None
+
+
 def overext_discard(m: dict, trend_4h: str = None) -> str | None:
     """Stage-0 reason: a stretched pair is dropped without AI unless the 4H trend backs the rebound."""
     ext = overextended(m)
@@ -197,7 +214,7 @@ def levels(side: str, price: float, atr: float, settings, ai_sl=None, ai_tp=None
 
 
 def stop_level(side: str, price: float, atr: float, settings, ai_sl=None, digits: int = None, buffer_atr: float = 0.0) -> tuple:
-    """(sl, source). Fixed toggle ON → sl_mult×ATR. OFF → the AI's stop when sane (0.5–4 ATR) pushed `buffer_atr` further away, otherwise the ATR stop."""
+    """(sl, source). Fixed toggle ON → sl_mult×ATR. OFF → the AI's stop when sane (1.1–4 ATR) pushed `buffer_atr` further away, otherwise the ATR stop."""
     d = 1 if side == "long" else -1
     sl, source = price - d * settings.atr_sl_mult * atr, "atr"
     if not settings.atr_levels_enabled and ai_sl and SL_ATR_BAND[0] * atr <= (price - ai_sl) * d <= SL_ATR_BAND[1] * atr:
@@ -222,10 +239,10 @@ def rr_block(m: dict, side: str, price: float, dist: float, rr: float, ranging: 
             return (f"falta de recorrido para 1:1 en rango: la {name} opuesta está a {free / atr:.2f} ATR y el objetivo necesita {reward / atr:.2f} ATR "
                     f"más {RANGE_ROOM_GAP_ATR} ATR de margen")
         return None
-    for tf, src in ((m.get("tf") or "entrada", m), ("4h", (m.get("mtf") or {}).get("4h"))):
+    for tf, src, pct in ((m.get("tf") or "entrada", m, RR_FREE_ENTRY), ("4h", (m.get("mtf") or {}).get("4h"), RR_FREE_4H)):
         free = zone(src)
-        if free is not None and free < RR_FREE_PCT * reward:
-            return (f"falta de recorrido para 2:1: {name} de {tf} a {free / atr:.2f} ATR, antes del {RR_FREE_PCT:.0%} del recorrido al objetivo "
+        if free is not None and free < pct * reward:
+            return (f"falta de recorrido para 2:1: {name} de {tf} a {free / atr:.2f} ATR, antes del {pct:.0%} del recorrido al objetivo "
                     f"({reward / atr:.2f} ATR)")
     return None
 
@@ -330,6 +347,9 @@ DEEP_SYSTEM = (
     "Cuando evalúes un candidato con GIRO_ALCISTA_CONFIRMADO contra una tendencia 4H bajista: NO compres en la cresta de una vela expansiva (> 2.5 ATR); exige al menos "
     "1 vela de retroceso o pausa/consolidación que respete la EMA 9 o el soporte roto, y comprueba que el objetivo 2:1 queda antes de la siguiente zona de oferta de 1H/4H. "
     "Aplica lo simétrico a GIRO_BAJISTA_CONFIRMADO contra una tendencia 4H alcista (no vendas en el suelo de una vela expansiva; objetivo 2:1 antes de la siguiente demanda). "
+    "VELA DE FRENO OBLIGATORIA: exige desaceleración o rechazo en la ÚLTIMA vela cerrada de {tf}. PROHIBIDO aprobar una compra (BUY) si esa vela es bajista activa "
+    "(cuerpo amplio, cierre cerca del mínimo) sin mecha inferior de absorción; PROHIBIDO aprobar una venta (SELL) si esa vela es alcista activa (cuerpo amplio, cierre "
+    "cerca del máximo) sin mecha superior de rechazo. Sin vela de freno o rechazo confirmada, responde PASS. "
     "Si el par está en régimen RANGO / CHOPPY o marcado como EXTREMO_OFERTA / EXTREMO_DEMANDA (con ADX < 20), busca rechazos en los bordes del rango "
     "(velas con mecha de rechazo o giro de RSI) con un stop ajustado detrás del borde: el objetivo será 1:1 y debe quedar al menos 0.2 ATR antes de la zona opuesta del rango. No exijas rupturas ni alineación de EMAs de tendencia. "
     "`confidence` es tu estimación honesta (0-100) de la probabilidad de que la operación alcance el objetivo antes que el stop; no la infles. "
@@ -351,7 +371,7 @@ def _candles_txt(df: pd.DataFrame, i: int, n: int, has_volume: bool) -> str:
 async def stage2(kind: str, symbol: str, tf: str, cand: dict, m: dict, df, i: int, has_volume: bool, htf: dict, rules: list, ctx: dict, settings, usage_kind: str) -> dict:
     fixed = settings.atr_levels_enabled
     lv = ((f"El stop es FIJO: SL a {settings.atr_sl_mult:g}×ATR de la entrada; deja sl en null." if fixed else
-           "Propón `sl` como precio: el stop técnico detrás de la estructura (entre 0,5 y 4 ATR de la entrada); el sistema le suma un margen de seguridad.")
+           f"Propón `sl` como precio: el stop técnico detrás de la estructura (entre {SL_ATR_BAND[0]:g} y {SL_ATR_BAND[1]:g} ATR de la entrada); el sistema le suma un margen de seguridad.")
           + f" El Take Profit NO lo fijas tú: el sistema lo calcula exactamente a {TREND_RR:g}× la distancia del stop final en tendencia, ruptura o contratendencia, y a "
             f"{RANGE_RR:g}× en operaciones de rango (EXTREMO_OFERTA / EXTREMO_DEMANDA o régimen RANGO / CHOPPY); deja tp en null. Juzga la operación con ese objetivo: "
             "da BUY o SELL solo si ves recorrido libre hasta él; esta regla prevalece sobre cualquier otra indicación de objetivos de este mensaje.")
@@ -359,7 +379,7 @@ async def stage2(kind: str, symbol: str, tf: str, cand: dict, m: dict, df, i: in
     rule_lines = "\n".join(f"{n}. {r['text']}" + (f" (solo {r['symbol']})" if r.get("symbol") else "") for n, r in enumerate(rules, 1))
     prompt = (
         f"PAR: {symbol} | TF {tf} | hora Nueva York {datetime.now(trade_guard.NY).strftime('%A %H:%M')}\n"
-        f"Candidato del filtro rápido: {cand['side'].upper()} · {cand['reason']}" + (f" · OPERACIÓN DE RANGO ({cand['range_edge']}): rechazo en el borde, TP 0.25 ATR antes de la zona opuesta" if cand.get("range_edge") else "") + (" · CONTRATENDENCIA (contra 4H): rebote técnico con TP corto" if cand.get("counter_trend") else "") + "\n"
+        f"Candidato del filtro rápido: {cand['side'].upper()} · {cand['reason']}" + (f" · OPERACIÓN DE RANGO ({cand['range_edge']}): rechazo en el borde, TP 0.25 ATR antes de la zona opuesta" if cand.get("range_edge") else "") + (" · CONTRATENDENCIA (contra 4H): rebote técnico con TP corto" if cand.get("counter_trend") else "") + (" · RETROCESO ORDENADO a favor de 4H/1H: EMA9/21 cruzada en contra de forma temporal, exige vela de freno en la EMA20/EMA50" if cand.get("pullback") else "") + "\n"
         f"ESTADO ({tf}): {_row_txt(symbol, {**m, 'mtf': None})}\n"
         + (f"ANÁLISIS MULTITEMPORAL (4H = estructura, 1H = confirmación, {tf} = entrada): {_mtf_txt(m)}\n" if m.get("mtf") else
            f"TEMPORALIDAD SUPERIOR ({htf['tf']}): tendencia {htf['trend']} · RSI {htf['rsi']} · ADX {htf['adx']} · precio a {htf['dist_ema50_atr']:+} ATR de su EMA50\n") +
@@ -539,8 +559,13 @@ async def run(engine, settings) -> int:
                 continue
             cross = eligible[c["symbol"]].get("fast_cross")
             if cross and cross != FAST_CROSS_SIDE[c["side"]] and not c.get("counter_trend") and not ext and not c.get("range_edge"):
-                s1["candidates"].remove(c)   # against the EMA9/21 cross of the entry timeframe: the strong model would reject it anyway
-                why = f"{c['side'].upper()} contra el cruce EMA9/21 de {tf} ({cross}: EMA9 {'>' if cross == 'ALCISTA' else '<'} EMA21)"
+                lock = pullback_block(eligible[c["symbol"]], c["side"])
+                if not lock:   # orderly pullback in favour of 4H + 1H: structure, EMA50 and last swing still hold
+                    c["pullback"] = True
+                    await engine.log("SCAN", f"{c['symbol']}: candidato {c['side'].upper()} en retroceso ordenado a favor de 4H/1H (EMA9/21 de {tf} en {cross}) · pasa al modelo potente")
+                    continue
+                s1["candidates"].remove(c)   # against the EMA9/21 cross of the entry timeframe and not a protected pullback
+                why = f"{c['side'].upper()} contra el cruce EMA9/21 de {tf} ({cross}: EMA9 {'>' if cross == 'ALCISTA' else '<'} EMA21) · sin retroceso ordenado: {lock}"
                 _note(engine, c["symbol"], 1, "DESCARTADO", why)
                 await engine.log("RISK", f"{c['symbol']}: candidato {why} · descartado sin IA potente")
         picked = {c["symbol"] for c in s1["candidates"]}

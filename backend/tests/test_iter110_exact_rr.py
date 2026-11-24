@@ -12,12 +12,12 @@ def _s(fixed=False):
 
 class TestStopLevel:
     def test_ai_stop_gets_buffer(self):
-        assert funnel.stop_level("long", 100.0, 1.0, _s(), 99.0, None, 0.25) == (98.75, "ia")
-        assert funnel.stop_level("short", 100.0, 1.0, _s(), 101.0, None, 0.25) == (101.25, "ia")
+        assert funnel.stop_level("long", 100.0, 1.0, _s(), 98.8, None, 0.25) == (98.55, "ia")
+        assert funnel.stop_level("short", 100.0, 1.0, _s(), 101.2, None, 0.25) == (101.45, "ia")
 
     def test_fixed_or_insane_stop_uses_atr(self):
         assert funnel.stop_level("long", 100.0, 1.0, _s(True), 99.0, None, 0.25) == (98.0, "atr")
-        assert funnel.stop_level("long", 100.0, 1.0, _s(), 99.8, None, 0.25) == (98.0, "atr")   # closer than 0.5 ATR
+        assert funnel.stop_level("long", 100.0, 1.0, _s(), 99.0, None, 0.25) == (98.0, "atr")   # closer than 1.1 ATR
         assert funnel.stop_level("long", 100.0, 1.0, _s(), None, None, 0.25) == (98.0, "atr")
 
 
@@ -30,14 +30,14 @@ def _z(low, high):
 
 
 class TestRoom:
-    """Entry 100, stop distance 1.25 → 2:1 target at 102.5 (85 % = 2.125) · 1:1 target at 101.25."""
+    """Entry 100, stop distance 1.25 → 2:1 target at 102.5 (15m micro-zone: 50 % = 1.25 · 4H zone: 75 % = 1.875) · 1:1 target at 101.25."""
 
     def test_trend_free_path(self):
         assert funnel.rr_block(_m(), "long", 100.0, 1.25, 2.0, False) is None
-        assert funnel.rr_block(_m(supply=_z(102.2, 102.6)), "long", 100.0, 1.25, 2.0, False) is None   # 2.2 ≥ 2.125
+        assert funnel.rr_block(_m(supply=_z(102.2, 102.6)), "long", 100.0, 1.25, 2.0, False) is None
 
     def test_trend_blocked_by_entry_tf_zone(self):
-        why = funnel.rr_block(_m(supply=_z(102.0, 102.4)), "long", 100.0, 1.25, 2.0, False)
+        why = funnel.rr_block(_m(supply=_z(101.2, 101.6)), "long", 100.0, 1.25, 2.0, False)
         assert "2:1" in why and "15m" in why
 
     def test_trend_blocked_by_4h_zone(self):
@@ -96,18 +96,18 @@ def _run_factory(monkeypatch, *, stage2, range_edge=None, regime=None, trend_4h=
 @pytest.mark.asyncio
 async def test_trend_trade_is_exactly_two_to_one(monkeypatch):
     await _force_in_hours(monkeypatch)
-    eng, s = _run_factory(monkeypatch, stage2=lambda m: {"sl": m["price"] - 1.0 * m["atr"], "tp": m["price"] + 9 * m["atr"]})
+    eng, s = _run_factory(monkeypatch, stage2=lambda m: {"sl": m["price"] - 1.2 * m["atr"], "tp": m["price"] + 9 * m["atr"]})
     await funnel.run(eng, s)
     sig = _sig(eng)
     risk_d, reward = sig["price"] - sig["sl"], sig["tp"] - sig["price"]
-    assert abs(risk_d - 1.25 * sig["atr"]) < 1e-6          # AI stop + 0.25 ATR buffer
+    assert abs(risk_d - 1.45 * sig["atr"]) < 1e-6          # AI stop + 0.25 ATR buffer
     assert abs(reward - 2.0 * risk_d) < 1e-6 and sig["rr_target"] == 2.0   # the AI's own tp (9 ATR) is ignored
 
 
 @pytest.mark.asyncio
 async def test_counter_trend_is_two_to_one_too(monkeypatch):
     await _force_in_hours(monkeypatch)
-    eng, s = _run_factory(monkeypatch, trend_4h="BAJISTA", stage2=lambda m: {"sl": m["price"] - 1.0 * m["atr"], "tp": None})
+    eng, s = _run_factory(monkeypatch, trend_4h="BAJISTA", stage2=lambda m: {"sl": m["price"] - 1.2 * m["atr"], "tp": None})
     await funnel.run(eng, s)
     sig = _sig(eng)
     assert abs((sig["tp"] - sig["price"]) - 2.0 * (sig["price"] - sig["sl"])) < 1e-6
@@ -118,7 +118,7 @@ async def test_counter_trend_is_two_to_one_too(monkeypatch):
 @pytest.mark.parametrize("edge,regime", [("EXTREMO_DEMANDA", None), (None, "RANGO / CHOPPY")])
 async def test_range_trade_is_exactly_one_to_one(monkeypatch, edge, regime):
     await _force_in_hours(monkeypatch)
-    eng, s = _run_factory(monkeypatch, range_edge=edge, regime=regime, stage2=lambda m: {"sl": m["price"] - 1.0 * m["atr"], "tp": None})
+    eng, s = _run_factory(monkeypatch, range_edge=edge, regime=regime, stage2=lambda m: {"sl": m["price"] - 1.2 * m["atr"], "tp": None})
     await funnel.run(eng, s)
     sig = _sig(eng)
     assert abs((sig["tp"] - sig["price"]) - 1.0 * (sig["price"] - sig["sl"])) < 1e-6 and sig["rr_target"] == 1.0
@@ -136,14 +136,14 @@ async def test_fixed_atr_stop_keeps_exact_ratio(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_obstacle_before_85pct_is_a_pass(monkeypatch):
+async def test_obstacle_before_half_way_is_a_pass(monkeypatch):
     await _force_in_hours(monkeypatch)
-    eng, s = _run_factory(monkeypatch, stage2=lambda m: {"sl": m["price"] - 1.0 * m["atr"], "tp": None})
+    eng, s = _run_factory(monkeypatch, stage2=lambda m: {"sl": m["price"] - 1.2 * m["atr"], "tp": None})
     real = funnel.metrics
 
     def near_supply(*a, **k):
         m = real(*a, **k)
-        m["supply"] = {"low": m["price"] + 1.5 * m["atr"], "high": m["price"] + 2.0 * m["atr"], "touches": 3, "dist_atr": 1.5}
+        m["supply"] = {"low": m["price"] + 1.2 * m["atr"], "high": m["price"] + 1.6 * m["atr"], "touches": 3, "dist_atr": 1.2}   # target at 2.9 ATR: 50 % = 1.45
         return m
     monkeypatch.setattr(funnel, "metrics", near_supply)
     await funnel.run(eng, s)

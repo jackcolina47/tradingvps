@@ -527,19 +527,19 @@ class TestLevelsBuffer:
     def test_long_ai_sl_moved_by_025_atr(self):
         s = self._s(atr_levels_enabled=False)
         price, atr = 100.0, 1.0
-        ai_sl, ai_tp = 99.0, 103.0   # risk=1, reward=3 (comfortable above MIN_RR even with buffer)
+        ai_sl, ai_tp = 98.8, 103.0   # risk=1.2, reward=3 (comfortable above MIN_RR even with buffer)
         sl, tp, src = funnel_mod.levels("long", price, atr, s, ai_sl=ai_sl, ai_tp=ai_tp, buffer_atr=0.25)
         assert src == "ia"
-        assert abs(sl - (99.0 - 0.25)) < 1e-9
+        assert abs(sl - (98.8 - 0.25)) < 1e-9
         assert abs(tp - 103.0) < 1e-9
 
     def test_short_ai_sl_moved_by_025_atr(self):
         s = self._s(atr_levels_enabled=False)
         price, atr = 100.0, 1.0
-        ai_sl, ai_tp = 101.0, 97.0
+        ai_sl, ai_tp = 101.2, 97.0
         sl, tp, src = funnel_mod.levels("short", price, atr, s, ai_sl=ai_sl, ai_tp=ai_tp, buffer_atr=0.25)
         assert src == "ia"
-        assert abs(sl - (101.0 + 0.25)) < 1e-9
+        assert abs(sl - (101.2 + 0.25)) < 1e-9
 
     def test_atr_source_ignores_buffer(self):
         s = self._s(atr_levels_enabled=True)
@@ -552,8 +552,8 @@ class TestLevelsBuffer:
     def test_buffer_breaks_rr_falls_back_to_atr(self):
         s = self._s(atr_levels_enabled=False)
         price, atr = 100.0, 1.0
-        # risk=0.8, reward=0.9 → R:R 1.125 OK without buffer, but with buffer 0.25 ATR new risk=1.05 → reward=0.9<1.05 → ATR fallback
-        sl, tp, src = funnel_mod.levels("long", price, atr, s, ai_sl=99.2, ai_tp=100.9, buffer_atr=0.25)
+        # risk=1.2, reward=1.3 → R:R OK without buffer, but with buffer 0.25 ATR new risk=1.45 → reward=1.3<1.45 → ATR fallback
+        sl, tp, src = funnel_mod.levels("long", price, atr, s, ai_sl=98.8, ai_tp=101.3, buffer_atr=0.25)
         assert src == "atr"
         # ATR fallback: sl = 100 - 2*1 = 98
         assert abs(sl - 98.0) < 1e-9

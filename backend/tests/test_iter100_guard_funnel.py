@@ -156,9 +156,9 @@ class TestStage0:
 
     def test_ai_stop_buffer(self):
         s = type("S", (), {"atr_levels_enabled": False, "atr_sl_mult": 2.0, "atr_tp_mult": 4.0})()
-        assert funnel.levels("long", 100.0, 1.0, s, 99.0, 103.0, buffer_atr=0.25) == (98.75, 103.0, "ia")
-        assert funnel.levels("short", 100.0, 1.0, s, 101.0, 97.0, buffer_atr=0.25) == (101.25, 97.0, "ia")
-        assert funnel.levels("long", 100.0, 1.0, s, 99.0, 103.0) == (99.0, 103.0, "ia")
+        assert funnel.levels("long", 100.0, 1.0, s, 98.8, 103.0, buffer_atr=0.25) == (98.55, 103.0, "ia")
+        assert funnel.levels("short", 100.0, 1.0, s, 101.2, 97.0, buffer_atr=0.25) == (101.45, 97.0, "ia")
+        assert funnel.levels("long", 100.0, 1.0, s, 98.8, 103.0) == (98.8, 103.0, "ia")
 
     def test_next_trigger(self):
         base = 1_800_000_000 // 900 * 900
@@ -189,13 +189,13 @@ class TestLevels:
     def test_ai_levels_ok(self):
         s = self.S()
         s.atr_levels_enabled = False
-        sl, tp, src = funnel.levels("long", 100.0, 1.0, s, ai_sl=99.0, ai_tp=102.0)
-        assert src == "ia" and sl == 99.0 and tp == 102.0
+        sl, tp, src = funnel.levels("long", 100.0, 1.0, s, ai_sl=98.8, ai_tp=102.0)
+        assert src == "ia" and sl == 98.8 and tp == 102.0
 
     def test_ai_levels_bad_rr_fallback(self):
         s = self.S()
         s.atr_levels_enabled = False
-        sl, tp, src = funnel.levels("long", 100.0, 1.0, s, ai_sl=99.5, ai_tp=100.1)  # SL 0.5 ATR, but R:R < 1
+        sl, tp, src = funnel.levels("long", 100.0, 1.0, s, ai_sl=98.8, ai_tp=100.1)  # SL 1.2 ATR, but R:R < 1
         assert src == "atr"
 
     def test_ai_levels_bad_distance(self):
