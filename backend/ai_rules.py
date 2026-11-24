@@ -32,11 +32,14 @@ def _pub(d: dict) -> dict:
 async def list_rules(db) -> List[dict]:
     """Every rule + what its blocked signals would have done (shadow trades of signals it rejected)."""
     stats = {s["_id"]: s async for s in db.shadow_trades.aggregate([{"$match": {"rule_id": {"$ne": None}}}, {"$group": {
-        "_id": "$rule_id", "n": {"$sum": 1}, "pnl": {"$sum": "$pnl"}, "wins": {"$sum": {"$cond": [{"$gt": ["$pnl", 0]}, 1, 0]}}}}])}
+        "_id": "$rule_id", "n": {"$sum": 1}, "pnl": {"$sum": "$pnl"}, "wins": {"$sum": {"$cond": [{"$gt": ["$pnl", 0]}, 1, 0]}},
+        "won": {"$sum": {"$max": ["$pnl", 0]}}, "lost": {"$sum": {"$min": ["$pnl", 0]}}}}])}
     out = []
     async for d in db.ai_rules.find().sort("_id", -1):
         s = stats.get(str(d["_id"]))
-        out.append({**_pub(d), "blocked_closed": s["n"] if s else 0, "blocked_wins": s["wins"] if s else 0, "blocked_pnl": round(s["pnl"], 2) if s else 0.0})
+        out.append({**_pub(d), "blocked_closed": s["n"] if s else 0, "blocked_wins": s["wins"] if s else 0, "blocked_pnl": round(s["pnl"], 2) if s else 0.0,
+                    "blocked_won": round(s["won"], 2) if s else 0.0, "blocked_lost": round(-s["lost"], 2) if s else 0.0,
+                    "misses_left": max(0, MAX_MISSES - d.get("misses", 0)), "max_misses": MAX_MISSES})
     return out
 
 

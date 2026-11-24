@@ -28,7 +28,8 @@ function rulesToTxt(rules, events, bot) {
     `Ámbito: ${r.symbol || "todos los símbolos"} · ${r.side ? (r.side === "long" ? "solo largos" : "solo cortos") : "ambos lados"} · ${r.strategy ? STRATEGY_LABELS[r.strategy] || r.strategy : "todas las estrategias"}`,
     `Creada: ${dt(r.created_at)}${r.verdict ? ` · de un análisis ${r.verdict}` : ""}${r.source_trade_id ? ` · operación ${r.source_trade_id}` : ""}`,
     `Señales bloqueadas: ${r.hits || 0} · resueltas: ${r.blocked_closed || 0} · habrían ganado: ${r.blocked_wins || 0} · PnL que habrían tenido: ${r.blocked_pnl || 0}`,
-    `Ganadoras que habría bloqueado: ${r.misses || 0}`,
+    `Sombras: ganaron +${r.blocked_won || 0} · perdieron -${r.blocked_lost || 0}`,
+    `Fallos (ganadoras bloqueadas): ${r.misses || 0} de ${r.max_misses || 3} · se apaga sola con ${r.max_misses || 3} o más y balance de sombras en contra`,
     ...(r.ai_note ? [`Nota de la IA: ${r.ai_note} (${dt(r.ai_edited_at)})`] : []),
     `ID: ${r.id}`, "",
   ].join("\n"));
@@ -76,6 +77,20 @@ function RulesSummary({ rules }) {
   );
 }
 
+function RuleBalance({ r }) {
+  const max = r.max_misses || 3;
+  const left = r.misses_left ?? max;
+  const status = !r.enabled ? "regla apagada"
+    : left > 0 ? `${left === 1 ? "falta 1 fallo" : `faltan ${left} fallos`} para poder apagarse sola`
+      : r.blocked_pnl > 0 ? "se apagará sola con el próximo fallo" : "sigue activa: sus sombras perdieron más de lo que ganaron";
+  return (
+    <p data-testid={`learned-rule-balance-${r.id}`} className="mt-0.5 font-mono text-[10px] text-slate-500">
+      Sombras: <span data-testid={`learned-rule-won-${r.id}`} className="text-rose-300">ganaron +{r.blocked_won || 0}</span> · <span data-testid={`learned-rule-lost-${r.id}`} className="text-emerald-300">perdieron −{r.blocked_lost || 0}</span>
+      {" · "}<span data-testid={`learned-rule-misses-${r.id}`} className={r.misses ? "text-amber-300" : ""}>fallos {r.misses || 0}/{max}</span> · <span data-testid={`learned-rule-status-${r.id}`}>{status}</span>
+    </p>
+  );
+}
+
 function RuleRow({ r, busy, onToggle, onRemove, onSave }) {
   const [draft, setDraft] = useState(null);
   const save = async () => { if (await onSave(r, draft)) setDraft(null); };
@@ -92,8 +107,8 @@ function RuleRow({ r, busy, onToggle, onRemove, onSave }) {
         </p>
         <p data-testid={`learned-rule-stats-${r.id}`} className="mt-0.5 font-mono text-[10px] text-slate-500">
           {r.hits || 0} señales bloqueadas{r.blocked_closed ? <> · de {r.blocked_closed} ya resueltas, {r.blocked_wins} habrían ganado (<span className={r.blocked_pnl > 0 ? "text-rose-300" : "text-emerald-300"}>{r.blocked_pnl > 0 ? "+" : ""}{r.blocked_pnl} sin la regla</span>)</> : ""}
-          {r.misses ? <span className="text-amber-300"> · {r.misses} ganadoras que habría bloqueado</span> : ""}
         </p>
+        <RuleBalance r={r} />
         {r.ai_note && <p data-testid={`learned-rule-ai-note-${r.id}`} className="mt-0.5 text-[10px] text-sky-300/80">{r.ai_note} · {new Date(r.ai_edited_at).toLocaleDateString("es-ES")}</p>}
       </div>
       {draft === null ? (

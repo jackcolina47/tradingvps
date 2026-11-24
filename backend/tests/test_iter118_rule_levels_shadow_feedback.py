@@ -88,6 +88,10 @@ def test_miss_needs_three_misses_and_losing_shadow_balance():
         await db.shadow_trades.insert_one({"rule_id": rid2, "pnl": 50.0})
         assert (await ai_rules.miss(db, rid2))["enabled"] and (await ai_rules.miss(db, rid2))["enabled"]  # 2 misses: still on
         assert await ai_rules.miss(db, "ffffffffffffffffffffffff") is None
+        row = next(x for x in await ai_rules.list_rules(db) if x["id"] == rid)
+        assert (row["blocked_won"], row["blocked_lost"], row["blocked_pnl"], row["misses_left"], row["max_misses"]) == (13.0, 10.0, 3.0, 0, 3)
+        assert next(x for x in await ai_rules.list_rules(db) if x["id"] == rid2)["misses_left"] == 1
+        assert f.MAJORS == ("BTCUSDT", "ETHUSDT", "EURUSD", "GBPUSD", "XAUUSD")
     asyncio.run(run())
 
 

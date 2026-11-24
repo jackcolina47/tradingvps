@@ -130,7 +130,7 @@ def apply_levels(sig: dict, sl, tp, min_rr: float = 1.0, spread: float = 0.0, di
 
 
 RULE_MIN_RR = 1.5
-MAJORS = ("BTCUSDT", "ETHUSDT")
+MAJORS = ("BTCUSDT", "ETHUSDT", "EURUSD", "GBPUSD", "XAUUSD")
 
 
 def high_conviction(sig: dict, d1_trend: str) -> bool:
@@ -159,8 +159,8 @@ RULES_SYSTEM = (
     "ALTA CONVICCIÓN: cuando la señal viene marcada «ALTA CONVICCIÓN: SÍ» (5 o más confirmaciones y tendencia diaria 1D alineada con la dirección) y la regla "
     "que aplicaría solo advierte de un swing, soporte/resistencia o nivel cercano, NO rechaces la señal: responde violates=false y propón un tp y/o sl "
     "ajustado que respete esa estructura (objetivo antes del nivel, stop detrás del swing). "
-    "PARES PRINCIPALES: cuando la señal viene marcada «PAR PRINCIPAL DE ALTA LIQUIDEZ: SÍ» (BTCUSDT, ETHUSDT), una regla genérica (sin «(solo SÍMBOLO)») "
-    "aprendida en altcoins volátiles no la veta por pequeños roces de volumen (volumen algo por debajo o por encima de lo que pide la regla): solo la "
+    "PARES PRINCIPALES: cuando la señal viene marcada «PAR PRINCIPAL DE ALTA LIQUIDEZ: SÍ» (BTCUSDT, ETHUSDT, EURUSD, GBPUSD, XAUUSD), una regla genérica (sin «(solo SÍMBOLO)») "
+    "aprendida en altcoins u otros pares más volátiles no la veta por pequeños roces de volumen (volumen algo por debajo o por encima de lo que pide la regla): solo la "
     "incumple si la diferencia es clara y amplia. "
     'Responde EXCLUSIVAMENTE con JSON válido, sin texto adicional: {{"violates":true|false,"rule":número de la regla incumplida (0 si ninguna),'
     '"reason":"máx. 25 palabras en español citando el dato concreto que incumple la regla, o por qué ajustas los niveles; vacío si pasa sin cambios",'

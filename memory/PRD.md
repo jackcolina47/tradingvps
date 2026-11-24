@@ -714,3 +714,4 @@
 - `shadow.rule_feedback` (Bybit y `fx/shadow.py`): sombra con `rule_id` que cierra en TP con net > 0 → `ai_rules.miss` + log `[SHADOW FEEDBACK]`; si se apaga, evento DESACTIVAR + Telegram.
 - `ai_rules.miss`: apaga solo con misses ≥ 3 Y suma de pnl de sus sombras > 0; devuelve `auto_off` y `shadow_pnl`. Afecta también a `_check_winner` de trade_learning.
 - Labs y Pepperstone no usan la ruta de reglas: sin cambios. Tests `tests/test_iter118_rule_levels_shadow_feedback.py` (5) + iter89 ajustado. Llamada real al modelo verificada (BTCUSDT alta convicción → TP ajustado antes del swing).
+- Iter 118b: `MAJORS` += EURUSD, GBPUSD, XAUUSD (HotForex). `ai_rules.list_rules` devuelve `blocked_won`, `blocked_lost`, `misses_left`, `max_misses`; `LearnedRulesSection.jsx` → `RuleBalance` (línea «Sombras: ganaron/perdieron · fallos N/3 · estado») y TXT de descarga actualizado.
