@@ -68,17 +68,13 @@ class TestRangeEdge:
     def test_low_volume_without_edge_still_blocked(self):
         assert "volumen" in funnel.stage0(_m(adx=25, rsi=50))
 
-    def test_target_is_quarter_atr_before_opposite_zone(self):
-        assert funnel.range_target(_m(), "short") == 107.65
-        assert funnel.range_target(_demand_edge(), "long") == 109.95
-
     def test_row_text_carries_the_tag(self):
         m = {**_m(), "price": 110.0, "trend": "MIXTA", "ema20": 109.0, "ema50": 109.0, "ema200": 109.0, "dist_ema20_atr": 1.0, "macd_hist": 0.1, "macd_rising": False, "atr_pct": 0.5}
         assert "oportunidad_rango: EXTREMO_OFERTA" in funnel._row_txt("X", m)
         assert "oportunidad_rango" not in funnel._row_txt("X", {**m, "range_edge": None})
 
     def test_prompts_mention_range(self):
-        assert "EXTREMO_OFERTA / EXTREMO_DEMANDA" in funnel.DEEP_SYSTEM and "0.25 ATR antes de la zona opuesta" in funnel.DEEP_SYSTEM
+        assert "EXTREMO_OFERTA / EXTREMO_DEMANDA" in funnel.DEEP_SYSTEM and "0.2 ATR antes de la zona opuesta" in funnel.DEEP_SYSTEM
         assert "oportunidad_rango" in funnel.RANGE_FAST_SYSTEM
 
 
@@ -261,98 +257,14 @@ class TestIntegrationE_Levels:
         await funnel_mod.run(eng, settings)
         return eng
 
-    @pytest.mark.asyncio
-    async def test_atr_levels_no_room_signal_pass(self, monkeypatch):
-        """atr_levels_enabled=True, AI with tp=None. With supply at price 100 (demand at 97.4), auto TP ~= 97.65; SL = 102; risk=2, reward=2.35, R:R>1 → opens.
-        To force R:R<1.0 narrow the range (demand very close)."""
-        cfg = {**_EDGE_SUPPLY,
-               "demand": {"low": 99.0, "high": 99.1, "touches": 2, "dist_atr": 2.5}}  # auto = 99.1 + 0.25 = 99.35; reward = 0.65 < 2
-        # But demand.dist_atr 2.5 > 1.8 so edge remains valid.
-        s = _settings(symbols=["BTCUSDT"], atr_levels_enabled=True, ai_min_confidence=60)
-        stage2_res = {"decision": "SELL", "confidence": 80, "sl": None, "tp": None, "rule": None, "reasoning": "rechazo", "model": "deep", "ms": 1}
-        eng = await self._run(monkeypatch, s, stage2_res, cfg)
-        # Signal recorded as PASS with note 'de rango sin recorrido', no open
-        assert eng.opened == []
-        assert eng.shadows == []
-        docs = eng.db.signals.docs
-        assert len(docs) == 1
-        sig = docs[0]
-        assert sig["ai_decision"] == "PASS"
-        assert "de rango sin recorrido" in sig["note"]
-        risk = " ".join(t for lv, t in eng.logs if lv == "RISK")
-        assert "de rango sin recorrido" in risk
 
-    @pytest.mark.asyncio
-    async def test_ai_levels_open_with_buffer(self, monkeypatch):
-        """atr_levels_enabled=False, AI sl=100.8 (0.8 ATR), AI tp=98.3 inside range → opens; sl = ai_sl + 0.25 ATR; context.funnel.range_edge preserved."""
-        s = _settings(symbols=["BTCUSDT"], atr_levels_enabled=False, ai_min_confidence=60)
-        stage2_res = {"decision": "SELL", "confidence": 80, "sl": 100.8, "tp": 98.3, "rule": None, "reasoning": "rechazo claro", "model": "deep", "ms": 1}
-        eng = await self._run(monkeypatch, s, stage2_res)
-        assert len(eng.opened) == 1
-        docs = eng.db.signals.docs
-        sig = docs[0]
-        assert sig["ai_decision"] == "APROBADA"
-        assert abs(sig["sl"] - (100.8 + 0.25)) < 1e-6
-        # tp inside range: ai_tp 98.3 < auto 97.65? No, 98.3 > 97.65 → stays as AI tp
-        assert abs(sig["tp"] - 98.3) < 1e-6
-        assert sig["context"]["funnel"]["range_edge"] == "EXTREMO_OFERTA"
         # Note: when source == "ia" (AI tp kept as-is, inside range), current AI_EVAL log does NOT include 'RANGO'
         # (see funnel.py line ~600: only source in {'contra','rango','atr'} produce branded labels). Report to main agent.
 
-    @pytest.mark.asyncio
-    async def test_ai_tp_beyond_opposite_zone_is_clipped(self, monkeypatch):
-        """AI tp beyond zone (97.0) → clipped to range_target (97.65) by the res mutation on line ~548."""
-        s = _settings(symbols=["BTCUSDT"], atr_levels_enabled=False, ai_min_confidence=60)
-        stage2_res = {"decision": "SELL", "confidence": 80, "sl": 100.8, "tp": 97.0, "rule": None, "reasoning": "x", "model": "deep", "ms": 1}
-        eng = await self._run(monkeypatch, s, stage2_res)
-        assert len(eng.opened) == 1
-        sig = eng.db.signals.docs[0]
-        # range_target = demand.high (97.4) + 0.25 ATR = 97.65 → TP recorded is the clipped value
-        assert abs(sig["tp"] - 97.65) < 1e-6
-        assert sig["context"]["funnel"]["range_edge"] == "EXTREMO_OFERTA"
 
-    @pytest.mark.asyncio
-    async def test_atr_levels_in_range_source_is_rango(self, monkeypatch):
-        """atr_levels_enabled=True + AI tp=None → levels returns ATR-based (tp=price-4*ATR=96); the edge block overwrites tp to range_target 97.65 and source='rango'; AI_EVAL log contains 'RANGO'."""
-        s = _settings(symbols=["BTCUSDT"], atr_levels_enabled=True, ai_min_confidence=60)
-        stage2_res = {"decision": "SELL", "confidence": 80, "sl": None, "tp": None, "rule": None, "reasoning": "r", "model": "deep", "ms": 1}
-        eng = await self._run(monkeypatch, s, stage2_res)
-        assert len(eng.opened) == 1
-        sig = eng.db.signals.docs[0]
-        assert abs(sig["tp"] - 97.65) < 1e-6
-        # SL = price + 2*ATR = 102
-        assert abs(sig["sl"] - 102.0) < 1e-6
-        assert sig["context"]["funnel"]["levels"] == "rango"
-        assert sig["context"]["funnel"]["range_edge"] == "EXTREMO_OFERTA"
-        ai_eval = " ".join(t for lv, t in eng.logs if lv == "AI_EVAL")
-        assert "RANGO" in ai_eval
 
 
 class TestIntegrationF_CounterTrend:
-    @pytest.mark.asyncio
-    async def test_supply_edge_short_against_4h_alcista(self, monkeypatch):
-        """EXTREMO_OFERTA + SHORT with 4H ALCISTA (bias long) → counter_trend=True, range_edge preserved; without room (R:R<1.5) → CONTRA_4H, with room → open."""
-        await _force_in_hours(monkeypatch)
-
-        # Scenario 1: no room (demand very close ⇒ AI TP 99.5 ⇒ reward=0.5 < 1.5*risk=1.5)
-        eng = FakeEngine(mtf=True, funnel_rich=True)
-        s = _settings(symbols=["BTCUSDT"], atr_levels_enabled=False, ai_min_confidence=60)
-        _patch_metrics(monkeypatch, {"BTCUSDT": _EDGE_SUPPLY})
-        monkeypatch.setattr(funnel_mod, "_mtf", _mtf_factory("ALCISTA", "ALCISTA"))
-        monkeypatch.setattr(funnel_mod, "stage1", _stage1_factory(
-            [{"symbol": "BTCUSDT", "side": "short", "reason": "rebote"}]))
-
-        async def s2(kind, symbol, tf, cand, *a, **kw):
-            # Assert cand props
-            s2.last_cand = dict(cand)
-            return {"decision": "SELL", "confidence": 80, "sl": 101.0, "tp": 99.5, "rule": None, "reasoning": "contra", "model": "deep", "ms": 1}
-        monkeypatch.setattr(funnel_mod, "stage2", s2)
-        await funnel_mod.run(eng, s)
-        assert s2.last_cand.get("counter_trend") is True
-        assert s2.last_cand.get("range_edge") == "EXTREMO_OFERTA"
-        assert eng.opened == []
-        sig = eng.db.signals.docs[0]
-        assert sig["ai_decision"] == "CONTRA_4H"
 
     @pytest.mark.asyncio
     async def test_counter_trend_with_room_opens(self, monkeypatch):

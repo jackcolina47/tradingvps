@@ -284,6 +284,7 @@ class Position(BaseDocument):
     expires_at: Optional[str] = None
     horizon: str = "short"
     news_guard: Optional[str] = None  # key of the red event this position was already protected for
+    rr_target: Optional[float] = None  # exact reward:risk of the trade; 1.0 = range trade, closes whole at its target (no partial close)
     exit_mode: Optional[str] = None  # "cross": no SL/TP, closes on the opposite EMA cross (Test cruce EMA 10/20)
     pips: Optional[float] = None
 

@@ -14,7 +14,7 @@ En :00, :15, :30 y :45 de cada hora (+8 s), dentro del horario operativo y con h
 - `ai_min_confidence` (10–90): confianza mayor que el umbral → se ejecuta; igual o menor → operación sombra.
 - Tamaño: `(equidad × riesgo %) ÷ (distancia al stop + comisiones)`; por defecto cada stop cuesta el 1 % de la equidad.
 - Forex, viernes: sin entradas desde las 12:00 NY y cierre total a las 15:30 NY.
-- SL/TP: fijos por ATR (2× / 4×) o los que propone la IA.
+- SL: el de la IA + 0,25 ATR, o fijo a 2×ATR. TP calculado por el sistema: 2:1 exacto en tendencia/contratendencia (sin zona contraria antes del 85 % del recorrido) y 1:1 exacto sin cierre parcial en rango.
 
 ## Horario y eventos rojos (`backend/trade_guard.py`)
 

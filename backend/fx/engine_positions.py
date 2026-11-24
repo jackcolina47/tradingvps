@@ -63,7 +63,7 @@ class PositionsMixin:
             await self.close_position(p.id, price, "TIEMPO")
             return
         updates.update(mark_price=price, unrealized_pnl=round(risk.pnl(p.symbol, p.side, p.entry_price, price, p.qty, tickers), 4))
-        if rules["partial_tp_enabled"] and not p.partial_done and p.mfe_r >= rules["partial_tp_r"] and not rollover:
+        if rules["partial_tp_enabled"] and p.rr_target != 1.0 and not p.partial_done and p.mfe_r >= rules["partial_tp_r"] and not rollover:
             part = risk.partial_lots(p.qty, rules["partial_tp_pct"])
             if part > 0:
                 fee = risk.spread_cost(p.symbol, part, tickers)
@@ -229,7 +229,7 @@ class PositionsMixin:
             await self.db.positions.update_one({"_id": ObjectId(p.id)}, {"$set": updates})
             await self.close_position(p.id, price, "TIEMPO")
             return
-        if rules["partial_tp_enabled"] and not p.partial_done and p.mfe_r >= rules["partial_tp_r"]:
+        if rules["partial_tp_enabled"] and p.rr_target != 1.0 and not p.partial_done and p.mfe_r >= rules["partial_tp_r"]:
             lot = await self.broker.lot(p.symbol)
             part = risk.partial_lots(p.qty, rules["partial_tp_pct"], lot)
             if part > 0:
@@ -412,7 +412,7 @@ class PositionsMixin:
                 entry, lots, fee = (r["entry"] or entry), r["lots"], abs(r["commission"])
                 sl, tp = r["sl"], (tp if cross else r["tp"])  # cross: TP stays virtual (R metrics only), nothing at the broker
                 margin = lots * SPECS[symbol]["contract"] * risk.base_usd(symbol, tickers, entry) / leverage
-                pos = Position(symbol=symbol, side=sig["side"], strategy=sig["strategy"], entry_price=entry, qty=lots, initial_qty=lots, leverage=leverage, margin=margin,
+                pos = Position(symbol=symbol, side=sig["side"], strategy=sig["strategy"], rr_target=sig.get("rr_target"), entry_price=entry, qty=lots, initial_qty=lots, leverage=leverage, margin=margin,
                                sl=sl, tp=tp, initial_sl=sl, atr=sig["atr"], fees=fee, mark_price=price, signal_id=signal_id, expires_at=expires_at,
                                live=True, order_id=r["position_id"], link_id=r["link_id"], horizon=horizon, exit_mode=exit_mode)
                 res = await self.db.positions.insert_one(pos.to_mongo())
@@ -432,7 +432,7 @@ class PositionsMixin:
                     return None, reason
                 await self._log_sizing(symbol, sig, lots, s["equity"], real_risk, entry, sl, tp)
                 fee = risk.spread_cost(symbol, lots, tickers)
-                pos = Position(symbol=symbol, side=sig["side"], strategy=sig["strategy"], entry_price=entry, qty=lots, initial_qty=lots, leverage=settings.leverage,
+                pos = Position(symbol=symbol, side=sig["side"], strategy=sig["strategy"], rr_target=sig.get("rr_target"), entry_price=entry, qty=lots, initial_qty=lots, leverage=settings.leverage,
                                margin=margin, sl=sl, tp=tp, initial_sl=sl, atr=sig["atr"], fees=fee, mark_price=price, signal_id=signal_id, expires_at=expires_at, horizon=horizon,
                                exit_mode=exit_mode)
                 res = await self.db.positions.insert_one(pos.to_mongo())

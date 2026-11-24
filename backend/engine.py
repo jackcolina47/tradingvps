@@ -339,7 +339,7 @@ class TradingEngine:
             await self.close_position(p.id, price, reason)
             return
         updates.update(mark_price=price, unrealized_pnl=round(pnl(p.side, p.entry_price, price, p.qty), 4))
-        if rules["partial_tp_enabled"] and not p.partial_done and p.mfe_r >= rules["partial_tp_r"]:
+        if rules["partial_tp_enabled"] and p.rr_target != 1.0 and not p.partial_done and p.mfe_r >= rules["partial_tp_r"]:
             part = partial_qty(p.symbol, p.qty, rules["partial_tp_pct"])
             if part > 0:
                 exit_price = price * (1 - SLIPPAGE) if p.side == "long" else price * (1 + SLIPPAGE)
@@ -460,7 +460,7 @@ class TradingEngine:
             await self._ema_partial_live(p, price, rules, updates)
             await self.db.positions.update_one({"_id": ObjectId(p.id)}, {"$set": updates})
             return
-        if rules["partial_tp_enabled"] and not p.partial_done and p.mfe_r >= rules["partial_tp_r"]:
+        if rules["partial_tp_enabled"] and p.rr_target != 1.0 and not p.partial_done and p.mfe_r >= rules["partial_tp_r"]:
             part = partial_qty(p.symbol, p.qty, rules["partial_tp_pct"])
             if part > 0:
                 try:
@@ -629,7 +629,7 @@ class TradingEngine:
                         return None
                 entry, qty, fee = (r["entry"] or entry), r["qty"], r["fee"]
                 margin = qty * entry / settings.leverage
-                pos = Position(symbol=symbol, side=sig["side"], strategy=sig["strategy"], entry_price=entry, qty=qty, initial_qty=qty,
+                pos = Position(symbol=symbol, side=sig["side"], strategy=sig["strategy"], rr_target=sig.get("rr_target"), entry_price=entry, qty=qty, initial_qty=qty,
                                leverage=settings.leverage, margin=margin, sl=sl, tp=tp, initial_sl=sl, atr=sig["atr"],
                                fees=fee, mark_price=price, signal_id=signal_id, live=True, order_id=r["order_id"], link_id=r["link_id"],
                                horizon=horizon, entry_type=entry_type, exit_mode=exit_mode)
@@ -646,7 +646,7 @@ class TradingEngine:
                     return None
                 await self._log_sizing(symbol, sig, qty, s["equity"], risk_pct, entry, sl, tp)
                 fee = entry * qty * fee_rate
-                pos = Position(symbol=symbol, side=sig["side"], strategy=sig["strategy"], entry_price=entry, qty=qty, initial_qty=qty,
+                pos = Position(symbol=symbol, side=sig["side"], strategy=sig["strategy"], rr_target=sig.get("rr_target"), entry_price=entry, qty=qty, initial_qty=qty,
                                leverage=settings.leverage, margin=margin, sl=sl, tp=tp, initial_sl=sl, atr=sig["atr"],
                                fees=fee, mark_price=price, signal_id=signal_id, horizon=horizon, entry_type=entry_type, exit_mode=exit_mode)
                 res = await self.db.positions.insert_one(pos.to_mongo())

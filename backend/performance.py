@@ -144,7 +144,7 @@ async def by_setup(db) -> list:
     kind = {}
     async for s in db.signals.find({"ai_stage": 2, "executed": True}, {"context.funnel.range_edge": 1, "context.funnel.counter_trend": 1}):
         f = (s.get("context") or {}).get("funnel") or {}
-        kind[str(s["_id"])] = "rango" if f.get("range_edge") else "contratendencia" if f.get("counter_trend") else "tendencia"
+        kind[str(s["_id"])] = "rango" if f.get("range_edge") or f.get("range_trade") else "contratendencia" if f.get("counter_trend") else "tendencia"
     acc = {}
     async for t in db.trades.find({"signal_id": {"$in": list(kind)}}, {"signal_id": 1, "pnl": 1, "fees": 1}):
         r = acc.setdefault(kind[t["signal_id"]], {"n": 0, "pnl": 0.0, "fees": 0.0, "wins": 0, "gw": 0.0, "gl": 0.0})

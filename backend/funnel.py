@@ -28,9 +28,11 @@ OVEREXT_RSI, OVEREXT_ATR = (32, 68), 2.0   # late entries: RSI beyond these and 
 SL_BUFFER_ATR = 0.25                        # safety margin added behind an AI stop (rich engines)
 SWING_BARS, RANGE_BARS, RANGE_CROSSES = 20, 15, 3
 # range-edge path: a sideways pair (ADX < 18 or RANGO / CHOPPY) still reaches the AI when the price sits on a tested edge of the range
-RANGE_ZONE_ATR, RANGE_TOUCHES, RANGE_RSI, RANGE_ROOM_ATR, RANGE_TP_GAP_ATR = 0.35, 2, (38, 62), 1.8, 0.25
+RANGE_ZONE_ATR, RANGE_TOUCHES, RANGE_RSI, RANGE_ROOM_ATR = 0.35, 2, (38, 62), 1.8
 TURN_VOLUME, TURN_BARS, TURN_ADX = 2.0, 6, 20   # structural turn: break of the last swing + ADX >= 20 + an impulse candle this strong within the last 6 closed candles
 TURN_SIDE = {"GIRO_ALCISTA_CONFIRMADO": "long", "GIRO_BAJISTA_CONFIRMADO": "short"}
+TREND_RR, RANGE_RR = 2.0, 1.0   # exact reward:risk of every trade: trend / breakout / counter-trend vs range (edge tag or RANGO / CHOPPY regime)
+RR_FREE_PCT, RANGE_ROOM_GAP_ATR = 0.85, 0.2   # trend: no opposing zone before 85 % of the way to the target · range: target 0.2 ATR short of the opposite edge
 RANGE_SIDE = {"EXTREMO_OFERTA": "short", "EXTREMO_DEMANDA": "long"}
 
 
@@ -45,7 +47,6 @@ CONFIDENCE_LEVELS = (10, 20, 30, 40, 50, 60, 70, 80, 90)
 FAST_TIMEOUT_SEC, DEEP_TIMEOUT_SEC = 25, 75
 SL_ATR_BAND = (0.5, 4.0)   # an AI stop must sit between 0.5 and 4 ATR from the entry
 MIN_RR = 1.0
-COUNTER_MIN_RR = 1.5   # a trade against the 4H trend needs this much room to the AI target (first EMA / zone of 4H-1H)
 DEEP_COOLDOWN_SEC = 300    # guard against manual re-scans: a candidate goes back to the strong model on every 15-min trigger, never sooner than 5 min
 REPEAT_MOVE_ATR = 0.15     # stage 1 is not repeated while no eligible pair moved this much (in ATR) since the last call on the same candle
 MTF_TTL = {"4h": 300, "1h": 120}   # seconds a higher-timeframe frame is reused (multi-timeframe engines only)
@@ -142,11 +143,6 @@ def range_edge(m: dict) -> str | None:
     return None
 
 
-def range_target(m: dict, side: str) -> float:
-    """Take profit of a range trade: 0.25 ATR before the opposite zone."""
-    return m["demand"]["high"] + RANGE_TP_GAP_ATR * m["atr"] if side == "short" else m["supply"]["low"] - RANGE_TP_GAP_ATR * m["atr"]
-
-
 def stage0(m: dict) -> str | None:
     """Deterministic filter: a flat or quiet pair is not worth an AI call, unless it sits on a tested edge of its range. Returns the discard reason."""
     if not m["atr"] > 0:
@@ -198,6 +194,40 @@ def levels(side: str, price: float, atr: float, settings, ai_sl=None, ai_tp=None
     if digits is not None:
         sl, tp = round(sl, digits), round(tp, digits)
     return sl, tp, source
+
+
+def stop_level(side: str, price: float, atr: float, settings, ai_sl=None, digits: int = None, buffer_atr: float = 0.0) -> tuple:
+    """(sl, source). Fixed toggle ON → sl_mult×ATR. OFF → the AI's stop when sane (0.5–4 ATR) pushed `buffer_atr` further away, otherwise the ATR stop."""
+    d = 1 if side == "long" else -1
+    sl, source = price - d * settings.atr_sl_mult * atr, "atr"
+    if not settings.atr_levels_enabled and ai_sl and SL_ATR_BAND[0] * atr <= (price - ai_sl) * d <= SL_ATR_BAND[1] * atr:
+        sl, source = float(ai_sl) - d * buffer_atr * atr, "ia"
+    return (sl if digits is None else round(sl, digits)), source
+
+
+def rr_block(m: dict, side: str, price: float, dist: float, rr: float, ranging: bool) -> str | None:
+    """Why the exact-R:R target is not reachable: an opposing zone in the way (trend) or not enough room inside the range."""
+    d, atr, reward = (1 if side == "long" else -1), m["atr"], rr * dist
+    name = "oferta" if side == "long" else "demanda"
+
+    def zone(src):
+        z = (src or {}).get("supply" if side == "long" else "demand")
+        if not z:
+            return None
+        near, far = (z["low"], z["high"]) if side == "long" else (z["high"], z["low"])
+        return None if (price - far) * d > 0 else max(0.0, (near - price) * d)   # already beyond the zone: no obstacle
+    if ranging:
+        free = zone(m)
+        if free is not None and free - RANGE_ROOM_GAP_ATR * atr < reward:
+            return (f"falta de recorrido para 1:1 en rango: la {name} opuesta está a {free / atr:.2f} ATR y el objetivo necesita {reward / atr:.2f} ATR "
+                    f"más {RANGE_ROOM_GAP_ATR} ATR de margen")
+        return None
+    for tf, src in ((m.get("tf") or "entrada", m), ("4h", (m.get("mtf") or {}).get("4h"))):
+        free = zone(src)
+        if free is not None and free < RR_FREE_PCT * reward:
+            return (f"falta de recorrido para 2:1: {name} de {tf} a {free / atr:.2f} ATR, antes del {RR_FREE_PCT:.0%} del recorrido al objetivo "
+                    f"({reward / atr:.2f} ATR)")
+    return None
 
 
 # ---------- stage 1 ----------
@@ -293,16 +323,15 @@ DEEP_SYSTEM = (
     "operación AHORA. Valora como lo harías con tu propio dinero: estructura y tendencia (EMAs 20/50/200 y temporalidad superior), momentum (RSI, MACD, ADX), "
     "volumen/actividad, zonas de oferta y demanda, dónde quedaría el stop y cuánto recorrido libre hay hasta el objetivo, y si la entrada llega tarde. "
     "Actúa como un trader intradía profesional y decisivo. Si la estructura en la temporalidad operativa ({tf}) muestra alineación técnica clara, el stop loss queda "
-    "técnicamente protegido y existe un espacio libre con un ratio riesgo/beneficio real >= 1.5 hacia el siguiente obstáculo relevante, prioriza emitir BUY o SELL. "
+    "técnicamente protegido y existe un espacio libre con un recorrido libre hasta el objetivo que calcula el sistema (2:1 en tendencia, 1:1 en rango), prioriza emitir BUY o SELL. "
     "Usa PASS únicamente si existe un conflicto severo o riesgo de invalidación inmediata. "
-    "Si la operación va en contra de la tendencia mayor de 4H (rebote técnico), el Take Profit debe fijarse obligatoriamente antes de la primera EMA relevante "
-    "(EMA 20 o EMA 50 de 4H/1H) o bloque de oferta/demanda previo, asegurando una toma de beneficios rápida: en ese caso devuelve SIEMPRE `tp` como precio, "
-    "con al menos 1.5 veces la distancia del stop. "
+    "Si la operación va en contra de la tendencia mayor de 4H (rebote técnico), exige que el objetivo 2:1 quede antes de la primera EMA relevante "
+    "(EMA 20 o EMA 50 de 4H/1H) o del bloque de oferta/demanda previo; si no cabe, responde PASS. "
     "Cuando evalúes un candidato con GIRO_ALCISTA_CONFIRMADO contra una tendencia 4H bajista: NO compres en la cresta de una vela expansiva (> 2.5 ATR); exige al menos "
-    "1 vela de retroceso o pausa/consolidación que respete la EMA 9 o el soporte roto, y proyecta el TP antes de la siguiente zona de oferta de 1H/4H manteniendo un R:R >= 1.5. "
-    "Aplica lo simétrico a GIRO_BAJISTA_CONFIRMADO contra una tendencia 4H alcista (no vendas en el suelo de una vela expansiva; TP antes de la siguiente demanda). "
+    "1 vela de retroceso o pausa/consolidación que respete la EMA 9 o el soporte roto, y comprueba que el objetivo 2:1 queda antes de la siguiente zona de oferta de 1H/4H. "
+    "Aplica lo simétrico a GIRO_BAJISTA_CONFIRMADO contra una tendencia 4H alcista (no vendas en el suelo de una vela expansiva; objetivo 2:1 antes de la siguiente demanda). "
     "Si el par está en régimen RANGO / CHOPPY o marcado como EXTREMO_OFERTA / EXTREMO_DEMANDA (con ADX < 20), busca rechazos en los bordes del rango "
-    "(velas con mecha de rechazo o giro de RSI) y coloca el Take Profit 0.25 ATR antes de la zona opuesta del rango, sin exigir rupturas ni alineación de EMAs de tendencia. "
+    "(velas con mecha de rechazo o giro de RSI) con un stop ajustado detrás del borde: el objetivo será 1:1 y debe quedar al menos 0.2 ATR antes de la zona opuesta del rango. No exijas rupturas ni alineación de EMAs de tendencia. "
     "`confidence` es tu estimación honesta (0-100) de la probabilidad de que la operación alcance el objetivo antes que el stop; no la infles. "
     "{levels} "
     "Si hay REGLAS APRENDIDAS, tienen prioridad: si la operación incumple alguna, responde PASS e indica su número en `rule`. "
@@ -321,8 +350,11 @@ def _candles_txt(df: pd.DataFrame, i: int, n: int, has_volume: bool) -> str:
 
 async def stage2(kind: str, symbol: str, tf: str, cand: dict, m: dict, df, i: int, has_volume: bool, htf: dict, rules: list, ctx: dict, settings, usage_kind: str) -> dict:
     fixed = settings.atr_levels_enabled
-    lv = (f"El stop y el objetivo son FIJOS: SL a {settings.atr_sl_mult:g}×ATR y TP a {settings.atr_tp_mult:g}×ATR de la entrada; deja sl y tp en null y juzga la operación con esos niveles (excepción: en contratendencia contra 4H el stop sigue fijo pero el `tp` lo fijas tú)."
-          if fixed else "Propón `sl` y `tp` como precios: el stop detrás de la estructura (entre 0,5 y 4 ATR de la entrada) y el objetivo antes del siguiente obstáculo, con R:R ≥ 1.")
+    lv = ((f"El stop es FIJO: SL a {settings.atr_sl_mult:g}×ATR de la entrada; deja sl en null." if fixed else
+           "Propón `sl` como precio: el stop técnico detrás de la estructura (entre 0,5 y 4 ATR de la entrada); el sistema le suma un margen de seguridad.")
+          + f" El Take Profit NO lo fijas tú: el sistema lo calcula exactamente a {TREND_RR:g}× la distancia del stop final en tendencia, ruptura o contratendencia, y a "
+            f"{RANGE_RR:g}× en operaciones de rango (EXTREMO_OFERTA / EXTREMO_DEMANDA o régimen RANGO / CHOPPY); deja tp en null. Juzga la operación con ese objetivo: "
+            "da BUY o SELL solo si ves recorrido libre hasta él; esta regla prevalece sobre cualquier otra indicación de objetivos de este mensaje.")
     chat = _chat(DEEP_SYSTEM.format(market=MARKET[kind], tf=tf, levels=lv), usage_kind)
     rule_lines = "\n".join(f"{n}. {r['text']}" + (f" (solo {r['symbol']})" if r.get("symbol") else "") for n, r in enumerate(rules, 1))
     prompt = (
@@ -572,51 +604,38 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
     price = engine.market.tickers.get(symbol, {}).get("price") or m["price"]
     d = 1 if side == "long" else -1
     edge = cand.get("range_edge") if RANGE_SIDE.get(cand.get("range_edge")) == side else None
-    if edge:   # range trade: the target is the AI's when it stays inside the range, otherwise 0.25 ATR before the opposite zone
-        auto = range_target(m, side)
-        res = {**res, "tp": res["tp"] if res["tp"] and 0 < (res["tp"] - price) * d <= (auto - price) * d else auto}
-    sl, tp, source = levels(side, price, m["atr"], settings, res["sl"], res["tp"], engine.funnel_digits(symbol), SL_BUFFER_ATR if m.get("rich") else 0.0)
+    ranging = bool(edge or m.get("regime"))
+    rr = RANGE_RR if ranging else TREND_RR
+    dg = engine.funnel_digits(symbol)
+    sl, source = stop_level(side, price, m["atr"], settings, res["sl"], dg, SL_BUFFER_ATR if m.get("rich") else 0.0)
+    dist = (price - sl) * d
+    tp = price + d * rr * dist   # exact reward:risk from the final stop; the position size still comes from risk_per_trade and that stop
+    tp = tp if dg is None else round(tp, dg)
     counter = m.get("bias") not in (None, side)
-    if counter:   # against the 4H trend: the stop stays, the target is the AI's (before the first 4H/1H obstacle), never further than the normal one
-        d = 1 if side == "long" else -1
-        risk, reward = (price - sl) * d, ((res["tp"] or price) - price) * d
-        if reward < COUNTER_MIN_RR * risk:
-            why = f"{res['decision']} de contratendencia sin recorrido: " + (f"R:R {reward / risk:.2f} < {COUNTER_MIN_RR} hasta el objetivo de la IA" if res["tp"] else "la IA no fijó objetivo")
-            _note(engine, symbol, 2, "PASS", why, res["confidence"])
-            await _record(engine, cand, m, res, s1, tf, threshold, "CONTRA_4H", key, f"{why} (4H {m['mtf']['4h']['trend']})")
-            await engine.log("RISK", f"{symbol}: {why} · confianza {res['confidence']}% · 4H {m['mtf']['4h']['trend']}{tail}")
-            return 0
-        if reward < abs(tp - price):
-            dg = engine.funnel_digits(symbol)
-            tp, source = float(res["tp"]) if dg is None else round(float(res["tp"]), dg), "contra"
-    if edge and source != "contra":
-        risk, reward = (price - sl) * d, (res["tp"] - price) * d
-        if reward < MIN_RR * risk:
-            why = f"{res['decision']} de rango sin recorrido: R:R {reward / risk:.2f} < {MIN_RR} hasta 0.25 ATR antes de la zona opuesta"
-            _note(engine, symbol, 2, "PASS", why, res["confidence"])
-            await _record(engine, cand, m, res, s1, tf, threshold, "PASS", key, why)
-            await engine.log("RISK", f"{symbol}: {why} · confianza {res['confidence']}%{tail}")
-            return 0
-        if reward < abs(tp - price):
-            dg = engine.funnel_digits(symbol)
-            tp, source = float(res["tp"]) if dg is None else round(float(res["tp"]), dg), "rango"
+    why = rr_block(m, side, price, dist, rr, ranging)
+    if why:
+        why = f"{res['decision']} · PASS por {why}"
+        _note(engine, symbol, 2, "PASS", why, res["confidence"])
+        await _record(engine, cand, m, res, s1, tf, threshold, "PASS", key, why)
+        await engine.log("RISK", f"{symbol}: {why} · confianza {res['confidence']}%{tail}")
+        return 0
     approved = res["confidence"] > threshold
     if not approved and candle_key in engine.signal_keys:   # this candle already has its shadow trade: just report the new verdict
         _note(engine, symbol, 2, "SOMBRA", f"Confianza {res['confidence']}% ≤ {threshold}% · {res['reasoning']}", res["confidence"])
         await _record(engine, cand, m, res, s1, tf, threshold, "BAJA_CONFIANZA", key, "Reanálisis: la operación sombra de esta vela ya está abierta")
         await engine.log("AI_EVAL", f"{symbol} {res['decision']} · confianza {res['confidence']}% (umbral {threshold}%) → sigue sin ejecutarse · nuevo análisis al cierre de la próxima vela de 15 min · {res['reasoning'][:160]}{tail}")
         return 0
-    sig = {"side": side, "price": price, "sl": sl, "tp": tp, "strategy": STRATEGY, "atr": m["atr"], "score": 2, "key_ts": m["candle_ts"],
+    sig = {"side": side, "price": price, "sl": sl, "tp": tp, "strategy": STRATEGY, "atr": m["atr"], "score": 2, "key_ts": m["candle_ts"], "rr_target": rr,
            "reasons": [f"Filtro rápido: {cand['reason']}", f"Modelo potente ({res['confidence']}%): {res['reasoning']}"]
-                      + ([f"Contratendencia (4H {m['mtf']['4h']['trend']}): objetivo corto fijado por la IA"] if counter else []),
+                      + ([f"Contratendencia (4H {m['mtf']['4h']['trend']})"] if counter else []) + [f"Objetivo exacto {rr:g}:1" + (" (rango, sin cierre parcial)" if ranging else "")],
            "indicators": {k: m[k] for k in ("close", "ema20", "ema50", "ema200", "rsi", "macd_hist", "adx", "atr", "activity")}}
     if source == "atr":
-        sig["atr_levels"] = (settings.atr_sl_mult, settings.atr_tp_mult)
+        sig["atr_levels"] = (settings.atr_sl_mult, settings.atr_sl_mult * rr)
     signal = Signal(symbol=symbol, side=side, strategy=STRATEGY, timeframe=tf, price=price, sl=sl, tp=tp, score=2, reasons=sig["reasons"], indicators=sig["indicators"],
                     ai_decision="APROBADA" if approved else "BAJA_CONFIANZA", ai_confidence=res["confidence"], ai_min_confidence=threshold, ai_stage=2,
-                    ai_model=res["model"], ai_ms=res["ms"], ai_adjusted_sl=res["sl"], ai_adjusted_tp=res["tp"], ai_levels_applied=source == "ia",
+                    ai_model=res["model"], ai_ms=res["ms"], ai_adjusted_sl=res["sl"], ai_adjusted_tp=None, ai_levels_applied=source == "ia",
                     ai_reasoning=res["reasoning"], key=key,
-                    context={**ctx, "funnel": {"stage1": {"reason": cand["reason"], "model": s1["model"], "ms": s1["ms"]}, "levels": source, "counter_trend": counter, "range_edge": edge, "trend": m["trend"],
+                    context={**ctx, "funnel": {"stage1": {"reason": cand["reason"], "model": s1["model"], "ms": s1["ms"]}, "levels": source, "rr_target": rr, "range_trade": ranging, "counter_trend": counter, "range_edge": edge, "trend": m["trend"],
                                                "htf_tf": htf_tf, "mtf": {tf: h["trend"] for tf, h in (m.get("mtf") or {}).items()} or None, "activity_kind": m["activity_kind"], "demand": m["demand"], "supply": m["supply"]}})
     sid = str((await engine.db.signals.insert_one(signal.to_mongo())).inserted_id)
     head = f"{symbol} {res['decision']} · confianza {res['confidence']}% (umbral {threshold}%)"
@@ -626,7 +645,8 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
         engine.signal_keys.add(candle_key)
         await engine.funnel_shadow(sid, symbol, sig, settings, "BAJA_CONFIANZA", state["acc"], res["confidence"])
         return 1
-    await engine.log("AI_EVAL", f"{head} → APROBADA · {'CONTRATENDENCIA · SL fijo y TP corto de la IA' if source == 'contra' else 'TP antes de la zona opuesta' if source == 'rango' else 'SL/TP fijos por ATR' if source == 'atr' else 'SL/TP de la IA'} · {res['reasoning'][:200]}{tail}")
+    await engine.log("AI_EVAL", f"{head} → APROBADA · R:R {rr:g}:1 exacto{' (rango, sin cierre parcial)' if ranging else ''}{' · CONTRATENDENCIA' if counter else ''} · "
+                                f"SL {'fijo por ATR' if source == 'atr' else 'de la IA + margen'} · {res['reasoning'][:200]}{tail}")
     late = getattr(engine, "funnel_late_atr", None)
     if late:   # market entry: never chase a move that already left
         t = engine.market.tickers.get(symbol, {})

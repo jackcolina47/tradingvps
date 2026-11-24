@@ -19,6 +19,8 @@ export function buildFaq(bot) {
 
     { cat: "Embudo IA", q: "¿Qué modelos de IA usa?", tags: ["modelo", "haiku", "sonnet", "rápido", "potente"],
       a: "Dos: uno rápido y barato para el Paso 1 y uno potente para el Paso 2. En Ajustes → IA eliges el proveedor y el modelo potente; el rápido se elige solo (Automático) o lo fijas tú." },
+    { cat: "Riesgo", q: "¿Dónde se coloca el objetivo (TP)?", tags: ["tp", "objetivo", "2:1", "1:1", "rango", "parcial"],
+      a: "Lo calcula el bot a partir del stop final, no la IA. En tendencia, ruptura y contratendencia el objetivo queda exactamente a 2 veces la distancia del stop (2:1); si una zona de oferta o demanda contraria queda antes del 85 % de ese recorrido, la operación no se abre. En mercados en rango el objetivo es exactamente 1 vez la distancia del stop (1:1), debe caber con 0,2 ATR de margen antes del borde opuesto y la posición no hace cierre parcial. El tamaño se sigue calculando con el riesgo por operación." },
     { cat: "Embudo IA", q: "¿Cómo funciona el análisis multitemporal?", tags: ["4h", "1h", "15m", "multitemporal", "gemini"],
       a: "El modelo rápido (Gemini 3.5 Flash) mira primero 4H para la estructura y 1H para confirmar, y usa la temporalidad configurada del bot como gatillo de entrada. El modelo potente recibe ese mismo contexto junto con las velas de la temporalidad de entrada. Las operaciones contra la tendencia de 4H se permiten solo como rebote técnico: stop fijo, objetivo corto fijado por la IA antes de la primera EMA o zona de 4H/1H y R:R mínimo de 1,5. Para seguir el esquema 4H → 1H → 15m, pon la temporalidad del bot en 15m." },
     { cat: "Embudo IA", q: "¿Cada cuánto se vuelve a analizar un par?", tags: ["15 minutos", "reanálisis", "tokens", "coste", "reloj"],

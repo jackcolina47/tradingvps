@@ -317,50 +317,7 @@ class TestIntegrationTurn:
         assert eng.opened, "trade should have opened"
         assert eng.opened[0][0] == "BTCUSDT"
 
-    @pytest.mark.asyncio
-    async def test_buy_without_tp_blocked_as_contra_4h(self, monkeypatch):
-        """Counter-trend BUY with tp=None must land as CONTRA_4H signal (no open)."""
-        await _force_in_hours(monkeypatch)
-        eng = FakeEngine(mtf=True, funnel_rich=True)
-        _patch_turn_metrics(monkeypatch)
-        monkeypatch.setattr(funnel, "_mtf", _mtf_bearish2)
 
-        async def fake_stage1(kind, tf, rows, limit, usage_kind):
-            return {"candidates": [{"symbol": "BTCUSDT", "side": "long", "reason": "giro"}],
-                    "model": "fast", "ms": 1}
-
-        async def fake_stage2(kind, symbol, tf, cand, m, *a, **kw):
-            return {"decision": "BUY", "confidence": 80, "sl": 98.0, "tp": None,
-                    "rule": None, "reasoning": "x", "model": "deep", "ms": 1}
-
-        monkeypatch.setattr(funnel, "stage1", fake_stage1)
-        monkeypatch.setattr(funnel, "stage2", fake_stage2)
-        await funnel.run(eng, _settings())
-        assert not eng.opened
-        risk_logs = [t for lvl, t in eng.logs if lvl == "RISK"]
-        assert any("contratendencia sin recorrido" in t for t in risk_logs)
-
-    @pytest.mark.asyncio
-    async def test_buy_with_poor_rr_blocked_as_contra_4h(self, monkeypatch):
-        """R:R < 1.5 against 4H must be rejected as CONTRA_4H."""
-        await _force_in_hours(monkeypatch)
-        eng = FakeEngine(mtf=True, funnel_rich=True)
-        _patch_turn_metrics(monkeypatch)
-        monkeypatch.setattr(funnel, "_mtf", _mtf_bearish2)
-
-        async def fake_stage1(kind, tf, rows, limit, usage_kind):
-            return {"candidates": [{"symbol": "BTCUSDT", "side": "long", "reason": "giro"}],
-                    "model": "fast", "ms": 1}
-
-        async def fake_stage2(kind, symbol, tf, cand, m, *a, **kw):
-            # risk=2, tp=102 → reward=2, R:R=1.0 < 1.5
-            return {"decision": "BUY", "confidence": 80, "sl": 98.0, "tp": 102.0,
-                    "rule": None, "reasoning": "x", "model": "deep", "ms": 1}
-
-        monkeypatch.setattr(funnel, "stage1", fake_stage1)
-        monkeypatch.setattr(funnel, "stage2", fake_stage2)
-        await funnel.run(eng, _settings())
-        assert not eng.opened
 
     @pytest.mark.asyncio
     async def test_short_with_fast_cross_alcista_dropped_before_stage2(self, monkeypatch):

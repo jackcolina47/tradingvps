@@ -730,6 +730,14 @@ Petición explícita del usuario (sustituye a «bloquear contra 4H sin gastar IA
 ## Iteración 122 (2026-11) — MIN_VOLUME 0,8 → 0,55 (3 bots)
 - `funnel.MIN_VOLUME = 0.55` (la media de 20 velas queda inflada tras picos de volumen). Resto de stage0, vía de rango y giro sin cambios. Textos UI/docs actualizados. Tested: testing_agent iteration_108.
 
+## Iteración 123 (2026-11) — R:R exacto por régimen (3 bots)
+Decisión del usuario: contratendencia = 2:1 como tendencia (sustituye al TP corto de la IA con R:R ≥ 1,5 y al TP de rango «zona opuesta − 0,25 ATR»).
+- `funnel.stop_level` (SL de la IA + buffer, o ATR) y TP = `TREND_RR` 2,0 / `RANGE_RR` 1,0 × distancia del stop. Rango = `range_edge` del lado o `m["regime"]`.
+- `funnel.rr_block`: tendencia → zona contraria (TF de entrada o 4H) antes del 85 % del recorrido = PASS; rango → zona opuesta − 0,2 ATR debe cubrir el objetivo.
+- `Position.rr_target`; `engine.py` y `fx/engine_positions.py` saltan el cierre parcial si `rr_target == 1.0`. `sig["rr_target"]`, `context.funnel.rr_target/range_trade`; `by_setup` cuenta `range_trade` como rango.
+- Prompts: el modelo potente ya no fija TP. `funnel.levels()` queda sin uso en producción (solo tests antiguos): retirar. `atr_tp_mult` sin efecto en el embudo.
+- Tests: `tests/test_iter110_exact_rr.py`; `tests/conftest.py` neutraliza `rr_block` en tests antiguos (sus velas sintéticas tienen zonas a 0,5 ATR); eliminados 9 tests de las reglas de TP sustituidas.
+
 ### Pendiente
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.
