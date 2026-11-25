@@ -83,7 +83,7 @@ export default function EmaTestSettings({ form, set, meta, main = false, lab = f
           </div>
         </div>
       )}
-      {lab && (
+      {!main && (
         <div className="mt-3 rounded-sm border border-[#1E293B] bg-[#07090E]/60 p-2.5">
           <p className="text-sm text-slate-200">Cierre de vela al otro lado de la EMA 21 <span className="ml-1 rounded-sm bg-fuchsia-500/30 px-1 text-[9px] text-fuchsia-100">SIEMPRE ACTIVO</span></p>
           <p data-testid="ema-close-beyond-hint" className="text-[11px] text-slate-500">Con la operación abierta, si una vela cierra por debajo de la EMA 21 (en un largo) o por encima (en un corto), la posición se cierra sin esperar al cruce contrario. Una mecha que cruza la EMA 21 y vuelve no cierra la operación: solo cuenta el precio de cierre.</p>

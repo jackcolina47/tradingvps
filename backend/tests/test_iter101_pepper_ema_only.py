@@ -137,7 +137,8 @@ def test_close_beyond_ema21_exit_always_on():
     asyncio.run(run())
 
 
-def test_hotforex_keeps_its_optional_touch_exit():
+def test_hotforex_test_closes_on_candle_close_beyond_ema21():
+    """Iter124: same permanent rule in the HotForex «Test cruce EMA»; the old «toque» toggle no longer matters."""
     async def run():
         out = {}
         for on in (False, True):
@@ -146,11 +147,13 @@ def test_hotforex_keeps_its_optional_touch_exit():
             await e.db.positions.insert_one({"symbol": "EURUSD", "side": "long", "strategy": EMA_TEST, "exit_mode": "cross", "entry_price": 1.1, "qty": 0.1, "initial_qty": 0.1, "leverage": 100,
                                              "margin": 110.0, "sl": 1.09, "tp": 1.2, "initial_sl": 1.09, "atr": 0.002, "fees": 0.0, "mark_price": 1.1, "live": False,
                                              "opened_at": datetime.fromtimestamp(10 * H / 1000 + 60, tz=timezone.utc).isoformat()})
-            await e._exit_on_cross("EURUSD", _row_df(1.09, 1.11, 1.10, 1.11, close=1.095), 1, s)  # touched AND closed below the EMA21
+            await e._exit_on_cross("EURUSD", _row_df(1.09, 1.11, 1.10, 1.11, close=1.105), 1, s)  # wick touched the EMA21, closed back above: stays open
+            wick = await e.db.positions.count_documents({})
+            await e._exit_on_cross("EURUSD", _row_df(1.09, 1.11, 1.10, 1.11, close=1.095), 1, s)  # closed below the EMA21
             t = await e.db.trades.find_one({})
-            out[on] = (await e.db.positions.count_documents({}), (t or {}).get("reason"))
+            out[on] = (wick, await e.db.positions.count_documents({}), (t or {}).get("reason"))
             await db.client.drop_database(db.name)
-        assert out == {False: (1, None), True: (0, TOUCH_REASON)}
+        assert out == {False: (1, 0, CLOSE_EMA_REASON), True: (1, 0, CLOSE_EMA_REASON)}
     asyncio.run(run())
 
 
@@ -180,7 +183,8 @@ def test_backtest_close_beyond_ema21_and_crypto_costs():
     pep, hfm_off, hfm_on = run(True), run(False), run(False, True)
     reasons = lambda r: {t["reason"] for t in r["trades"]}  # noqa: E731
     assert CLOSE_EMA_REASON in reasons(pep) and TOUCH_REASON not in reasons(pep)
-    assert hfm_off["trades"] and not {CLOSE_EMA_REASON, TOUCH_REASON} & reasons(hfm_off) and TOUCH_REASON in reasons(hfm_on) and CLOSE_EMA_REASON not in reasons(hfm_on)
+    for r in (hfm_off, hfm_on):
+        assert CLOSE_EMA_REASON in reasons(r) and TOUCH_REASON not in reasons(r)
     c = PEPPERSTONE.costs("razor")
     assert c.side_cost("ADAUSDT", 1.0, {}) == pytest.approx(SPECS["ADAUSDT"]["spread"] / 2 * 1000) and c.side_cost("EURUSD", 1.0, {}) > 3.5
 

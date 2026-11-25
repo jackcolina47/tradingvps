@@ -755,3 +755,5 @@
 - Frontend: `lib/api.js` `setMoney`/`moneySymbol` (USD $, GBP £, EUR €…); `fmtUsd`/`fmtSignedUsd` usan el símbolo del panel abierto; `FxDashboard` lo fija con `account.currency`; selector de bots con la moneda de cada bot.
 - Pendiente/conocido: el backtest y el plan de crecimiento siguen simulando en USD aunque se muestren con el símbolo de la cuenta; el PnL «estimado» (cuando el bróker no confirma el cierre) y las sombras se calculan en USD.
 - Tests: `test_iter123_account_currency.py` (3). Verificado en preview con el puente falso en GBP (paneles con £; HotForex y Bybit siguen en $).
+
+- Iter 124: HotForex «Test cruce EMA» con la misma regla permanente `CIERRE_EMA21` (vela que CIERRA al otro lado de la EMA21) en motor y backtest; el «toque» (`ema_touch_exit_enabled`, `TOQUE_EMA`) queda retirado en todos los bots (solo etiqueta de histórico). Tras este cierre no se invierte; el cruce contrario sigue invirtiendo. UI: aviso «SIEMPRE ACTIVO» también en HotForex.
