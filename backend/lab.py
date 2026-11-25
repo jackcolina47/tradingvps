@@ -98,7 +98,8 @@ class LabEngine(TradingEngine):
             self._last_snapshot = time.time()
             await self.db.equity.insert_one({"ts": now_iso(), "equity": s["equity"], "balance": s["balance"], "net_deposits": 0.0})
 
-    candle_sync, ai_gate, close_beyond_ema21 = False, False, True  # only the test cruce EMA: fixed-interval scan
+    candle_sync, candle_only, candle_delay = True, True, 7  # one scan per closed candle of the lab timeframe, 7 s after the close (entries and exits are candle-close decisions)
+    ai_gate, close_beyond_ema21 = False, True
 
     async def scan_once(self, settings: Settings, normal: bool = True):
         self.scanning = True
@@ -108,7 +109,7 @@ class LabEngine(TradingEngine):
         try:
             for symbol in list(dict.fromkeys([*settings.ema_test_symbols, *open_test])):
                 try:
-                    df = build_df(await self.market.fetch_klines(symbol, settings.timeframe, 300))
+                    df = build_df(await self.market.fetch_klines(symbol, settings.timeframe, 300, cache_sec=5))  # never a copy cached before the candle closed
                     i = len(df) - 2
                     row = df.iloc[i]
                     if self.running:
@@ -184,6 +185,7 @@ def build_router(lab: LabEngine, require_auth) -> APIRouter:
 
     @r.post("/bot/scan")
     async def bot_scan():
+        lab.scan_full = True
         lab.scan_event.set()
         return {"ok": True}
 

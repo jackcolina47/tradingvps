@@ -115,7 +115,7 @@ export default function LabDashboard({ onLogout, bot = "lab", suffix = "" }) {
               </TabsContent>
             </Tabs>
           </Panel>
-          <SettingsPanel testOnly settings={data.settings} meta={meta} hide={["max_positions", "ai_min_confidence", "min_rr", "ai_enabled", "ai_funnel_enabled", "breakeven_enabled", "trailing_enabled", "htf_filter"]}
+          <SettingsPanel testOnly settings={data.settings} meta={meta} hide={["scan_interval_sec", "max_positions", "ai_min_confidence", "min_rr", "ai_enabled", "ai_funnel_enabled", "breakeven_enabled", "trailing_enabled", "htf_filter"]}
             onSave={(body) => act(() => http.put("/settings", body), "Ajustes del laboratorio guardados")} />
         </div>
         <Terminal logs={data.logs} onClear={() => act(() => http.delete("/logs"))} />

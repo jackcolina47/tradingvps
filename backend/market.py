@@ -16,29 +16,29 @@ CANDLE_DELAY_SEC = 8   # entries are scanned this long after each candle close, 
 TEST_SCAN_SEC = 60     # cadence of the «Test cruce EMA» scan, which is not tied to the candle clock
 
 
-def next_candle_scan(tf: str, now: float) -> float:
+def next_candle_scan(tf: str, now: float, delay: float = CANDLE_DELAY_SEC) -> float:
     """Next UTC-aligned candle close of `tf` + CANDLE_DELAY_SEC (15m → hh:00:08, hh:15:08…; 4h → 00:00:08, 04:00:08… UTC)."""
     sec = TF_SECONDS[tf]
-    due = now - now % sec + CANDLE_DELAY_SEC
+    due = now - now % sec + delay
     return due if now < due else due + sec
 
 
 async def candle_scan_loop(engine):
     """Entry scanner shared by every bot. Normal strategies (and their AI calls) run once per closed candle, CANDLE_DELAY_SEC after the close;
-    the «Test cruce EMA» keeps its own fixed cadence. SL/TP/trailing live in the independent monitor loop."""
+    the «Test cruce EMA» keeps its own fixed cadence, except in engines with `candle_only` (Bybit Labs: one scan per closed candle, `candle_delay` seconds after it). SL/TP/trailing live in the independent monitor loop."""
     await asyncio.sleep(2)
     tf, due, first = None, 0.0, True
     while True:
         settings = await engine.get_settings()
         now = time.time()
-        sync = engine.candle_sync
+        sync, delay, only = engine.candle_sync, getattr(engine, "candle_delay", CANDLE_DELAY_SEC), getattr(engine, "candle_only", False)
         if settings.timeframe != tf:
-            tf, due = settings.timeframe, next_candle_scan(settings.timeframe, now)
+            tf, due = settings.timeframe, next_candle_scan(settings.timeframe, now, delay)
         normal = not sync or engine.scan_full or now >= due
         if now >= due:
-            due = next_candle_scan(tf, now)
+            due = next_candle_scan(tf, now, delay)
         engine.scan_full = False
-        test = not sync or settings.ema_test_enabled or await engine.db.positions.count_documents({"exit_mode": "cross"}) > 0
+        test = not only and (not sync or settings.ema_test_enabled or await engine.db.positions.count_documents({"exit_mode": "cross"}) > 0)
         if normal or test or first:
             try:
                 await engine.scan_once(settings, normal)
