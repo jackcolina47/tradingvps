@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Zap, Landmark, Flame, FlaskConical, ArrowRight, LogOut, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { api, setApiBase, fmtUsd, fmtPct, pnlClass } from "@/lib/api";
+import { api, setApiBase, fmtUsd, fmtPct, pnlClass, fmtDateTime } from "@/lib/api";
 
 const BOTS = [
   {
@@ -23,7 +23,7 @@ const BOTS = [
     key: "pepper", path: "/pepperstone", icon: Flame, accent: "teal", overview: "/pepper/overview",
     title: <>Pepperstone <span className="text-teal-300">AI</span> trading</>,
     subtitle: "Forex y metales · Pepperstone vía puente MT propio (MT4 / MT5)",
-    desc: "Una sola estrategia: Cruce EMA 9 y 21 Personalizado, con salida en el cruce contrario y SL por ATR. Sin IA en las entradas. Forex sin JPY ni CHF, metales y 14 criptomonedas CFD.",
+    desc: "Una sola estrategia: Cruce EMA 9 y 21 Personalizado, con salida en el cruce contrario y SL por ATR. Sin IA en las entradas. Forex sin JPY ni CHF y metales.",
     tags: ["Cruce EMA 9 y 21", "Forex · Metales · Cripto", "Razor / Standard"],
   },
   {
@@ -48,7 +48,26 @@ const ACCENT = {
   teal: { ring: "hover:border-teal-400/60 hover:shadow-[0_0_0_1px_rgba(45,212,191,0.35),0_30px_80px_-30px_rgba(45,212,191,0.35)]", mark: "bg-teal-400 text-[#07090E]", btn: "bg-teal-400 text-[#07090E] hover:bg-teal-300", tag: "border-teal-400/30 text-teal-300" },
 };
 
-function Status({ s }) {
+const BRIDGE = {
+  ok: { dot: "bg-emerald-400", text: "text-emerald-300", label: "activo y conectado" },
+  broker_off: { dot: "bg-amber-400", text: "text-amber-300", label: "activo · sin conexión con el bróker" },
+  terminal_off: { dot: "bg-rose-400", text: "text-rose-300", label: "detenido (sin latido)" },
+  unreachable: { dot: "bg-rose-400", text: "text-rose-300", label: "puente sin respuesta" },
+};
+
+function BridgeStatus({ b, botKey }) {
+  const v = BRIDGE[b.status] || BRIDGE.unreachable;
+  return (
+    <p data-testid={`bot-card-bridge-${botKey}`} title={b.detail || undefined} className="mt-1.5 flex flex-wrap items-center gap-x-2 font-mono text-[10px] text-slate-400">
+      <span className={`h-1.5 w-1.5 rounded-full ${v.dot}`} />
+      <span>Terminal {b.platform ? b.platform.toUpperCase() : "MetaTrader"} <span className="text-slate-500">({b.account_id})</span></span>
+      <span data-testid={`bot-card-bridge-state-${botKey}`} className={v.text}>{v.label}</span>
+      <span data-testid={`bot-card-bridge-beat-${botKey}`} className="text-slate-500">· último latido {b.heartbeat_at ? fmtDateTime(b.heartbeat_at) : "nunca"}</span>
+    </p>
+  );
+}
+
+function Status({ s, botKey }) {
   if (!s) return <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-slate-500"><Loader2 className="h-3 w-3 animate-spin" /> Cargando estado</span>;
   if (s.error) return <span data-testid="bot-card-status-error" className="font-mono text-[10px] uppercase tracking-wider text-rose-400">Sin respuesta del motor</span>;
   return (
@@ -61,6 +80,7 @@ function Status({ s }) {
       <span className="text-slate-400">{s.open_positions} {s.open_positions === 1 ? "posición" : "posiciones"}</span>
       {s.mode && <span className={`rounded-sm border px-1.5 py-px text-[9px] uppercase ${s.mode === "REAL" ? "border-rose-500/50 text-rose-300" : "border-[#1E293B] text-slate-400"}`}>{s.mode}</span>}
       {s.market_open === false && <span className="rounded-sm border border-slate-600 px-1.5 py-px text-[9px] uppercase text-slate-400">Mercado cerrado</span>}
+      {s.bridge && <div className="basis-full"><BridgeStatus b={s.bridge} botKey={botKey} /></div>}
     </div>
   );
 }
@@ -78,6 +98,8 @@ export default function BotSelector({ onLogout }) {
       setStatus({ crypto: v(c), fx: v(f), pepper: v(p), lab: v(l), lab4h: v(l4) });
     };
     load();
+    const t = setInterval(load, 30000);  // keeps the terminal status and last heartbeat fresh
+    return () => clearInterval(t);
   }, []);
 
   return (
@@ -116,7 +138,7 @@ export default function BotSelector({ onLogout }) {
                     {b.tags.map((t) => <span key={t} className={`rounded-sm border px-2 py-0.5 font-mono text-[10px] ${a.tag}`}>{t}</span>)}
                   </div>
                   <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-[#1E293B] pt-4">
-                    <Status s={status[b.key]} />
+                    <Status s={status[b.key]} botKey={b.key} />
                     <span className={`inline-flex h-8 items-center rounded-sm px-3 font-mono text-[11px] font-bold uppercase tracking-wider ${a.btn}`}>Entrar</span>
                   </div>
                 </div>

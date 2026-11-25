@@ -56,6 +56,7 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
         self.analysis = {}
         self.signal_keys = maintenance.RecentKeys()
         self._trade_totals = None
+        self._bridge_view = None
         self.scan_event = asyncio.Event()
         self.tasks = []
         self._last_snapshot = 0.0
@@ -97,9 +98,34 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
             return None
         return broker_health.summary(self.hfm, self.cfg.hfm_alert_after_sec if self.cfg else None)
 
+    async def bridge_status(self):
+        """Terminal behind the bridge, for the home page (any mode): cached 20 s, never waits more than 4 s."""
+        if not self.broker:
+            return None
+        c, now = self._bridge_view, time.time()
+        if c and now - c["ts"] < 20:
+            return c["view"]
+        prev = (c or {}).get("view") or {}
+        view = {"account_id": self.broker.account_id, "status": "unreachable", "platform": prev.get("platform", ""), "heartbeat_at": prev.get("heartbeat_at"), "detail": ""}
+        try:
+            acc = await asyncio.wait_for(self.broker.api.account(self.broker.account_id), 4)
+            up, conn = acc.get("state") == "DEPLOYED", acc.get("connectionStatus") == "CONNECTED"
+            beat = acc.get("heartbeatAt") or (now if up else None)  # older bridge versions do not report it: use the moment we saw it alive
+            view.update(status="ok" if up and conn else "broker_off" if up else "terminal_off", platform=str(acc.get("platform") or ""), detail=acc.get("detail") or "",
+                        heartbeat_at=datetime.fromtimestamp(beat, tz=timezone.utc).isoformat() if beat else view["heartbeat_at"])
+        except Exception as e:
+            view["detail"] = getattr(e, "msg", None) or str(e)[:160] or "el puente no respondió en 4 s"
+        self._bridge_view = {"ts": now, "view": view}
+        return view
+
+    def pnl_ccy(self, symbol: str, side: str, entry: float, price: float, lots: float, tickers: dict) -> float:
+        """PnL the engine computes itself (paper, partial closes, closes the broker has not confirmed yet) in the account currency."""
+        return risk.pnl(symbol, side, entry, price, lots, tickers) / self.fxr()
+
     def fxr(self) -> float:
         """USD per unit of the account currency (1.0 in paper or for USD accounts): backtests, optimizer and growth plan run in the account currency."""
-        return risk.account_usd(self.ccy, self.market.tickers)
+        ccy = self.ccy
+        return 1.0 if ccy == "USD" else risk.account_usd(ccy, self.market.tickers)
 
     @property
     def mode_label(self) -> str:
@@ -108,7 +134,8 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
     @property
     def ccy(self) -> str:
         """Currency of the money figures: the real account's deposit currency in REAL mode (read from the terminal), USD in paper."""
-        return (self.cfg.hfm_currency if self.live and self.cfg and self.cfg.hfm_currency else "USD").upper()
+        cfg = getattr(self, "cfg", None)
+        return (cfg.hfm_currency if getattr(self, "live", False) and cfg and cfg.hfm_currency else "USD").upper()
 
     @property
     def env(self) -> str:

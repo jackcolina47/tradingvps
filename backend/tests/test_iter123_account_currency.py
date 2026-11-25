@@ -67,3 +67,54 @@ def test_backtest_runs_in_the_account_currency():
     assert tg["lots"] == pytest.approx(tu["lots"] * 1.25, abs=0.011)
     assert tg["pnl"] == pytest.approx(tu["pnl"] * (tg["lots"] / tu["lots"]) / 1.25, abs=0.02)
     assert tg["r"] == pytest.approx(tu["r"], abs=0.02) and gbp["return_pct"] == pytest.approx(usd["return_pct"], abs=0.3)
+
+
+def test_shadows_and_estimated_pnl_in_account_currency():
+    """Iter127: with a GBP account (1 GBP = 1.25 USD) shadows and engine-computed PnL are in pounds."""
+    from fx import shadow as fx_shadow
+    from datetime import datetime, timezone
+
+    async def run():
+        e, db = await mk("shccy", PEPPERSTONE)
+        e.cfg = NS(hfm_currency="GBP", trading_mode="live", hfm_alert_after_sec=180, mt_server="")
+        e.market.tickers = dict(TICK)
+        s = await e.get_settings()
+        sig = {"side": "long", "strategy": "ema_test", "price": 1.1, "sl": 1.095, "tp": 1.11, "atr": 0.002}
+        acc = {"equity": 10000.0, "available": 10000.0}
+        usd = await fx_shadow.open_shadow(e, "s1", "EURUSD", sig, s, "BLOQUEADA", acc)
+        e.live = True
+        gbp = await fx_shadow.open_shadow(e, "s2", "EURUSD", sig, s, "BLOQUEADA", acc)
+        assert e.fxr() == 1.25 and (usd.get("fxr"), usd["currency"]) == (1.0, "USD") and (gbp["fxr"], gbp["currency"]) == (1.25, "GBP")
+        assert gbp["qty"] == pytest.approx(usd["qty"] * 1.25, abs=0.011) and gbp["margin"] == pytest.approx(usd["margin"] * (gbp["qty"] / usd["qty"]) / 1.25, rel=0.01)
+        assert e.pnl_ccy("EURUSD", "long", 1.1, 1.11, 1.0, TICK) == pytest.approx(risk.pnl("EURUSD", "long", 1.1, 1.11, 1.0, TICK) / 1.25)
+        await fx_shadow.monitor_shadows(e, {"EURUSD": {"price": 1.111}}, s, datetime.now(timezone.utc))
+        rows = {t["signal_id"]: t async for t in e.db.shadow_trades.find()}
+        await db.client.drop_database(db.name)
+        assert rows["s1"]["reason"] == rows["s2"]["reason"] == "TP"
+        assert rows["s2"]["pnl"] == pytest.approx(rows["s1"]["pnl"] * (gbp["qty"] / usd["qty"]) / 1.25, rel=0.02)  # same trade, bigger lots, valued in pounds
+    asyncio.run(run())
+
+
+def test_bridge_status_view():
+    async def run():
+        e, db = await mk("brst", PEPPERSTONE)
+        await db.client.drop_database(db.name)
+        assert await e.bridge_status() is None  # bridge not configured
+        calls = []
+
+        class Api:
+            async def account(self, acc):
+                calls.append(acc)
+                if len(calls) == 3:
+                    raise RuntimeError("boom")
+                return {"state": "DEPLOYED", "connectionStatus": "CONNECTED" if len(calls) == 1 else "DISCONNECTED", "platform": "mt5", "heartbeatAt": 1_700_000_000}
+        e.broker = NS(api=Api(), account_id="pepperstone_v1")
+        v = await e.bridge_status()
+        assert (v["status"], v["platform"], v["account_id"]) == ("ok", "mt5", "pepperstone_v1") and v["heartbeat_at"].startswith("2023-11-14T22:13:20")
+        assert await e.bridge_status() == v and len(calls) == 1  # cached
+        e._bridge_view["ts"] = 0
+        assert (await e.bridge_status())["status"] == "broker_off"
+        e._bridge_view["ts"] = 0
+        v = await e.bridge_status()
+        assert v["status"] == "unreachable" and v["heartbeat_at"].startswith("2023-11-14") and "boom" in v["detail"]  # keeps the last heartbeat seen
+    asyncio.run(run())

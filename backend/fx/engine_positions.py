@@ -32,7 +32,7 @@ class PositionsMixin:
                                f"{p.symbol}: SL de seguridad del test cruce EMA alcanzado ({fmt_price(p.symbol, p.sl)}) · movimiento violento antes del cierre de vela")
                 await self.close_position(p.id, p.sl, self._ema_sl_reason(p))
                 return
-            updates.update(mark_price=price, unrealized_pnl=round(risk.pnl(p.symbol, p.side, p.entry_price, price, p.qty, tickers), 4))
+            updates.update(mark_price=price, unrealized_pnl=round(self.pnl_ccy(p.symbol, p.side, p.entry_price, price, p.qty, tickers), 4))
             if self.profile.ema_only and not rollover:
                 await self._ema_exits(p, price, rules, updates)
             if not rollover and ema_partial_due(rules, p.side, p.entry_price, p.atr, price, p.partial_done):
@@ -43,12 +43,12 @@ class PositionsMixin:
                     return
                 if part > 0:
                     fee = risk.spread_cost(p.symbol, part, tickers)
-                    gross = risk.pnl(p.symbol, p.side, p.entry_price, price, part, tickers)
+                    gross = self.pnl_ccy(p.symbol, p.side, p.entry_price, price, part, tickers)
                     net = gross - fee
                     await self.db.account.update_one({"_id": "main"}, {"$inc": {"balance": net}})
                     updates.update(qty=round(p.qty - part, 8), margin=round(p.margin * (p.qty - part) / p.qty, 6), fees=round(p.fees + fee, 6),
                                    partial_gross=round(p.partial_gross + gross, 6), partial_fees=round(p.partial_fees + fee, 6), initial_qty=p.initial_qty or p.qty,
-                                   unrealized_pnl=round(risk.pnl(p.symbol, p.side, p.entry_price, price, p.qty - part, tickers), 4))
+                                   unrealized_pnl=round(self.pnl_ccy(p.symbol, p.side, p.entry_price, price, p.qty - part, tickers), 4))
                     p.qty = updates["qty"]
                 updates.update(partial_done=True, sl=be, breakeven=True)
                 await self._announce_ema_partial(p, part, price, net, be, rules)
@@ -66,18 +66,18 @@ class PositionsMixin:
             await self.db.positions.update_one({"_id": ObjectId(p.id)}, {"$set": updates})
             await self.close_position(p.id, price, "TIEMPO")
             return
-        updates.update(mark_price=price, unrealized_pnl=round(risk.pnl(p.symbol, p.side, p.entry_price, price, p.qty, tickers), 4))
+        updates.update(mark_price=price, unrealized_pnl=round(self.pnl_ccy(p.symbol, p.side, p.entry_price, price, p.qty, tickers), 4))
         if rules["partial_tp_enabled"] and not p.partial_done and p.mfe_r >= rules["partial_tp_r"] and not rollover:
             part = risk.partial_lots(p.qty, rules["partial_tp_pct"])
             if part > 0 and not await maintenance.claim_partial(self.db, ObjectId(p.id)):
                 return
             if part > 0:
                 fee = risk.spread_cost(p.symbol, part, tickers)
-                gross = risk.pnl(p.symbol, p.side, p.entry_price, price, part, tickers)
+                gross = self.pnl_ccy(p.symbol, p.side, p.entry_price, price, part, tickers)
                 await self.db.account.update_one({"_id": "main"}, {"$inc": {"balance": gross - fee}})
                 updates.update(qty=round(p.qty - part, 8), margin=round(p.margin * (p.qty - part) / p.qty, 6), fees=round(p.fees + fee, 6), partial_done=True,
                                partial_gross=round(p.partial_gross + gross, 6), partial_fees=round(p.partial_fees + fee, 6), initial_qty=p.initial_qty or p.qty,
-                               unrealized_pnl=round(risk.pnl(p.symbol, p.side, p.entry_price, price, p.qty - part, tickers), 4))
+                               unrealized_pnl=round(self.pnl_ccy(p.symbol, p.side, p.entry_price, price, p.qty - part, tickers), 4))
                 p.qty = updates["qty"]
                 await self._announce_partial(p, part, price, gross - fee, rules)
             else:
@@ -112,14 +112,14 @@ class PositionsMixin:
             else:
                 try:
                     fee = abs((await self.broker.close_partial(p.order_id, part, p.link_id)).get("commission") or 0) if p.live else risk.spread_cost(p.symbol, part, tickers)
-                    gross = risk.pnl(p.symbol, p.side, p.entry_price, price, part, tickers)
+                    gross = self.pnl_ccy(p.symbol, p.side, p.entry_price, price, part, tickers)
                     if not p.live:
                         if not await maintenance.claim_partial(self.db, ObjectId(p.id)):
                             return
                         await self.db.account.update_one({"_id": "main"}, {"$inc": {"balance": gross - fee}})
                     rest = round(p.qty - part, 8)
                     updates.update(qty=rest, margin=round(p.margin * rest / p.qty, 6), partial_gross=round(p.partial_gross + gross, 6), partial_fees=round(p.partial_fees + fee, 6),
-                                   initial_qty=p.initial_qty or p.qty, **({} if p.live else {"fees": round(p.fees + fee, 6), "unrealized_pnl": round(risk.pnl(p.symbol, p.side, p.entry_price, price, rest, tickers), 4)}))
+                                   initial_qty=p.initial_qty or p.qty, **({} if p.live else {"fees": round(p.fees + fee, 6), "unrealized_pnl": round(self.pnl_ccy(p.symbol, p.side, p.entry_price, price, rest, tickers), 4)}))
                     p.qty = rest
                     msg = f"cerrado {pct:g}% ({part:.2f} lotes) @ {f(price)} a +{k:g}×ATR · PnL {gross - fee:+.2f} {self.ccy} · resto {rest:.2f} lotes"
                     await self.log("ORDER", f"PARCIAL {tag}{p.side.upper()} {p.symbol} · {msg}")
@@ -163,7 +163,7 @@ class PositionsMixin:
             if part > 0:
                 try:
                     r = await self.broker.close_partial(p.order_id, part, p.link_id)
-                    gross = risk.pnl(p.symbol, p.side, p.entry_price, price, part, self.market.tickers)
+                    gross = self.pnl_ccy(p.symbol, p.side, p.entry_price, price, part, self.market.tickers)
                     updates.update(qty=round(p.qty - part, 8), margin=round(p.margin * (p.qty - part) / p.qty, 6), partial_done=True,
                                    partial_gross=round(p.partial_gross + gross, 6), partial_fees=round(p.partial_fees + abs(r.get("commission") or 0), 6),
                                    initial_qty=p.initial_qty or p.qty)
@@ -266,7 +266,7 @@ class PositionsMixin:
             if part > 0:
                 try:
                     r = await self.broker.close_partial(p.order_id, part, p.link_id)
-                    gross = risk.pnl(p.symbol, p.side, p.entry_price, price, part, self.market.tickers)
+                    gross = self.pnl_ccy(p.symbol, p.side, p.entry_price, price, part, self.market.tickers)
                     updates.update(qty=round(p.qty - part, 8), margin=round(p.margin * (p.qty - part) / p.qty, 6), partial_done=True,
                                    partial_gross=round(p.partial_gross + gross, 6), partial_fees=round(p.partial_fees + abs(r.get("commission") or 0), 6),
                                    initial_qty=p.initial_qty or p.qty)
@@ -311,7 +311,7 @@ class PositionsMixin:
                 logger.warning(f"hfm deals {p.symbol}: {e}")
             price = (cr or {}).get("exit") or p.mark_price
             fees = cr["fees"] if cr else p.fees + p.partial_fees
-            net = cr["pnl"] if cr else risk.pnl(p.symbol, p.side, p.entry_price, price, p.qty, self.market.tickers) + p.partial_gross - p.fees - p.partial_fees
+            net = cr["pnl"] if cr else self.pnl_ccy(p.symbol, p.side, p.entry_price, price, p.qty, self.market.tickers) + p.partial_gross - p.fees - p.partial_fees
             reason = (cr or {}).get("reason") or ("SL" if p.exit_mode == "cross" else "TP" if abs(price - p.tp) <= abs(price - p.sl) else ("TRAILING" if p.breakeven else "SL"))
             if reason == "SL" and p.breakeven:
                 reason = self._ema_sl_reason(p) if p.exit_mode == "cross" else "TRAILING"
@@ -528,7 +528,7 @@ class PositionsMixin:
                     logger.warning(f"hfm deals {p.symbol}: {e}")
                 price = (cr or {}).get("exit") or tickers.get(p.symbol, {}).get("price") or p.mark_price
                 fees = cr["fees"] if cr else p.fees + p.partial_fees
-                net = cr["pnl"] if cr else risk.pnl(p.symbol, p.side, p.entry_price, price, p.qty, tickers) + p.partial_gross - p.fees - p.partial_fees
+                net = cr["pnl"] if cr else self.pnl_ccy(p.symbol, p.side, p.entry_price, price, p.qty, tickers) + p.partial_gross - p.fees - p.partial_fees
                 await self.db.positions.delete_one({"_id": ObjectId(pos_id)})
                 trade = await self._record_trade(p, price, net, fees, reason)
                 estimated = cr is None
@@ -536,7 +536,7 @@ class PositionsMixin:
                 await self.db.positions.delete_one({"_id": ObjectId(pos_id)})
                 price = price or tickers.get(p.symbol, {}).get("price") or p.mark_price
                 exit_fee = risk.spread_cost(p.symbol, p.qty, tickers)
-                gross = risk.pnl(p.symbol, p.side, p.entry_price, price, p.qty, tickers)
+                gross = self.pnl_ccy(p.symbol, p.side, p.entry_price, price, p.qty, tickers)
                 net = gross + p.partial_gross - p.fees - exit_fee
                 await self.db.account.update_one({"_id": "main"}, {"$inc": {"balance": gross - exit_fee}})
                 trade = await self._record_trade(p, price, net, p.fees + exit_fee, reason)

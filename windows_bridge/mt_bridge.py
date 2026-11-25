@@ -234,6 +234,13 @@ class Mt4Driver(Driver):
     def _learn_clock(self):
         self.heartbeat()
 
+    def last_beat(self):
+        """UTC epoch of the EA's last status.json write (None if it never wrote one)."""
+        try:
+            return int((self.dir / "status.json").stat().st_mtime)
+        except OSError:
+            return None
+
     def ea_alive(self) -> bool:
         """status.json exists and the EA refreshed it less than EA_MAX_AGE seconds ago."""
         try:
@@ -301,7 +308,7 @@ class Mt4Driver(Driver):
 
     def status(self) -> dict:
         hb = self.heartbeat()
-        base = {"_id": self.id, "platform": "mt4", "type": "bridge", "reliability": "own", "region": "vps-windows"}
+        base = {"_id": self.id, "platform": "mt4", "type": "bridge", "reliability": "own", "region": "vps-windows", "heartbeatAt": self.last_beat()}
         if not hb:
             return {**base, "state": "UNDEPLOYED", "connectionStatus": "DISCONNECTED", "detail": "El Expert Advisor no escribe su latido: abre el terminal MT4, activa Algo Trading y arrastra HFM_Bridge_EA a un gráfico"}
         return {**base, "state": "DEPLOYED", "connectionStatus": "CONNECTED" if hb.get("connected") else "DISCONNECTED", "login": str(hb.get("login", "")), "server": hb.get("server", ""),
@@ -513,7 +520,7 @@ class Mt5Core:
         except Fault as e:
             return {"state": "UNDEPLOYED", "connectionStatus": "DISCONNECTED", "detail": e.detail}
         ai = self.mt5.account_info()
-        return {"state": "DEPLOYED", "connectionStatus": "CONNECTED" if ti.connected and ai else "DISCONNECTED", "login": str(ai.login) if ai else "", "server": ai.server if ai else "",
+        return {"state": "DEPLOYED", "heartbeatAt": int(time.time()), "connectionStatus": "CONNECTED" if ti.connected and ai else "DISCONNECTED", "login": str(ai.login) if ai else "", "server": ai.server if ai else "",
                 "broker": ai.company if ai else "", "tradeAllowed": bool(ti.trade_allowed and ai and ai.trade_allowed and ai.trade_expert),
                 "detail": "" if ti.connected else "Terminal MT5 sin conexión con el servidor del bróker"}
 

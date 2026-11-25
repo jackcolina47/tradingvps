@@ -167,7 +167,7 @@ def register(router, engine, store, news):
     async def overview():
         acc = await engine.account_summary()
         return {"running": engine.running, "mode": engine.mode_label, "equity": acc["equity"], "currency": acc["currency"], "total_return_pct": acc["total_return_pct"],
-                "open_positions": acc["open_positions"], "market_open": market_status()["open"]}
+                "open_positions": acc["open_positions"], "market_open": market_status()["open"], "bridge": await engine.bridge_status()}
 
     @router.get("/settings")
     async def get_settings():
