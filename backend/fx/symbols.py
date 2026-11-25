@@ -30,8 +30,8 @@ SPECS.update({f"{c}USDT": _crypto(c, n, k, d, p) for c, n, k, d, p in (
     ("LINK", "Chainlink", 10, 3, 15), ("ONDO", "Ondo", 1000, 4, 0.8), ("SOL", "Solana", 10, 2, 150), ("SUI", "Sui", 100, 4, 3), ("XRP", "XRP", 100, 4, 2),
     ("NEAR", "NEAR Protocol", 100, 3, 4), ("LTC", "Litecoin", 10, 2, 90), ("ARB", "Arbitrum", 1000, 4, 0.5), ("UNI", "Uniswap", 100, 3, 8))})
 CRYPTO = [s for s in SPECS if SPECS[s].get("crypto")]
-# Pepperstone: no JPY / CHF pairs, plus AUD crosses and crypto CFDs
-PEPPER_SYMBOLS = [s for s in SPECS if not {"JPY", "CHF"} & {SPECS[s]["base"], SPECS[s]["quote"]}]
+# Pepperstone: no JPY / CHF pairs, plus AUD crosses. No crypto CFDs (not offered to UK accounts); their specs stay only so stored history still renders.
+PEPPER_SYMBOLS = [s for s in SPECS if not {"JPY", "CHF"} & {SPECS[s]["base"], SPECS[s]["quote"]} and s not in CRYPTO]
 
 
 def is_crypto(symbol: str) -> bool:

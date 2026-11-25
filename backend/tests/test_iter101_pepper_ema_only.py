@@ -61,7 +61,8 @@ def quiet(monkeypatch):
 def test_symbol_lists():
     assert not [s for s in PEPPER_SYMBOLS if "JPY" in s or "CHF" in s]
     assert {"AUDCAD", "AUDNZD", "XAUUSD", "EURUSD"} <= set(PEPPER_SYMBOLS)
-    assert sorted(CRYPTO) == sorted(f"{c}USDT" for c in "ADA AVAX BNB DOGE HYPE LINK ONDO SOL SUI XRP NEAR LTC ARB UNI".split()) and set(CRYPTO) <= set(PEPPER_SYMBOLS)
+    assert sorted(CRYPTO) == sorted(f"{c}USDT" for c in "ADA AVAX BNB DOGE HYPE LINK ONDO SOL SUI XRP NEAR LTC ARB UNI".split()) and not set(CRYPTO) & set(PEPPER_SYMBOLS)  # no crypto CFDs for UK accounts
+    assert len(PEPPER_SYMBOLS) == 9
     assert len(AVAILABLE) == 12 and not set(AVAILABLE) & set(CRYPTO) and "USDJPY" in AVAILABLE  # HotForex untouched
     assert tuple(HFM.symbols) == tuple(AVAILABLE) and PEPPERSTONE.ema_only and not HFM.ema_only
 
@@ -72,7 +73,7 @@ def test_settings_forced():
         await e.db.settings.update_one({"_id": "main"}, {"$set": {"symbols": ["USDJPY", "EURUSD", "ADAUSDT"]}})
         s = await e.get_settings()
         await db.client.drop_database(db.name)
-        assert s.symbols == ["EURUSD", "ADAUSDT"] == s.ema_test_symbols and s.ema_test_enabled
+        assert s.symbols == ["EURUSD"] == s.ema_test_symbols and s.ema_test_enabled  # JPY and crypto are dropped
         assert not (s.ai_enabled or s.ema_test_adx_filter or s.htf_filter or s.ai_position_review_enabled or s.rules_auto_learn)
     asyncio.run(run())
 

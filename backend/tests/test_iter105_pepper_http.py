@@ -33,10 +33,10 @@ def test_pepper_meta(s):
     assert r.status_code == 200
     d = r.json()
     syms = d["symbols"]
-    assert len(syms) == 23, f"expected 23, got {len(syms)}: {syms}"
+    assert len(syms) == 9, f"expected 9, got {len(syms)}: {syms}"
     assert not [x for x in syms if "JPY" in x or "CHF" in x]
     assert {"AUDCAD", "AUDNZD"} <= set(syms)
-    assert set(CRYPTO) <= set(syms)
+    assert not set(CRYPTO) & set(syms)
     assert d.get("strategies") == ["ema_test"]
     assert d.get("ema_only") is True
     assert d.get("profiles") in (None, [])
@@ -53,10 +53,9 @@ def test_fx_meta_unchanged(s):
 
 
 # --- KLINES -------------------------------------------------------------------
-def test_pepper_klines_crypto_ok(s):
+def test_pepper_klines_crypto_rejected(s):
     r = s.get(f"{BASE}/api/pepper/klines", params={"symbol": "ADAUSDT", "tf": "1h"}, timeout=30)
-    assert r.status_code == 200
-    assert len(r.json()["candles"]) > 10
+    assert r.status_code == 400
 
 
 def test_pepper_klines_jpy_rejected(s):
@@ -112,7 +111,7 @@ def test_settings_jpy_filtered(s):
 
 
 # --- BACKTEST -----------------------------------------------------------------
-@pytest.mark.parametrize("sym", ["SOLUSDT", "EURUSD"])
+@pytest.mark.parametrize("sym", ["EURUSD"])
 def test_backtest(s, sym):
     payload = {"symbol": sym, "strategy": "all", "timeframe": "1h", "risk_per_trade": 1, "leverage": 100}
     r = s.post(f"{BASE}/api/pepper/backtest", json=payload, timeout=120)

@@ -17,7 +17,7 @@ import maintenance
 from fx.models import FxSettings
 from fx.market import FxMarket, market_open, closing_soon, friday_stage
 from fx import risk
-from fx.symbols import is_crypto
+from fx.symbols import SPECS, is_crypto
 from strategies import EMA_TEST
 from fx import filters
 from fx.live import FxLiveBroker, is_our_link
@@ -226,7 +226,8 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
 
     async def _monitor_once(self):
         settings = await self.get_settings()
-        tickers = await self.market.fetch_tickers(settings.symbols)
+        held = await self.db.positions.distinct("symbol")  # a pair removed from the list keeps being managed until its position is closed
+        tickers = await self.market.fetch_tickers(list(dict.fromkeys([*settings.symbols, *(x for x in held if x in SPECS)])))
         now = datetime.now(timezone.utc)
         if settings.close_before_weekend and market_open() and friday_stage() == "flat" and self._weekend_flat_day != today():
             self._weekend_flat_day = today()

@@ -81,8 +81,7 @@ const HFM_TOGGLES = EXTRA_TOGGLES.flatMap((t) => (t.k !== "close_before_weekend"
   { k: "weekend_hold_be_only", label: "Fin de semana · solo test EMA con stop en breakeven", hint: "El viernes a las 15:30 NY, una posición del test de cruce solo queda abierta si su stop ya está en la entrada o mejor. Si aún no lo está pero gana al menos 0.5×ATR, el bot mueve el stop a breakeven y la mantiene; si no, la cierra. Apagado: se mantienen todas con su SL original" },
   { k: "weekend_hold_fx_only", label: "Fin de semana · solo test EMA en divisas", hint: "Las posiciones del test de cruce en oro y plata se cierran el viernes (sus huecos de apertura suelen ser mayores); solo las de pares de divisas pueden quedar abiertas. Apagado: los metales también pueden quedar abiertos" },
 ]));
-const EMA_TOGGLES = EXTRA_TOGGLES.filter((t) => ["close_before_weekend", "rollover_guard"].includes(t.k))
-  .map((t) => ({ ...t, hint: `${t.hint} · no se aplica a las criptomonedas, que operan 24/7` }));
+const EMA_TOGGLES = EXTRA_TOGGLES.filter((t) => ["close_before_weekend", "rollover_guard"].includes(t.k));
 const EMA_BT_INTRO = (brand) => (s) => `Cruce EMA 9 y 21 Personalizado sobre las últimas 1.000 velas con los ajustes guardados (SL ${s.ema_sl_atr}×ATR, entrada confirmada, cierre parcial, trailing, breakeven y toque de EMA 21 si están activos): ${s.risk_per_trade}% por operación, 1:${s.leverage}, ${brand.costsNote}. Las criptomonedas usan las velas del perpetuo USDT y no aplican cierre de fin de semana.`;
 const PLAN_INTRO = (brand) => `Plan de crecimiento compuesto para la cuenta forex: cuándo reinvertir, cuándo subir el riesgo y cuándo empezar a retirar. Los escenarios Prudente / Realista / Ambicioso son rentabilidades mensuales supuestas para la proyección (no tienen relación con el perfil de riesgo del bot); el escenario «Según backtest» usa Monte Carlo sobre tus propias estrategias en lotes y pips (${brand.costsNote}, lote mínimo, sesiones y cierre de fin de semana como en el bot, sin filtro IA). Tu meta, aporte y escenario quedan guardados en la configuración de este bot.`;
 
@@ -252,7 +251,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
           <Terminal exportable={bot === "fx"} logs={data.logs} onClear={() => act(() => http.delete("/logs"))} />
         </div>
         <p className="pb-4 pt-2 font-mono text-[10px] uppercase tracking-wider text-slate-600">
-          Simulación con precios reales de Yahoo Finance{emaOnly ? " (cripto: perpetuos USDT)" : ""} · Lotes y pips según especificaciones de {brand.broker}{data.status.costs?.commission_lot_usd ? ` · comisión ${data.status.costs.commission_lot_usd} USD/lote` : ""} · No es asesoría financiera · El apalancamiento implica alto riesgo
+          Simulación con precios reales de Yahoo Finance · Lotes y pips según especificaciones de {brand.broker}{data.status.costs?.commission_lot_usd ? ` · comisión ${data.status.costs.commission_lot_usd} USD/lote` : ""} · No es asesoría financiera · El apalancamiento implica alto riesgo
         </p>
       </main>
       )}

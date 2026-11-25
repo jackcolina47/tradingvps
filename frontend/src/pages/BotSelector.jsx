@@ -22,7 +22,7 @@ const BOTS = [
   {
     key: "pepper", path: "/pepperstone", icon: Flame, accent: "teal", overview: "/pepper/overview",
     title: <>Pepperstone <span className="text-teal-300">AI</span> trading</>,
-    subtitle: "Forex, metales y cripto CFD · Pepperstone vía puente MT propio (MT4 / MT5)",
+    subtitle: "Forex y metales · Pepperstone vía puente MT propio (MT4 / MT5)",
     desc: "Una sola estrategia: Cruce EMA 9 y 21 Personalizado, con salida en el cruce contrario y SL por ATR. Sin IA en las entradas. Forex sin JPY ni CHF, metales y 14 criptomonedas CFD.",
     tags: ["Cruce EMA 9 y 21", "Forex · Metales · Cripto", "Razor / Standard"],
   },
