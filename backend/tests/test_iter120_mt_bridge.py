@@ -30,7 +30,8 @@ NOW = int(time.time())
 # ---------------------------------------------------------------- fake MT4 Expert Advisor
 class FakeEA(threading.Thread):
     """Answers the request files like HFM_Bridge_EA.mq4 (server clock = UTC+2)."""
-    SPECS = {"EURUSD": (5, 0), "EURUSDb": (5, 4), "GOLDb": (2, 4), "SOLUSD": (2, 4), "XRPUSD.a": (4, 4)}
+    MODES = {0: "DISABLED", 4: "FULL"}
+    SPECS = {"EURUSD": (5, 0), "EURUSDb": (5, 4), "GOLDb": (2, 4), "SILVERb": (3, 4), "SOLUSD": (2, 4), "XRPUSD.a": (4, 4)}
 
     def __init__(self, files_dir: Path):
         super().__init__(daemon=True)
@@ -77,7 +78,7 @@ class FakeEA(threading.Thread):
                 return {"ok": 0, "err": 4106}
             d, mode = self.SPECS[j["symbol"]]
             return {"ok": 1, "symbol": j["symbol"], "digits": d, "point": 10 ** -d, "min_lot": 0.01, "lot_step": 0.01, "max_lot": 50.0, "contract": 100000, "tick_size": 10 ** -d,
-                    "tick_value": 1.0, "trade_mode": mode, "stops_level": 0, "bid": 1.1, "ask": 1.1002, "time": int(time.time()) + 7200}
+                    "tick_value": 1.0, "trade_mode": self.MODES[mode], "trade_allowed": 1 if mode else 0, "stops_level": 0, "bid": 1.1, "ask": 1.1002, "time": int(time.time()) + 7200}
         if c == "candles":
             base = (j["start"] or NOW + 7200) // 3600 * 3600
             return {"ok": 1, "rows": [[base - 3600 * (j["limit"] - 1 - i), 1.1, 1.2, 1.0, 1.15, 100 + i] for i in range(j["limit"])]}
@@ -430,3 +431,29 @@ def test_legacy_metaapi_link_must_be_verified_again():
     col.doc.update(hfm_verified_at="2026-02-02")  # verified later through the bridge: a restart must not reset it again
     run(store.load())
     assert store.cfg.hfm_verified_at == "2026-02-02"
+
+
+def test_mt4_trade_mode_and_gold_silver_aliases(stack):
+    full, dis = mt_bridge.MODE_FULL, "SYMBOL_TRADE_MODE_DISABLED"
+    m = mt_bridge.mt4_trade_mode
+    assert m("FULL") == full and m("CLOSEONLY") == "SYMBOL_TRADE_MODE_CLOSEONLY" and m("DISABLED", 0) == dis
+    assert m(2) == full and m("2") == full and m(1) == "SYMBOL_TRADE_MODE_CLOSEONLY" and m(0, 0) == dis  # older EA: MT4 numbering, FULL = 2 (was read as «solo ventas»)
+    assert m(0, 1) == full and m("CLOSEONLY", 1) == "SYMBOL_TRADE_MODE_CLOSEONLY"
+    stack.d.cfg["symbol_suffix"] = "b"
+
+    async def go():
+        api = MtBridge("http://bridge", TOKEN)
+        api.client = httpx.AsyncClient(transport=httpx.ASGITransport(app=stack.app), base_url="http://bridge", headers={"Authorization": f"Bearer {TOKEN}"})
+        got = {s: (await api.spec("hfm_v1", s))["symbol"] for s in ("XAUUSD", "XAUUSDb", "XAGUSD", "XAGUSDb", "GOLDb", "EURUSDb")}
+        assert got == {"XAUUSD": "GOLDb", "XAUUSDb": "GOLDb", "XAGUSD": "SILVERb", "XAGUSDb": "SILVERb", "GOLDb": "GOLDb", "EURUSDb": "EURUSDb"}
+        assert (await api.spec("hfm_v1", "EURUSDb"))["tradeMode"] == full and (await api.spec("hfm_v1", "EURUSD"))["tradeMode"] == dis
+        from fx.live import FxLiveBroker
+        b = FxLiveBroker("http://bridge", TOKEN, "hfm_v1", "b")
+        assert (b.broker_symbol("XAUUSD"), b.broker_symbol("XAGUSD"), b.broker_symbol("EURUSD")) == ("GOLDb", "SILVERb", "EURUSDb")
+        assert (b.our_symbol("EURUSDb"), b.our_symbol("GOLDb"), b.our_symbol("SILVERb")) == ("EURUSD", "XAUUSD", "XAGUSD")
+        b.symbol_map = {"XAUUSD": "XAUUSD.b"}
+        assert b.broker_symbol("XAUUSD") == "XAUUSD.b"
+        prem = FxLiveBroker("http://bridge", TOKEN, "hfm_v1", "")
+        assert prem.broker_symbol("XAUUSD") == "XAUUSD"
+        await api.aclose(); await b.aclose(); await prem.aclose()
+    run(go())

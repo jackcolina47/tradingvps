@@ -41,6 +41,7 @@ TRADE_MODE_TXT = {TRADE_MODE_FULL: "operable", "SYMBOL_TRADE_MODE_DISABLED": "de
 SUFFIX_PROBE = "EURUSD"
 # alternative root names brokers use for the same instrument (matched on the account's symbol list, case/punctuation-insensitive)
 SYMBOL_ALIASES = {"XAUUSD": ["GOLD"], "XAGUSD": ["SILVER"]}
+ALIAS_SUFFIXES = ("b",)  # account suffixes where the alias name is the one the broker uses
 
 
 def _norm(name: str) -> str:
@@ -97,13 +98,18 @@ class FxLiveBroker:
         return rows
 
     def broker_symbol(self, symbol: str) -> str:
-        return self.symbol_map.get(symbol) or f"{symbol}{self.suffix}"
+        if symbol in self.symbol_map:
+            return self.symbol_map[symbol]
+        if self.suffix in ALIAS_SUFFIXES and symbol in SYMBOL_ALIASES:
+            return f"{SYMBOL_ALIASES[symbol][0]}{self.suffix}"  # HFM Zero: XAUUSD → GOLDb, XAGUSD → SILVERb
+        return f"{symbol}{self.suffix}"
 
     def our_symbol(self, broker_symbol: str) -> str:
         for ours, theirs in self.symbol_map.items():
             if theirs == broker_symbol:
                 return ours
-        return broker_symbol[:-len(self.suffix)] if self.suffix and broker_symbol.endswith(self.suffix) else broker_symbol
+        base = broker_symbol[:-len(self.suffix)] if self.suffix and broker_symbol.endswith(self.suffix) else broker_symbol
+        return next((ours for ours, alts in SYMBOL_ALIASES.items() if base in alts), base) if self.suffix in ALIAS_SUFFIXES else base
 
     async def resolve_symbol(self, symbol: str):
         """`symbol+suffix` is unknown to the server: find the name this account group really uses (HFM: XAUUSDb may be GOLDb, XAUUSD.b…)
@@ -111,7 +117,7 @@ class FxLiveBroker:
         names = await self.api.symbols(self.account_id)
         aliases = [symbol] + SYMBOL_ALIASES.get(symbol, [])
         cands = [n for n in names if any(_norm(n).startswith(a) for a in aliases) and len(_norm(n)) <= len(symbol) + 6]
-        cands.sort(key=lambda n: (0 if self.suffix and self.suffix.upper() in _norm(n)[len(symbol) - 1:] else 1, len(n), n))
+        cands.sort(key=lambda n: (0 if self.suffix and _norm(n).endswith(_norm(self.suffix)) else 1, len(n), n))
         for n in cands[:6]:
             if n == f"{symbol}{self.suffix}":
                 continue

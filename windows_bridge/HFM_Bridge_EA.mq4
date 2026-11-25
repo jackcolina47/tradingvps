@@ -188,6 +188,18 @@ string CmdSymbols()
    return s + "]";
   }
 
+// Trade mode by NAME: the numeric values of ENUM_SYMBOL_TRADE_MODE differ between MT4 (FULL = 2) and MT5 (FULL = 4)
+string TradeModeName(string sym)
+  {
+   long m = SymbolInfoInteger(sym, SYMBOL_TRADE_MODE);
+   if(m == SYMBOL_TRADE_MODE_FULL)      return "FULL";
+   if(m == SYMBOL_TRADE_MODE_CLOSEONLY) return "CLOSEONLY";
+   if(m == SYMBOL_TRADE_MODE_LONGONLY)  return "LONGONLY";
+   if(m == SYMBOL_TRADE_MODE_SHORTONLY) return "SHORTONLY";
+   if(m == SYMBOL_TRADE_MODE_DISABLED)  return "DISABLED";
+   return "FULL";
+  }
+
 string CmdSpec(string sym)
   {
    ResetLastError();
@@ -196,7 +208,7 @@ string CmdSpec(string sym)
    return "\"ok\":1,\"symbol\":\"" + Esc(sym) + "\",\"digits\":" + IntegerToString(digits) + ",\"point\":" + D(MarketInfo(sym, MODE_POINT))
           + ",\"min_lot\":" + D(MarketInfo(sym, MODE_MINLOT)) + ",\"lot_step\":" + D(MarketInfo(sym, MODE_LOTSTEP)) + ",\"max_lot\":" + D(MarketInfo(sym, MODE_MAXLOT))
           + ",\"contract\":" + D(MarketInfo(sym, MODE_LOTSIZE), 2) + ",\"tick_size\":" + D(MarketInfo(sym, MODE_TICKSIZE)) + ",\"tick_value\":" + D(MarketInfo(sym, MODE_TICKVALUE))
-          + ",\"trade_mode\":" + IntegerToString(SymbolInfoInteger(sym, SYMBOL_TRADE_MODE)) + ",\"stops_level\":" + IntegerToString((int)MarketInfo(sym, MODE_STOPLEVEL))
+          + ",\"trade_mode\":\"" + TradeModeName(sym) + "\",\"trade_allowed\":" + IntegerToString((int)MarketInfo(sym, MODE_TRADEALLOWED)) + ",\"stops_level\":" + IntegerToString((int)MarketInfo(sym, MODE_STOPLEVEL))
           + ",\"bid\":" + D(MarketInfo(sym, MODE_BID), digits) + ",\"ask\":" + D(MarketInfo(sym, MODE_ASK), digits) + ",\"time\":" + IntegerToString(SymbolInfoInteger(sym, SYMBOL_TIME));
   }
 

@@ -29,7 +29,21 @@ TF_MIN = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "4h": 240, "1d": 144
 FROM_RE = re.compile(r"from #(\d+)")
 HEARTBEAT_MAX_AGE = 6.0
 MODE_FULL = "SYMBOL_TRADE_MODE_FULL"
-TRADE_MODES = {0: "SYMBOL_TRADE_MODE_DISABLED", 1: "SYMBOL_TRADE_MODE_LONGONLY", 2: "SYMBOL_TRADE_MODE_SHORTONLY", 3: "SYMBOL_TRADE_MODE_CLOSEONLY", 4: MODE_FULL}
+TRADE_MODES = {0: "SYMBOL_TRADE_MODE_DISABLED", 1: "SYMBOL_TRADE_MODE_LONGONLY", 2: "SYMBOL_TRADE_MODE_SHORTONLY", 3: "SYMBOL_TRADE_MODE_CLOSEONLY", 4: MODE_FULL}  # MT5 numbering
+MT4_TRADE_MODES = {0: "SYMBOL_TRADE_MODE_DISABLED", 1: "SYMBOL_TRADE_MODE_CLOSEONLY", 2: MODE_FULL, 3: "SYMBOL_TRADE_MODE_LONGONLY", 4: "SYMBOL_TRADE_MODE_SHORTONLY"}
+SYMBOL_ALIASES = {"XAUUSD": "GOLD", "XAGUSD": "SILVER"}  # HFM Zero: XAUUSD → GOLDb, XAGUSD → SILVERb
+
+
+def mt4_trade_mode(raw, trade_allowed=None) -> str:
+    """MT4 symbol trade mode → standard name. The EA sends the name; an older EA sent MT4's own number (FULL = 2, not MT5's 4)."""
+    if isinstance(raw, str) and not raw.strip().lstrip("-").isdigit():
+        mode = "SYMBOL_TRADE_MODE_" + raw.strip().upper().replace("SYMBOL_TRADE_MODE_", "")
+        mode = mode if mode in TRADE_MODES.values() else MODE_FULL
+    else:
+        mode = MT4_TRADE_MODES.get(int(raw), MODE_FULL)
+    if mode == "SYMBOL_TRADE_MODE_DISABLED" and trade_allowed and int(trade_allowed) == 1:
+        return MODE_FULL  # MODE_TRADEALLOWED = 1: the symbol can be traded right now
+    return mode
 MT4_ERR = {0: "ERR_NO_ERROR", 1: "ERR_NO_RESULT", 2: "ERR_COMMON_ERROR", 3: "ERR_INVALID_TRADE_PARAMETERS", 4: "ERR_SERVER_BUSY", 6: "ERR_NO_CONNECTION",
            8: "ERR_TOO_FREQUENT_REQUESTS", 64: "ERR_ACCOUNT_DISABLED", 65: "ERR_INVALID_ACCOUNT", 128: "ERR_TRADE_TIMEOUT", 129: "ERR_INVALID_PRICE",
            130: "ERR_INVALID_STOPS", 131: "ERR_INVALID_TRADE_VOLUME", 132: "ERR_MARKET_CLOSED", 133: "ERR_TRADE_DISABLED", 134: "ERR_NOT_ENOUGH_MONEY",
@@ -148,7 +162,7 @@ class Driver:
         return self._names[1]
 
     def resolve(self, symbol: str) -> str:
-        """Broker name of `symbol`: exact, configured map/suffix, case-insensitive, USDT → USD for crypto CFDs, or the tradable variant with a suffix (EURUSD → EURUSD.a / EURUSDm)."""
+        """Broker name of `symbol`: exact, configured map/suffix, case-insensitive, XAUUSD/XAGUSD → GOLD/SILVER, USDT → USD for crypto CFDs, or the tradable variant with a suffix (EURUSD → EURUSD.a / EURUSDm)."""
         if symbol in self._resolved:
             return self._resolved[symbol]
         names = self.names()
@@ -157,6 +171,12 @@ class Driver:
         found = next((c for c in (mapped, symbol, f"{symbol}{suffix}") if c and c in names), None)
         if not found:
             found = next((n for n in names if n.upper() == symbol.upper()), None)
+        if not found:  # gold / silver under their other name, keeping whatever suffix came with the symbol (XAUUSDb → GOLDb)
+            up = {n.upper(): n for n in names}
+            for root, alt in SYMBOL_ALIASES.items():
+                if symbol.upper().startswith(root):
+                    rest = symbol[len(root):]
+                    found = next((up[c.upper()] for c in (f"{alt}{rest}", f"{alt}{rest}{suffix}") if c.upper() in up), None)
         roots = [symbol] + ([symbol[:-1]] if symbol.upper().endswith("USDT") else [])  # crypto CFDs are quoted in USD at most brokers (SOLUSDT → SOLUSD)
         if not found:
             found = next((n for r in roots[1:] for n in names if n.upper() == r.upper()), None)
@@ -266,7 +286,7 @@ class Mt4Driver(Driver):
     def _spec(self, name: str) -> dict:
         r = self._ok(self.request("spec", 8, symbol=name), f"spec {name}")
         return {"symbol": name, "digits": int(r["digits"]), "point": r["point"], "minVolume": r["min_lot"], "volumeStep": r["lot_step"], "maxVolume": r["max_lot"],
-                "contractSize": r["contract"], "tickSize": r["tick_size"], "tickValue": r["tick_value"], "tradeMode": TRADE_MODES.get(int(r["trade_mode"]), MODE_FULL),
+                "contractSize": r["contract"], "tickSize": r["tick_size"], "tickValue": r["tick_value"], "tradeMode": mt4_trade_mode(r["trade_mode"], r.get("trade_allowed")),
                 "stopsLevel": r.get("stops_level", 0), "bid": r["bid"], "ask": r["ask"], "time": r.get("time", 0)}
 
     def tick(self, symbol: str) -> dict:
