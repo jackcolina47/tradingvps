@@ -165,9 +165,9 @@ class TestStage0:
 
     def test_next_trigger(self):
         base = 1_800_000_000 // 900 * 900
-        assert funnel.next_trigger(base + 3) == base + 8
-        assert funnel.next_trigger(base + 8) == base + 908
-        assert funnel.next_trigger(base + 500) == base + 908
+        assert funnel.next_trigger("15m", base + 3) == base + 5
+        assert funnel.next_trigger("15m", base + 5) == base + 905
+        assert funnel.next_trigger("15m", base + 500) == base + 905
 
     def test_no_atr_discarded(self):
         assert funnel.stage0(self._m(atr=0)) == "sin ATR válido"

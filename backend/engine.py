@@ -718,7 +718,7 @@ class TradingEngine:
             except Exception as e:
                 logger.exception("scan error")
                 await self.log("ERROR", f"Error en escaneo: {e}")
-            self.next_scan_ts = funnel.next_trigger()
+            self.next_scan_ts = await funnel.schedule(self, settings.timeframe)
             try:
                 await asyncio.wait_for(self.scan_event.wait(), timeout=max(0.5, self.next_scan_ts - time.time()))
             except asyncio.TimeoutError:
@@ -740,10 +740,10 @@ class TradingEngine:
 
     # ---------- AI funnel adapter ----------
     async def funnel_frame(self, symbol: str, tf: str, limit: int = 300):
-        return build_df(await self.market.fetch_klines(symbol, tf, limit, cache_sec=30)), True
+        return build_df(await self.market.fetch_klines(symbol, tf, limit, cache_sec=funnel.fresh_sec(tf, 30))), True
 
     funnel_rich = True          # Bybit only: fast EMAs, ADX slope, swings, range regime, over-extension filter and AI-stop buffer
-    funnel_mtf = ("4h", "1h")   # 4H structure + 1H confirmation before the entry timeframe
+    funnel_mtf = True           # structure + confirmation frames above the entry timeframe (funnel.MTF_BY_TF: 15m → 4H/1H · 1h → 1D/4H)
 
     @staticmethod
     def funnel_htf(tf: str) -> str:

@@ -27,7 +27,7 @@ class SignalsMixin:
             except Exception as e:
                 logger.exception("scan error")
                 await self.log("ERROR", f"Error en escaneo: {e}")
-            self.next_scan_ts = funnel.next_trigger()
+            self.next_scan_ts = await funnel.schedule(self, settings.timeframe)
             try:
                 await asyncio.wait_for(self.scan_event.wait(), timeout=max(0.5, self.next_scan_ts - time.time()))
             except asyncio.TimeoutError:
@@ -59,7 +59,7 @@ class SignalsMixin:
             self.scanning = False
 
     # ---------- AI funnel adapter ----------
-    funnel_mtf = ("4h", "1h")   # 4H structure + 1H confirmation before the entry timeframe
+    funnel_mtf = True           # structure + confirmation frames above the entry timeframe (funnel.MTF_BY_TF: 15m → 4H/1H · 1h → 1D/4H)
 
     funnel_rich = True          # fast EMAs, ADX slope, swings, range regime, over-extension filter and AI-stop buffer
     funnel_late_atr = 0.35      # a market entry is dropped when the price already ran this many ATR past the signal candle's close
@@ -69,13 +69,13 @@ class SignalsMixin:
         b = self.broker
         if b and self.cfg and self.cfg.hfm_state == "DEPLOYED" and time.time() - b.chart_fail_ts > 60:
             try:
-                rows = await b.candles(symbol, tf, None, limit, cache_sec=45)
+                rows = await b.candles(symbol, tf, None, limit, cache_sec=funnel.fresh_sec(tf, 45))
                 if rows and len(rows) >= 220:
                     return self._df(rows), sum(r[5] for r in rows[-50:]) > 0
             except Exception as e:
                 b.chart_fail_ts = time.time()
                 logger.warning(f"velas {self.bk} {symbol} {tf}: {e} → usando Yahoo")
-        return self._df(await self.market.fetch_klines(symbol, tf, limit, cache_sec=60)), False
+        return self._df(await self.market.fetch_klines(symbol, tf, limit, cache_sec=funnel.fresh_sec(tf, 60))), False
 
     @staticmethod
     def funnel_htf(tf: str) -> str:

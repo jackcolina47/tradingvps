@@ -22,7 +22,10 @@ STRATEGY = "ai_funnel"
 INFO = {STRATEGY: {"name": "Embudo IA", "rules": "Filtro técnico sin IA → modelo rápido elige hasta 3 candidatos → modelo potente decide BUY/SELL/PASS con un % de confianza. "
                                                  "Solo se ejecuta si la confianza supera «Confianza IA para abrir operación»; si no, se sigue como operación sombra.",
                    "basis": "Análisis discrecional de un trader profesional (tendencia, EMAs, momentum, volumen, oferta y demanda) con dimensionamiento por riesgo fijo."}}
-TRIGGER_MIN, TRIGGER_DELAY_SEC = 15, 8   # the funnel fires at :00/:15/:30/:45 + 8 s, once the exchange has closed the candle
+TF_SECONDS = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400}
+TRIGGER_DELAY_SEC = 5   # the funnel fires 5 s after the close (UTC) of the candle of the bot's timeframe, once the exchange/broker has published it
+MTF_BY_TF = {"1h": ("1d", "4h"), "4h": ("1d", "4h")}   # entry timeframe → (structure, confirmation); every lower timeframe uses 4H / 1H
+MTF_DEFAULT = ("4h", "1h")
 MIN_ADX, MIN_VOLUME = 18, 0.55
 OVEREXT_RSI, OVEREXT_ATR = (32, 68), 2.0   # late entries: RSI beyond these and price further than 2 ATR from the EMA20 (rich engines)
 SL_BUFFER_ATR = 0.25                        # safety margin added behind an AI stop (rich engines)
@@ -37,12 +40,48 @@ PULLBACK_ZONE_ATR = 0.5   # orderly pullback: the price must be testing the EMA2
 RANGE_SIDE = {"EXTREMO_OFERTA": "short", "EXTREMO_DEMANDA": "long"}
 
 
-def next_trigger(now: float = None) -> float:
-    """Epoch of the next quarter-hour mark + safety delay."""
+def next_trigger(tf: str = "15m", now: float = None) -> float:
+    """Epoch of the next candle close of `tf` (UTC-aligned) + safety delay."""
     now = time.time() if now is None else now
-    step = TRIGGER_MIN * 60
+    step = TF_SECONDS[tf]
     t = (now - TRIGGER_DELAY_SEC) // step * step + step + TRIGGER_DELAY_SEC
     return t if t > now else t + step
+
+
+async def schedule(engine, tf: str) -> float:
+    """Next scan of the engine; logged when the bot starts and whenever its timeframe changes."""
+    ts = next_trigger(tf)
+    if getattr(engine, "scan_tf", None) != tf:
+        engine.scan_tf = tf
+        await engine.log("INFO", f"Próximo escaneo al cierre de vela {tf}: {datetime.fromtimestamp(ts, timezone.utc):%H:%M:%S} UTC")
+    return ts
+
+
+def closed_index(df, tf: str, now: float = None) -> int:
+    """Index of the last CLOSED candle: the last row once the clock proves it closed (new candle not published yet), else the one before the forming candle."""
+    step, now = TF_SECONDS.get(tf), time.time() if now is None else now
+    return len(df) - 1 if step and int(df["ts"].iloc[-1]) / 1000 + step <= now else len(df) - 2
+
+
+def fresh_sec(tf: str, default: float, now: float = None) -> float:
+    """Cache age allowed for a `tf` frame: never older than its last candle close, so a scan at close + 5 s refetches."""
+    step, now = TF_SECONDS.get(tf), time.time() if now is None else now
+    return max(0.0, min(default, now % step - 1)) if step else default
+
+
+def mtf_of(tf: str) -> tuple:
+    return MTF_BY_TF.get(tf, MTF_DEFAULT)
+
+
+def _relabel(text: str, tfs) -> str:
+    """Rewrites the 4H / 1H wording of a prompt for another (structure, confirmation) pair."""
+    if not tfs or tuple(tfs) == MTF_DEFAULT:
+        return text
+    return text.replace("4H", "\0").replace("1H", tfs[1].upper()).replace("\0", tfs[0].upper())
+
+
+def _tfs(m: dict):
+    return tuple(m["mtf"]) if m.get("mtf") else None
 MAX_CANDIDATES = 3
 CONFIDENCE_LEVELS = (10, 20, 30, 40, 50, 60, 70, 80, 90)
 FAST_TIMEOUT_SEC, DEEP_TIMEOUT_SEC = 25, 75
@@ -50,7 +89,7 @@ SL_ATR_BAND = (0.85, 4.0)   # an AI stop must sit between 0.85 and 4 ATR from th
 MIN_RR = 1.0
 DEEP_COOLDOWN_SEC = 300    # guard against manual re-scans: a candidate goes back to the strong model on every 15-min trigger, never sooner than 5 min
 REPEAT_MOVE_ATR = 0.15     # stage 1 is not repeated while no eligible pair moved this much (in ATR) since the last call on the same candle
-MTF_TTL = {"4h": 300, "1h": 120}   # seconds a higher-timeframe frame is reused (multi-timeframe engines only)
+MTF_TTL = {"1d": 900, "4h": 300, "1h": 120}   # seconds a higher-timeframe frame is reused (multi-timeframe engines only)
 MTF_FAST = {"provider": "gemini", "model": "gemini-3.5-flash"}   # cheap model of the multi-timeframe stage 1
 BIAS_SIDE = {"ALCISTA": "long", "BAJISTA": "short"}
 MARKET = {"crypto": "criptomonedas (futuros perpetuos USDT)", "fx": "forex y metales (CFD)"}
@@ -178,8 +217,9 @@ OVEREXT_KEEP = {"suelo": ("ALCISTA", "long"), "techo": ("BAJISTA", "short")}   #
 def pullback_block(m: dict, side: str) -> str | None:
     """Why a candidate against the EMA9/21 cross is NOT an orderly pullback in favour of 4H + 1H (None = it may reach the strong model)."""
     d, want, mtf = (1 if side == "long" else -1), FAST_CROSS_SIDE[side], m.get("mtf") or {}
-    if any((mtf.get(tf) or {}).get("trend") != want for tf in ("4h", "1h")):
-        return "4H y 1H no apoyan el lado"
+    tfs = tuple(mtf) if len(mtf) == 2 else MTF_DEFAULT
+    if any((mtf.get(tf) or {}).get("trend") != want for tf in tfs):
+        return f"{tfs[0].upper()} y {tfs[1].upper()} no apoyan el lado"
     if m.get("turn") and TURN_SIDE[m["turn"]] != side:
         return f"giro de estructura en contra ({m['turn']})"
     if (m["close"] - m["ema50"]) * d <= 0:
@@ -195,7 +235,7 @@ def overext_discard(m: dict, trend_4h: str = None) -> str | None:
     """Stage-0 reason: a stretched pair is dropped without AI unless the 4H trend backs the rebound."""
     ext = overextended(m)
     if ext and trend_4h != OVEREXT_KEEP[ext][0]:
-        return f"sobreextendido en {ext} (RSI/ATR) · RSI {m['rsi']}, precio a {m['dist_ema20_atr']:+} ATR de EMA20, 4H {trend_4h or 's/d'}"
+        return f"sobreextendido en {ext} (RSI/ATR) · RSI {m['rsi']}, precio a {m['dist_ema20_atr']:+} ATR de EMA20, {(_tfs(m) or MTF_DEFAULT)[0].upper()} {trend_4h or 's/d'}"
     return None
 
 
@@ -244,7 +284,7 @@ def rr_block(m: dict, side: str, price: float, dist: float, rr: float, ranging: 
             return (f"falta de recorrido para 1:1 en rango: la {name} opuesta está a {free / atr:.2f} ATR y el objetivo necesita {reward / atr:.2f} ATR "
                     f"más {RANGE_ROOM_GAP_ATR} ATR de margen")
         return None
-    for tf, src, pct in ((m.get("tf") or "entrada", m, RR_FREE_ENTRY), ("4h", (m.get("mtf") or {}).get("4h"), RR_FREE_4H)):
+    for tf, src, pct in ((m.get("tf") or "entrada", m, RR_FREE_ENTRY), ((_tfs(m) or MTF_DEFAULT)[0], (m.get("mtf") or {}).get((_tfs(m) or MTF_DEFAULT)[0]), RR_FREE_4H)):
         free = zone(src)
         if free is not None and free < pct * reward:
             return (f"falta de recorrido para 2:1: {name} de {tf} a {free / atr:.2f} ATR, antes del {pct:.0%} del recorrido al objetivo "
@@ -287,7 +327,7 @@ def _mtf_txt(m: dict) -> str:
     for tf, h in (m.get("mtf") or {}).items():
         z = f" · demanda {_zone_txt(h['demand'])} · oferta {_zone_txt(h['supply'])}" if "demand" in h else ""
         out.append(f"{tf.upper()}: tendencia {h['trend']} · RSI {h['rsi']} · ADX {h['adx']} · precio a {h['dist_ema50_atr']:+} ATR de su EMA50{z}")
-    return " || ".join(out) + (f" || lado a favor de 4H: {m['bias'].upper() + ' (el contrario solo como rebote de contratendencia)' if m.get('bias') else 'LONG o SHORT'}" if out else "")
+    return " || ".join(out) + (f" || lado a favor de {next(iter(m['mtf'])).upper()}: {m['bias'].upper() + ' (el contrario solo como rebote de contratendencia)' if m.get('bias') else 'LONG o SHORT'}" if out else "")
 
 
 def _zone_txt(z) -> str:
@@ -310,9 +350,9 @@ def _row_txt(symbol: str, m: dict) -> str:
 
 async def stage1(kind: str, tf: str, rows: dict, limit: int, usage_kind: str) -> dict:
     mtf = any(m.get("mtf") for m in rows.values())
-    system = (FAST_SYSTEM.format(market=MARKET[kind], tf=tf, n=limit) + (MTF_SYSTEM.format(tf=tf) if mtf else "")
-              + (RANGE_FAST_SYSTEM if any(m.get("range_edge") for m in rows.values()) else "")
-              + (TURN_FAST_SYSTEM.format(tf=tf) if any(m.get("turn") for m in rows.values()) else ""))
+    system = _relabel(FAST_SYSTEM.format(market=MARKET[kind], tf=tf, n=limit) + (MTF_SYSTEM.format(tf=tf) if mtf else "")
+                      + (RANGE_FAST_SYSTEM if any(m.get("range_edge") for m in rows.values()) else "")
+                      + (TURN_FAST_SYSTEM.format(tf=tf) if any(m.get("turn") for m in rows.values()) else ""), next((_tfs(m) for m in rows.values() if m.get("mtf")), None))
     prompt = "\n".join(_row_txt(s, m) for s, m in rows.items()) + f"\n\n¿Qué pares (máx. {limit}) merecen el análisis completo?"
     t0 = time.monotonic()
 
@@ -380,13 +420,14 @@ async def stage2(kind: str, symbol: str, tf: str, cand: dict, m: dict, df, i: in
           + f" El Take Profit NO lo fijas tú: el sistema lo calcula exactamente a {TREND_RR:g}× la distancia del stop final en tendencia, ruptura o contratendencia, y a "
             f"{RANGE_RR:g}× en operaciones de rango (EXTREMO_OFERTA / EXTREMO_DEMANDA o régimen RANGO / CHOPPY); deja tp en null. Juzga la operación con ese objetivo: "
             "da BUY o SELL solo si ves recorrido libre hasta él; esta regla prevalece sobre cualquier otra indicación de objetivos de este mensaje.")
-    chat = _chat(DEEP_SYSTEM.format(market=MARKET[kind], tf=tf, levels=lv), usage_kind)
+    hi, mid = (t.upper() for t in (_tfs(m) or MTF_DEFAULT))
+    chat = _chat(_relabel(DEEP_SYSTEM, _tfs(m)).format(market=MARKET[kind], tf=tf, levels=lv), usage_kind)
     rule_lines = "\n".join(f"{n}. {r['text']}" + (f" (solo {r['symbol']})" if r.get("symbol") else "") for n, r in enumerate(rules, 1))
     prompt = (
         f"PAR: {symbol} | TF {tf} | hora Nueva York {datetime.now(trade_guard.NY).strftime('%A %H:%M')}\n"
-        f"Candidato del filtro rápido: {cand['side'].upper()} · {cand['reason']}" + (f" · OPERACIÓN DE RANGO ({cand['range_edge']}): rechazo en el borde, TP 0.25 ATR antes de la zona opuesta" if cand.get("range_edge") else "") + (" · CONTRATENDENCIA (contra 4H): rebote técnico con TP corto" if cand.get("counter_trend") else "") + (" · RETROCESO ORDENADO a favor de 4H/1H: EMA9/21 cruzada en contra de forma temporal, exige vela de freno en la EMA20/EMA50" if cand.get("pullback") else "") + "\n"
+        f"Candidato del filtro rápido: {cand['side'].upper()} · {cand['reason']}" + (f" · OPERACIÓN DE RANGO ({cand['range_edge']}): rechazo en el borde, TP 0.25 ATR antes de la zona opuesta" if cand.get("range_edge") else "") + (f" · CONTRATENDENCIA (contra {hi}): rebote técnico con TP corto" if cand.get("counter_trend") else "") + (f" · RETROCESO ORDENADO a favor de {hi}/{mid}: EMA9/21 cruzada en contra de forma temporal, exige vela de freno en la EMA20/EMA50" if cand.get("pullback") else "") + "\n"
         f"ESTADO ({tf}): {_row_txt(symbol, {**m, 'mtf': None})}\n"
-        + (f"ANÁLISIS MULTITEMPORAL (4H = estructura, 1H = confirmación, {tf} = entrada): {_mtf_txt(m)}\n" if m.get("mtf") else
+        + (f"ANÁLISIS MULTITEMPORAL ({hi} = estructura, {mid} = confirmación, {tf} = entrada): {_mtf_txt(m)}\n" if m.get("mtf") else
            f"TEMPORALIDAD SUPERIOR ({htf['tf']}): tendencia {htf['trend']} · RSI {htf['rsi']} · ADX {htf['adx']} · precio a {htf['dist_ema50_atr']:+} ATR de su EMA50\n") +
         
         f"CONTEXTO: {json.dumps(ctx, ensure_ascii=False)}\n"
@@ -427,24 +468,25 @@ async def _say(engine, key: str, level: str, text: str):
 
 
 def _htf(df: pd.DataFrame, tf: str) -> dict:
-    r = df.iloc[-2]
+    r = df.iloc[closed_index(df, tf)]
     e20, e50, e200, atr = float(r["ema20"]), float(r["ema50"]), float(r["ema200"]), float(r["atr"])
     return {"tf": tf, "trend": "ALCISTA" if e20 > e50 > e200 else "BAJISTA" if e20 < e50 < e200 else "MIXTA", "rsi": round(float(r["rsi"]), 1),
             "adx": round(float(r["adx"]), 1), "dist_ema50_atr": round((float(r["close"]) - e50) / atr, 2) if atr else 0}
 
 
 async def _mtf(engine, symbol: str, price: float) -> dict:
-    """4H structure + 1H confirmation of a pair (frames cached a few minutes: they change slowly)."""
-    cache, out = engine.__dict__.setdefault("funnel_mtf_cache", {}), {}
-    for tf in engine.funnel_mtf:
+    """Structure + confirmation frames of a pair (cached a few minutes, never past their own candle close)."""
+    cache, out, tfs = engine.__dict__.setdefault("funnel_mtf_cache", {}), {}, getattr(engine, "funnel_tfs", MTF_DEFAULT)
+    for tf in tfs:
         hit = cache.get((symbol, tf))
-        if not hit or time.time() - hit[0] > MTF_TTL[tf]:
+        if not hit or time.time() - hit[0] > fresh_sec(tf, MTF_TTL[tf]):
             df, _ = await engine.funnel_frame(symbol, tf, 250)
             hit = cache[(symbol, tf)] = (time.time(), df)
         df = hit[1]
         out[tf] = _htf(df, tf)
-        if tf == "4h":
-            out[tf].update(zones(df, len(df) - 2, float(df["atr"].iloc[-2]), price))
+        if tf == tfs[0]:
+            i = closed_index(df, tf)
+            out[tf].update(zones(df, i, float(df["atr"].iloc[i]), price))
     return out
 
 
@@ -457,11 +499,13 @@ def _upcoming(kind: str, symbol: str, hours: int = 4) -> list:
 async def run(engine, settings) -> int:
     """One funnel cycle. Returns the number of BUY/SELL decisions of stage 2."""
     kind, tf = engine.guard_kind, settings.timeframe
+    tfs = engine.funnel_tfs = mtf_of(tf)
+    ctx_txt = "/".join(t.upper() for t in tfs)
     rows, frames = {}, {}
     for symbol in settings.symbols:
         try:
             df, has_volume = await engine.funnel_frame(symbol, tf)
-            i = len(df) - 2
+            i = closed_index(df, tf)
             price = engine.market.tickers.get(symbol, {}).get("price") or float(df["close"].iloc[-1])
             m = metrics(df, i, has_volume, price, getattr(engine, "funnel_rich", False))
             m["tf"], m["range_edge"] = tf, range_edge(m)
@@ -508,13 +552,13 @@ async def run(engine, settings) -> int:
                 m["mtf"] = await _mtf(engine, symbol, m["price"])
             except Exception as e:
                 logger.exception(f"funnel mtf {symbol}")
-                _note(engine, symbol, 0, "DESCARTADO", f"Sin datos de 4H/1H · {str(e)[:100]}")
-                dropped.append(f"{symbol} (sin datos de 4H/1H)")
+                _note(engine, symbol, 0, "DESCARTADO", f"Sin datos de {ctx_txt} · {str(e)[:100]}")
+                dropped.append(f"{symbol} (sin datos de {ctx_txt})")
                 continue
-            m["bias"] = BIAS_SIDE.get(m["mtf"]["4h"]["trend"])
-            engine.analysis[symbol]["htf"] = {"MIXTA": "NEUTRAL"}.get(m["mtf"]["4h"]["trend"], m["mtf"]["4h"]["trend"])
+            m["bias"] = BIAS_SIDE.get(m["mtf"][tfs[0]]["trend"])
+            engine.analysis[symbol]["htf"] = {"MIXTA": "NEUTRAL"}.get(m["mtf"][tfs[0]]["trend"], m["mtf"][tfs[0]]["trend"])
             engine.analysis[symbol]["mtf"] = {tf: h["trend"] for tf, h in m["mtf"].items()}
-        why = overext_discard(m, (m.get("mtf") or {}).get("4h", {}).get("trend"))
+        why = overext_discard(m, (m.get("mtf") or {}).get(tfs[0], {}).get("trend"))
         if why:
             _note(engine, symbol, 0, "DESCARTADO", why)
             dropped.append(f"{symbol} ({why})")
@@ -552,7 +596,7 @@ async def run(engine, settings) -> int:
                 continue
             if eligible[c["symbol"]].get("bias") not in (None, c["side"]):
                 c["counter_trend"] = True   # stage 2 must set the target before the first 4H/1H obstacle
-                await engine.log("SCAN", f"{c['symbol']}: candidato {c['side'].upper()} de contratendencia (4H {eligible[c['symbol']]['mtf']['4h']['trend']}) · el modelo potente exigirá TP corto")
+                await engine.log("SCAN", f"{c['symbol']}: candidato {c['side'].upper()} de contratendencia ({tfs[0].upper()} {eligible[c['symbol']]['mtf'][tfs[0]]['trend']}) · el modelo potente exigirá TP corto")
             edge = eligible[c["symbol"]].get("range_edge")
             if edge and RANGE_SIDE[edge] == c["side"]:
                 c["range_edge"] = edge   # range trade: exempt from the EMA9/21 cross filter, target before the opposite zone
@@ -567,7 +611,7 @@ async def run(engine, settings) -> int:
                 lock = pullback_block(eligible[c["symbol"]], c["side"])
                 if not lock:   # orderly pullback in favour of 4H + 1H: structure, EMA50 and last swing still hold
                     c["pullback"] = True
-                    await engine.log("SCAN", f"{c['symbol']}: candidato {c['side'].upper()} en retroceso ordenado a favor de 4H/1H (EMA9/21 de {tf} en {cross}) · pasa al modelo potente")
+                    await engine.log("SCAN", f"{c['symbol']}: candidato {c['side'].upper()} en retroceso ordenado a favor de {ctx_txt} (EMA9/21 de {tf} en {cross}) · pasa al modelo potente")
                     continue
                 s1["candidates"].remove(c)   # against the EMA9/21 cross of the entry timeframe and not a protected pullback
                 why = f"{c['side'].upper()} contra el cruce EMA9/21 de {tf} ({cross}: EMA9 {'>' if cross == 'ALCISTA' else '<'} EMA21) · sin retroceso ordenado: {lock}"
@@ -579,7 +623,7 @@ async def run(engine, settings) -> int:
                 _note(engine, symbol, 1, "DESCARTADO", f"El filtro rápido no ve entrada ({s1['model']})")
         if len(picked) < len(eligible):
             await engine.log("FILTER", f"Fase 1 (modelo rápido) · sin entrada en: {', '.join(s for s in eligible if s not in picked)}")
-        await engine.log("SCAN", f"Embudo {'4H/1H → ' if getattr(engine, 'funnel_mtf', None) else ''}{tf} · {len(rows)} pares → {len(eligible)} tras filtro técnico → {len(picked)} candidato(s) del modelo rápido"
+        await engine.log("SCAN", f"Embudo {ctx_txt + ' → ' if getattr(engine, 'funnel_mtf', None) else ''}{tf} · {len(rows)} pares → {len(eligible)} tras filtro técnico → {len(picked)} candidato(s) del modelo rápido"
                                  + (f": {', '.join(c['symbol'] + ' ' + c['side'].upper() for c in s1['candidates'])}" if picked else "") + f" · {s1['model']} · {s1['ms']} ms")
     found = 0
     deep_at = engine.__dict__.setdefault("funnel_deep_at", {})
@@ -616,7 +660,7 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
     candle_key = _key(symbol, m["candle_ts"])
     key = f"{candle_key}:{int(time.time())}"
     htf_tf = engine.funnel_htf(tf)
-    htf = m["mtf"]["1h"] if m.get("mtf") else _htf((await engine.funnel_frame(symbol, htf_tf, 250))[0], htf_tf)
+    htf = m["mtf"][_tfs(m)[1]] if m.get("mtf") else _htf((await engine.funnel_frame(symbol, htf_tf, 250))[0], htf_tf)
     rules = await ai_rules.active(engine.db, symbol)
     ctx = {**engine.funnel_ctx(symbol), "posiciones_abiertas": len(state["open"]), "max_posiciones": settings.max_positions,
            "pnl_dia_pct": state["acc"]["daily_pnl_pct"], "eventos_rojos_proximos": _upcoming(kind, symbol)}
@@ -653,11 +697,11 @@ async def _deep(engine, settings, cand: dict, m: dict, frame: tuple, s1: dict) -
     if not approved and candle_key in engine.signal_keys:   # this candle already has its shadow trade: just report the new verdict
         _note(engine, symbol, 2, "SOMBRA", f"Confianza {res['confidence']}% ≤ {threshold}% · {res['reasoning']}", res["confidence"])
         await _record(engine, cand, m, res, s1, tf, threshold, "BAJA_CONFIANZA", key, "Reanálisis: la operación sombra de esta vela ya está abierta")
-        await engine.log("AI_EVAL", f"{symbol} {res['decision']} · confianza {res['confidence']}% (umbral {threshold}%) → sigue sin ejecutarse · nuevo análisis al cierre de la próxima vela de 15 min · {res['reasoning'][:160]}{tail}")
+        await engine.log("AI_EVAL", f"{symbol} {res['decision']} · confianza {res['confidence']}% (umbral {threshold}%) → sigue sin ejecutarse · nuevo análisis al cierre de la próxima vela de {tf} · {res['reasoning'][:160]}{tail}")
         return 0
     sig = {"side": side, "price": price, "sl": sl, "tp": tp, "strategy": STRATEGY, "atr": m["atr"], "score": 2, "key_ts": m["candle_ts"], "rr_target": rr,
            "reasons": [f"Filtro rápido: {cand['reason']}", f"Modelo potente ({res['confidence']}%): {res['reasoning']}"]
-                      + ([f"Contratendencia (4H {m['mtf']['4h']['trend']})"] if counter else []) + [f"Objetivo exacto {rr:g}:1" + (" (rango, sin cierre parcial)" if ranging else "")],
+                      + ([f"Contratendencia ({_tfs(m)[0].upper()} {m['mtf'][_tfs(m)[0]]['trend']})"] if counter else []) + [f"Objetivo exacto {rr:g}:1" + (" (rango, sin cierre parcial)" if ranging else "")],
            "indicators": {k: m[k] for k in ("close", "ema20", "ema50", "ema200", "rsi", "macd_hist", "adx", "atr", "activity")}}
     if source == "atr":
         sig["atr_levels"] = (settings.atr_sl_mult, settings.atr_sl_mult * rr)

@@ -18,7 +18,7 @@ const STAGES = [
 
 const MTF_STAGES = [
   STAGES[0],
-  ["Etapa 1 · Modelo rápido multitemporal (Gemini 3.5 Flash)", "Evalúa cada par en 4H (estructura) y 1H (confirmación) y usa la temporalidad del bot como gatillo: elige como máximo 3 candidatos. Las entradas contra la tendencia de 4H solo se proponen como rebote técnico, con giro claro en la temporalidad de entrada."],
+  ["Etapa 1 · Modelo rápido multitemporal (Gemini 3.5 Flash)", "Evalúa cada par en 4H (estructura) y 1H (confirmación) (1D y 4H si el bot opera en 1h o 4h) y usa la temporalidad del bot como gatillo: elige como máximo 3 candidatos. Las entradas contra la tendencia de 4H solo se proponen como rebote técnico, con giro claro en la temporalidad de entrada."],
   STAGES[2],
 ];
 
@@ -32,7 +32,7 @@ export default function BotPanel({ settings: s, account, equity, mtf = false, fm
   return (
     <Panel testId="bot-plan-panel" title="Plan de trading" icon={ShieldCheck} className="lg:col-span-3" bodyClass="p-4 space-y-4 overflow-y-auto thin-scroll max-h-[540px]" delay={180}>
       <div>
-        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">Temporalidad {s.timeframe} · análisis en :00, :15, :30 y :45 (+8 s)</p>
+        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">Temporalidad {s.timeframe} · análisis al cierre de cada vela {s.timeframe} (+5 s, UTC)</p>
         <p data-testid="active-strategy-name" className="font-display mt-1 text-lg font-bold text-amber-400">Embudo IA</p>
         <ul className="mt-2 space-y-2">
           {(mtf ? MTF_STAGES : STAGES).map(([name, text]) => (
@@ -74,7 +74,7 @@ export default function BotPanel({ settings: s, account, equity, mtf = false, fm
           </span>
         </div>
         <p className="mt-1 text-[12px] leading-relaxed text-slate-400">
-          Al cierre de cada vela de 15 minutos (:00, :15, :30 y :45, con 8 s de margen), dentro del horario operativo y con huecos libres: filtro técnico sin IA → el modelo rápido elige hasta 3 candidatos → el modelo potente decide BUY / SELL / PASS.
+          Al cierre de cada vela de {s.timeframe} (hora UTC, con 5 s de margen), dentro del horario operativo y con huecos libres: filtro técnico sin IA → el modelo rápido elige hasta 3 candidatos → el modelo potente decide BUY / SELL / PASS.
           Solo se abre si su confianza supera el {s.ai_min_confidence}%; el resto se sigue como sombra. El tamaño se calcula para que el stop cueste el {s.risk_per_trade}% de la equidad actual, comisiones incluidas.
         </p>
       </div>
