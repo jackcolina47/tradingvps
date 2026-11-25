@@ -30,9 +30,9 @@ export const http = withAuth(axios.create({ baseURL: API, timeout: 90000 }));
 export const BOT_API = { fx: "/api/fx", pepper: "/api/pepper", lab: "/api/lab", lab4h: "/api/lab4h" };
 export const EMA_MAIN_NAME = "Cruce EMA 9 y 21 Personalizado";
 let NO_TP = false;
-export const noTp = () => NO_TP;  // Pepperstone: no take profit (exit on the EMA rules), so nothing TP-related is shown
+export const noTp = () => NO_TP;  // Pepperstone and the Bybit Labs: no take profit (exit on the EMA rules), so nothing TP-related is shown
 export const setApiBase = (bot) => {
-  NO_TP = bot === "pepper";
+  NO_TP = ["pepper", "lab", "lab4h"].includes(bot);
   http.defaults.baseURL = BOT_API[bot] ? `${BACKEND}${BOT_API[bot]}` : API;
   DISPLAY_TZ = null;
   MONEY = "$";

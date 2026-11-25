@@ -47,7 +47,7 @@ function SignalCard({ s, minConfidence, rulesOnly }) {
         </span>
       </div>
       <p className="mt-1 font-mono text-[10px] text-slate-500">
-        {STRATEGY_LABELS[s.strategy]} · {fmtPrice(s.price)} · SL {fmtPrice(s.sl)}{noTp() ? "" : ` · TP ${fmtPrice(s.tp)}`} · {fmtTime(s.created_at)}
+        {STRATEGY_LABELS[s.strategy]} · {fmtPrice(s.price)} · SL {fmtPrice(s.sl)}{noTp() || s.strategy === "ema_test" ? "" : ` · TP ${fmtPrice(s.tp)}`} · {fmtTime(s.created_at)}
       </p>
       {!NO_AI_BAR.includes(s.ai_decision) && !rulesOnly && (
         <div data-testid={`ai-gate-${s.id}`} title={GATE_TIP} className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px]">

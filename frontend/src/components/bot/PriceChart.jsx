@@ -28,7 +28,7 @@ const AFTER = 150;  // candles shown after the close of a focused (closed) trade
 const lastAtOrBefore = (candles, t) => { let i = -1; for (let k = 0; k < candles.length && candles[k].time <= t; k++) i = k; return i; };
 
 /** `focus` = { opened, closed (unix s), lines }: the chart opens on that past trade instead of the live market (trade detail). */
-export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs = TFS, trade, focus }) {
+export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs = TFS, trade, focus, onFs }) {
   const [order, setOrder] = useState(null);
   const [tf, setTf] = useState(defaultTf);
   const [fs, setFs] = useState(false);
@@ -105,6 +105,8 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ind, api]);
 
+  useEffect(() => { onFs?.(fs); }, [fs]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!fs) return;
     const onKey = (e) => e.key === "Escape" && setFs(false);
@@ -132,10 +134,10 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
           <ChartStyle style={style} setStyle={setStyle} />
           <button data-testid="chart-screenshot-btn" onClick={screenshot} title="Descargar captura del gráfico (PNG)"
             className="rounded-sm border border-[#1E293B] p-1 text-slate-400 transition-colors hover:text-slate-100"><Camera className="h-3.5 w-3.5" /></button>
-          {!focus && <button data-testid="chart-fullscreen-btn" onClick={() => setFs((v) => !v)} title={fs ? "Salir de pantalla completa (Esc)" : "Pantalla completa"}
+          <button data-testid="chart-fullscreen-btn" onClick={() => setFs((v) => !v)} title={fs ? "Salir de pantalla completa (Esc)" : "Pantalla completa"}
             className="rounded-sm border border-[#1E293B] p-1 text-slate-400 transition-colors hover:text-slate-100">
             {fs ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-          </button>}
+          </button>
         </div>
       }>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-3 font-mono text-[11px]">

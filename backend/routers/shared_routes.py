@@ -166,7 +166,8 @@ def add_shared_routes(router, engine, label: str, currency="USDT", before_unit: 
 
     @router.get("/trades/{trade_id}/detail")
     async def trade_detail(trade_id: str):
-        trade = (await _trade(trade_id)).model_dump()
+        t = await _trade(trade_id)
+        trade = t.model_dump()
         signal = None
         sid = trade.get("signal_id")
         if sid and ObjectId.is_valid(sid):
@@ -174,7 +175,7 @@ def add_shared_routes(router, engine, label: str, currency="USDT", before_unit: 
             if sdoc:
                 signal = Signal.from_mongo(sdoc).model_dump()
         tf = (signal or {}).get("timeframe") or (await engine.get_settings()).timeframe
-        return {"trade": trade, "signal": signal, "currency": cur(), "no_tp": trade_learning.no_tp_bot(engine), "tf": tf, "fx": hasattr(engine, "profile")}
+        return {"trade": trade, "signal": signal, "currency": cur(), "no_tp": trade_learning.no_tp_bot(engine, t), "tf": tf, "fx": hasattr(engine, "profile")}
 
     @router.put("/trades/{trade_id}/note")
     async def trade_note(trade_id: str, body: TradeNote):

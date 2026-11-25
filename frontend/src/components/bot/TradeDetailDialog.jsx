@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { SideBadge } from "./Panel";
@@ -29,13 +29,13 @@ const FX_TFS = ["5m", "15m", "1h", "4h", "1d"];
 const LEVELS = [["entry_price", "ENTRADA", "#F8FAFC"], ["exit_price", "SALIDA", "#F7A600"], ["tp", "TP", "#10B981"], ["initial_sl", "SL inicial", "#EF4444"], ["sl", "SL final", "#FB7185"]];
 
 /** The main chart (indicators, drawings, timeframes, infinite history) opened on the candles of this closed trade. */
-function TradeChart({ trade: t, tf, fx, hideTp }) {
+function TradeChart({ trade: t, tf, fx, hideTp, onFs }) {
   const focus = useMemo(() => {
     const seen = new Set();
     const lines = LEVELS.filter(([k]) => !(hideTp && k === "tp") && t[k] && !seen.has(t[k]) && seen.add(t[k])).map(([k, title, color]) => ({ price: t[k], title, color }));
     return { opened: Math.floor(new Date(t.opened_at).getTime() / 1000), closed: Math.floor(new Date(t.closed_at).getTime() / 1000), lines };
   }, [t.id, hideTp]); // eslint-disable-line react-hooks/exhaustive-deps
-  return <div data-testid="trade-chart"><PriceChart symbol={t.symbol} defaultTf={tf} kind="Gráfico de la operación" tfs={fx ? FX_TFS : undefined} focus={focus} /></div>;
+  return <div data-testid="trade-chart"><PriceChart symbol={t.symbol} defaultTf={tf} kind="Gráfico de la operación" tfs={fx ? FX_TFS : undefined} focus={focus} onFs={onFs} /></div>;
 }
 
 const Section = ({ title, children, testId }) => (
@@ -51,8 +51,8 @@ const Row = ({ label, value, className = "", testId }) => (
   </div>
 );
 
-function TradeDetailBody({ trade: t, signal: s, currency, onSaved, autoAnalyze, tf, fx }) {
-  const hideTp = noTp();
+function TradeDetailBody({ trade: t, signal: s, currency, onSaved, autoAnalyze, tf, fx, onFs }) {
+  const hideTp = noTp() || t.exit_mode === "cross";
   const price = (v) => (v == null || v === 0 ? "—" : fmtPrice(v));
   const rr = t.initial_sl && t.tp ? (Math.abs(t.tp - t.entry_price) / Math.abs(t.entry_price - t.initial_sl)).toFixed(2) : null;
   return (
@@ -68,7 +68,7 @@ function TradeDetailBody({ trade: t, signal: s, currency, onSaved, autoAnalyze, 
         </span>
       </div>
 
-      {tf && <TradeChart trade={t} tf={tf} fx={fx} hideTp={hideTp} />}
+      {tf && <TradeChart trade={t} tf={tf} fx={fx} hideTp={hideTp} onFs={onFs} />}
       <TradeAiReview trade={t} autoRun={autoAnalyze} onReviewed={(review) => onSaved?.({ id: t.id, ai_review: review })} />
       <TradeNoteEditor trade={t} onSaved={onSaved} />
 
@@ -158,23 +158,27 @@ function TradeDetailBody({ trade: t, signal: s, currency, onSaved, autoAnalyze, 
 export default function TradeDetailDialog({ trade, onClose, onSaved, autoAnalyze = false }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
+  const [fs, setFs] = useState(false);  // chart in full screen: the dialog itself takes the whole viewport
+  const box = useRef(null);
+  const onFs = (v) => { if (v && box.current) box.current.scrollTop = 0; setFs(v); };
   const tradeId = trade?.id;
   useEffect(() => {
     if (!tradeId) return;
-    setData(null); setErr("");
+    setData(null); setErr(""); setFs(false);
     http.get(`/trades/${tradeId}/detail`).then((r) => setData(r.data)).catch((e) => setErr(errMsg(e)));
   }, [tradeId]);
   const t = trade && data?.trade ? { ...data.trade, note: trade.note ?? data.trade.note, tags: trade.tags ?? data.trade.tags } : trade;
   return (
     <Dialog open={!!trade} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent data-testid="trade-detail-dialog" className="max-h-[94vh] w-[97vw] max-w-6xl overflow-y-auto thin-scroll border-[#1E293B] bg-[#0D111A] text-slate-200">
+      <DialogContent ref={box} data-testid="trade-detail-dialog" onEscapeKeyDown={(e) => fs && e.preventDefault()}
+        className={`thin-scroll border-[#1E293B] bg-[#0D111A] text-slate-200 ${fs ? "h-screen max-h-screen w-screen max-w-none overflow-hidden sm:rounded-none" : "max-h-[94vh] w-[97vw] max-w-6xl overflow-y-auto"}`}>
         <DialogHeader>
           <DialogTitle className="font-display text-sm uppercase tracking-[0.14em]">Detalle de la operación</DialogTitle>
           <DialogDescription className="text-xs text-slate-500">Todos los datos registrados para análisis manual.</DialogDescription>
         </DialogHeader>
         {err && <p data-testid="trade-detail-error" className="text-xs text-rose-400">{err}</p>}
         {!data && !err && t && <div className="flex items-center gap-2 text-xs text-slate-500"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando detalle…</div>}
-        {t && (data || err) && <TradeDetailBody trade={t} signal={data?.signal} currency={data?.currency || "USD"} onSaved={onSaved} autoAnalyze={autoAnalyze} tf={data?.tf} fx={data?.fx} />}
+        {t && (data || err) && <TradeDetailBody trade={t} signal={data?.signal} currency={data?.currency || "USD"} onSaved={onSaved} autoAnalyze={autoAnalyze} tf={data?.tf} fx={data?.fx} onFs={onFs} />}
       </DialogContent>
     </Dialog>
   );

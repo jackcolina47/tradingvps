@@ -17,9 +17,9 @@ CHART_PAD = 25
 RULE_VERDICTS = ("EVITABLE", "MALA")
 
 
-def no_tp_bot(engine) -> bool:
-    """Pepperstone (single EMA-cross strategy): trades have no take profit, the stored `tp` is a virtual sizing reference."""
-    return bool(getattr(getattr(engine, "profile", None), "ema_only", False))
+def no_tp_bot(engine, t: Trade = None) -> bool:
+    """Pepperstone, the Bybit Labs and any EMA-cross test trade have no take profit: the stored `tp` is a virtual sizing reference."""
+    return bool(getattr(getattr(engine, "profile", None), "ema_only", False) or getattr(engine, "close_beyond_exit_ema", False) or (t is not None and t.exit_mode == "cross"))
 
 
 async def window(engine, t: Trade, pad: int = CHART_PAD, before_unit: str = "ms") -> dict:
@@ -55,7 +55,7 @@ async def review(engine, t: Trade, currency: str, before_unit: str = "ms", known
     w = await window(engine, t, 60, before_unit)
     before = [x for x in w["candles"] if x["time"] < w["opened"]]
     during = [x for x in w["candles"] if w["opened"] <= x["time"] <= w["closed"]]
-    no_tp = no_tp_bot(engine)
+    no_tp = no_tp_bot(engine, t)
     if no_tp and signal:
         signal = {k: v for k, v in signal.items() if k != "tp"}
     pa = price_action.facts(before, t.side, t.entry_price, t.atr or 0, t.initial_sl or t.sl, None if no_tp else t.tp)
