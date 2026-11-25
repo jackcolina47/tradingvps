@@ -113,7 +113,7 @@ function Dashboard({ onLogout }) {
           <BotPanel settings={data.settings} meta={meta} account={data.account} equity={data.equity} profileActive={data.profile_active} rulesOnly />
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
-          <Panel testId="operations-panel" className="lg:col-span-8" delay={220}>
+          <Panel testId="operations-panel" className="lg:col-span-12" delay={220}>
             <Tabs defaultValue="positions" className="flex h-full flex-col">
               <div className="flex items-center gap-3 border-b border-[#1E293B] px-4 py-2.5">
                 <Layers className="h-4 w-4 shrink-0 text-amber-400" />
@@ -162,8 +162,6 @@ function Dashboard({ onLogout }) {
               </TabsContent>
             </Tabs>
           </Panel>
-          <AiSignals signals={data.signals} ai={data.status.ai} usage={data.status.ai_usage} rulesOnly title="Señales y reglas aprendidas"
-            emptyText="Cada señal detectada se abre directamente; aquí verás si alguna regla aprendida la bloqueó y por qué." />
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <SettingsPanel settings={data.settings} meta={meta} profileActive={data.profile_active} strategyKeys={meta?.strategy_keys} longKeys={meta?.long_horizon_keys}
@@ -182,7 +180,11 @@ function Dashboard({ onLogout }) {
               hint: "Máximo 6 pares. Los parámetros propios (SL/TP/ATR) de cada uno se actualizan si el optimizador encuentra una combinación robusta mejor." }]}
             onSave={(body) => act(() => http.put("/settings", body), "Configuración guardada")}
             onProfile={(level) => act(() => http.post("/profile", { level }), `Perfil de riesgo aplicado: ${meta?.profiles?.[level]?.name || level}`)} />
-          <Terminal exportable logs={data.logs} onClear={() => act(() => http.delete("/logs"))} />
+          <div className="min-w-0 space-y-4 lg:col-span-7">
+            <AiSignals signals={data.signals} ai={data.status.ai} usage={data.status.ai_usage} rulesOnly title="Señales y reglas aprendidas" className=""
+              emptyText="Cada señal detectada se abre directamente; aquí verás si alguna regla aprendida la bloqueó y por qué." />
+            <Terminal exportable logs={data.logs} onClear={() => act(() => http.delete("/logs"))} />
+          </div>
         </div>
         <p className="pb-4 pt-2 font-mono text-[10px] uppercase tracking-wider text-slate-600">
           Simulación con precios reales · No es asesoría financiera · El trading con apalancamiento implica alto riesgo

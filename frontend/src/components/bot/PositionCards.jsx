@@ -2,7 +2,7 @@ import { useState } from "react";
 import { X, LineChart } from "lucide-react";
 import { SideBadge, Empty } from "./Panel";
 import PositionChartDialog from "./PositionChartDialog";
-import { fmtPrice, fmtSignedUsd, fmtUsd, fmtQty, pnlClass, STRATEGY_LABELS, fmtPips, fmtDateTime } from "@/lib/api";
+import { http, fmtPrice, fmtSignedUsd, fmtUsd, fmtQty, pnlClass, STRATEGY_LABELS, fmtPips, fmtDateTime } from "@/lib/api";
 
 const BTN = "inline-flex items-center gap-1 rounded-sm border px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors";
 
@@ -13,7 +13,9 @@ const Field = ({ label, children, testId, className = "text-slate-200" }) => (
   </div>
 );
 
-function PositionCard({ p, onClose, onChart }) {
+const fxBot = () => /\/api\/(fx|pepper)$/.test(http.defaults.baseURL || "");
+
+export function PositionCard({ p, onClose, onChart }) {
   const pct = p.margin ? (p.unrealized_pnl / p.margin) * 100 : 0;
   const cross = p.exit_mode === "cross";
   return (
@@ -24,7 +26,8 @@ function PositionCard({ p, onClose, onChart }) {
             {p.symbol} <SideBadge side={p.side} />
             {p.live && <span className="rounded-sm border border-rose-500/50 px-1 font-mono text-[9px] uppercase text-rose-300">Real</span>}
           </p>
-          <p className="mt-0.5 text-[11px] text-slate-500">{STRATEGY_LABELS[p.strategy] || p.strategy} · 1:{p.leverage}</p>
+          <p className="mt-0.5 text-[11px] text-slate-500">{STRATEGY_LABELS[p.strategy] || p.strategy} · {fxBot() ? `1:${p.leverage}` : `${p.leverage}x`}</p>
+          {p.ai_review && <p data-testid={`position-ai-review-${p.id}`} title={p.ai_review.reasoning} className="mt-0.5 font-mono text-[9px] uppercase text-violet-300">IA: {p.ai_review.action} {p.ai_review.confidence}%</p>}
         </div>
         <div className={`text-right ${pnlClass(p.unrealized_pnl)}`}>
           <p data-testid={`position-pnl-${p.id}`} className="num text-[16px] font-semibold leading-tight">{fmtSignedUsd(p.unrealized_pnl)}</p>
@@ -37,7 +40,7 @@ function PositionCard({ p, onClose, onChart }) {
         <Field label="Precio actual" className="text-slate-50">{fmtPrice(p.mark_price)}</Field>
         <Field label={cross ? "SL de seguridad" : "SL"} className="text-rose-400">{fmtPrice(p.sl)}{p.breakeven && <span className="ml-1 text-[9px] text-amber-400">BE</span>}</Field>
         <Field label="Salida" className="text-emerald-400">{cross ? "Cruce contrario" : fmtPrice(p.tp)}</Field>
-        <Field label="Tamaño (lotes)">{fmtQty(p.qty)}{p.partial_done && p.partial_gross ? <span className="ml-1 rounded-sm bg-emerald-500/20 px-1 text-[9px] text-emerald-300" title={`Cierre parcial ejecutado · ${fmtSignedUsd(p.partial_gross - (p.partial_fees || 0))} realizados`}>½</span> : null}</Field>
+        <Field label={fxBot() ? "Tamaño (lotes)" : "Tamaño"}>{fmtQty(p.qty)}{p.partial_done && p.partial_gross ? <span className="ml-1 rounded-sm bg-emerald-500/20 px-1 text-[9px] text-emerald-300" title={`Cierre parcial ejecutado · ${fmtSignedUsd(p.partial_gross - (p.partial_fees || 0))} realizados`}>½</span> : null}</Field>
         <Field label="Margen">{fmtUsd(p.margin)}</Field>
         <Field label="Máx. a favor">{p.mfe_r > 0 ? `+${p.mfe_r.toFixed(1)}R` : "—"}</Field>
         <Field label="Máx. en contra">{p.mae_r > 0 ? `-${p.mae_r.toFixed(1)}R` : "—"}</Field>

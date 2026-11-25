@@ -179,7 +179,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
             : <BotPanel settings={data.settings} meta={meta} account={data.account} equity={data.equity} profileActive={data.profile_active} fmtLeverage={fmtLev} rulesOnly={rulesOnly} />}
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
-          <Panel testId="fx-operations-panel" className={emaOnly ? "lg:col-span-12" : "lg:col-span-8"} delay={220}>
+          <Panel testId="fx-operations-panel" className="lg:col-span-12" delay={220}>
             <Tabs defaultValue="positions" className="flex h-full flex-col">
               <div className="flex items-center gap-3 border-b border-[#1E293B] px-4 py-2.5">
                 <Layers className="h-4 w-4 shrink-0 text-amber-400" />
@@ -232,8 +232,6 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
               </TabsContent>
             </Tabs>
           </Panel>
-          {!emaOnly && <AiSignals signals={data.signals} ai={data.status.ai} usage={data.status.ai_usage} minConfidence={data.settings.ai_min_confidence} rulesOnly={rulesOnly}
-            {...(rulesOnly ? { title: "Señales y reglas aprendidas", emptyText: "Cada señal detectada se abre directamente; aquí verás si alguna regla aprendida la bloqueó y por qué." } : {})} />}
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           {emaOnly ? (
@@ -249,7 +247,13 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
             onSave={(body) => act(() => http.put("/settings", body), "Configuración guardada")}
             onProfile={(level) => act(() => http.post("/profile", { level }), `Perfil de riesgo aplicado: ${meta?.profiles?.[level]?.name || level}`)} />
           )}
-          <Terminal exportable={bot === "fx"} logs={data.logs} onClear={() => act(() => http.delete("/logs"))} />
+          {emaOnly ? <Terminal exportable={bot === "fx"} logs={data.logs} onClear={() => act(() => http.delete("/logs"))} /> : (
+            <div className="min-w-0 space-y-4 lg:col-span-7">
+              <AiSignals signals={data.signals} ai={data.status.ai} usage={data.status.ai_usage} minConfidence={data.settings.ai_min_confidence} rulesOnly={rulesOnly} className=""
+                {...(rulesOnly ? { title: "Señales y reglas aprendidas", emptyText: "Cada señal detectada se abre directamente; aquí verás si alguna regla aprendida la bloqueó y por qué." } : {})} />
+              <Terminal exportable={bot === "fx"} logs={data.logs} onClear={() => act(() => http.delete("/logs"))} />
+            </div>
+          )}
         </div>
         <p className="pb-4 pt-2 font-mono text-[10px] uppercase tracking-wider text-slate-600">
           Simulación con precios reales de Yahoo Finance · Lotes y pips según especificaciones de {brand.broker}{data.status.costs?.commission_lot_usd ? ` · comisión ${data.status.costs.commission_lot_usd} USD/lote` : ""} · No es asesoría financiera · El apalancamiento implica alto riesgo

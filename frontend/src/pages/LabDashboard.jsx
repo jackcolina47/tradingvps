@@ -93,7 +93,7 @@ export default function LabDashboard({ onLogout, bot = "lab", suffix = "" }) {
           <AiSignals rulesOnly signals={data.signals} title="Cruces detectados" emptyText="Cuando el laboratorio detecte un cruce de EMAs válido aparecerá aquí." className="lg:col-span-3" />
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
-          <Panel testId="operations-panel" className="lg:col-span-7" delay={220}>
+          <Panel testId="operations-panel" className="lg:col-span-12" delay={220}>
             <Tabs defaultValue="positions" className="flex h-full flex-col">
               <div className="flex items-center gap-3 border-b border-[#1E293B] px-4 py-2.5">
                 <Layers className="h-4 w-4 shrink-0 text-fuchsia-400" />
@@ -115,10 +115,12 @@ export default function LabDashboard({ onLogout, bot = "lab", suffix = "" }) {
               </TabsContent>
             </Tabs>
           </Panel>
+        </div>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
           <SettingsPanel testOnly settings={data.settings} meta={meta} hide={["scan_interval_sec", "max_positions", "ai_min_confidence", "min_rr", "ai_enabled", "ai_funnel_enabled", "breakeven_enabled", "trailing_enabled", "htf_filter"]}
             onSave={(body) => act(() => http.put("/settings", body), "Ajustes del laboratorio guardados")} />
+          <Terminal logs={data.logs} onClear={() => act(() => http.delete("/logs"))} />
         </div>
-        <Terminal logs={data.logs} onClear={() => act(() => http.delete("/logs"))} />
         <p className="pb-4 pt-2 font-mono text-[10px] uppercase tracking-wider text-slate-600">Simulación con precios reales · No es asesoría financiera</p>
       </main>
     </div>

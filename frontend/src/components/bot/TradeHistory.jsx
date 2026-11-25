@@ -5,7 +5,8 @@ import { TH, TD } from "./PositionsTable";
 import TradeDetailDialog from "./TradeDetailDialog";
 import TradeFilters, { EMPTY_FILTERS, applyFilters } from "./TradeFilters";
 import { downloadCsv } from "./tradesCsv";
-import { http, fmtPrice, fmtSignedUsd, fmtDateTime, pnlClass, REASON_LABELS, STRATEGY_LABELS, fmtPips, PIPS_HINT } from "@/lib/api";
+import { useIsMobile } from "@/hooks/useIsMobile";
+import { http, fmtPrice, fmtSignedUsd, fmtDateTime, pnlClass, REASON_LABELS, STRATEGY_LABELS, fmtPips, PIPS_HINT, noTp } from "@/lib/api";
 
 const botLabel = () => {
   const b = http.defaults.baseURL || "";
@@ -20,8 +21,46 @@ const REASON_CLS = {
   MANUAL: "text-slate-300 border-slate-500/30",
 };
 
+const Actions = ({ t, onOpen }) => (
+  <span className="inline-flex items-center gap-1.5">
+    {!!(t.note || t.tags?.length) && <StickyNote data-testid={`trade-note-icon-${t.id}`} className="h-3 w-3 text-amber-400" title={[...(t.tags || []), t.note].filter(Boolean).join(" · ")} />}
+    <button data-testid={`trade-analyze-btn-${t.id}`} onClick={() => onOpen(t, true)} title={t.ai_review ? `Análisis IA: ${t.ai_review.verdict} (${t.ai_review.confidence} %)` : "Pedir a la IA un análisis detallado de esta operación"}
+      className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors ${t.ai_review ? "border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10" : "border-violet-400/40 text-violet-300 hover:bg-violet-500/10"}`}>
+      <Sparkles className="h-3 w-3" strokeWidth={2.2} /> {t.ai_review ? "IA ✓" : "Analizar IA"}
+    </button>
+    <button data-testid={`trade-detail-btn-${t.id}`} onClick={() => onOpen(t, false)} title="Ver todos los detalles"
+      className="inline-flex items-center gap-1 rounded-sm border border-amber-500/30 px-1.5 py-1 font-mono text-[10px] uppercase tracking-wider text-amber-300 transition-colors hover:bg-amber-500/10">
+      <Search className="h-3 w-3" strokeWidth={2.2} /> Ver
+    </button>
+  </span>
+);
+
+/** Small screens: one stacked card per trade instead of the wide table. */
+function TradeCard({ t, onOpen }) {
+  return (
+    <article data-testid={`trade-row-${t.id}`} className="rounded-md border border-[#1E293B] bg-[#0B0F17] p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="flex flex-wrap items-center gap-2 font-display text-[14px] font-semibold text-slate-100">{t.symbol} <SideBadge side={t.side} /></p>
+          <p className="mt-0.5 text-[11px] text-slate-500">{STRATEGY_LABELS[t.strategy]} · {fmtDateTime(t.closed_at)}</p>
+        </div>
+        <div className={`text-right ${pnlClass(t.pnl)}`}>
+          <p className="num text-[15px] font-semibold leading-tight">{fmtSignedUsd(t.pnl)}</p>
+          <p className="num text-[11px]">{t.pnl_pct > 0 ? "+" : ""}{t.pnl_pct.toFixed(2)}%{t.pips != null && ` · ${fmtPips(t.pips)}`}</p>
+        </div>
+      </div>
+      <div className="num mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
+        <span>{fmtPrice(t.entry_price)} → {fmtPrice(t.exit_price)}</span>
+        <span className={`rounded-sm border px-1.5 py-0.5 text-[10px] uppercase ${REASON_CLS[t.reason] || "border-slate-600/60 text-slate-300"}`}>{REASON_LABELS[t.reason] || t.reason}</span>
+        <span className="text-slate-500">com. {t.fees.toFixed(2)}</span>
+      </div>
+      <div className="mt-2.5 flex justify-end border-t border-[#1E293B] pt-2.5"><Actions t={t} onOpen={onOpen} /></div>
+    </article>
+  );
+}
+
 function TradeRow({ t, onOpen }) {
-  const hasNote = !!(t.note || t.tags?.length);
+  const hideTp = noTp() || t.exit_mode === "cross";
   return (
     <tr data-testid={`trade-row-${t.id}`} className="border-b border-[#1E293B]/60 transition-colors hover:bg-[#111827]">
       <TD className="text-slate-400">
@@ -38,9 +77,9 @@ function TradeRow({ t, onOpen }) {
       <TD right>{fmtPrice(t.exit_price)}</TD>
       <TD><span className={`rounded-sm border px-1.5 py-0.5 text-[10px] uppercase ${REASON_CLS[t.reason]}`}>{REASON_LABELS[t.reason]}</span>
         {t.mfe_r != null && t.mfe_tp_pct != null && (
-          <span data-testid={`trade-mfe-${t.id}`} className={`mt-0.5 block text-[10px] ${t.reason !== "TP" && t.mfe_tp_pct >= 70 ? "text-amber-300" : "text-slate-500"}`}
-            title={`Máximo a favor +${t.mfe_r} R (${t.mfe_tp_pct} % del camino al TP) · máximo en contra ${t.mae_r} R${t.partial_tp ? " · con cierre parcial" : ""}`}>
-            máx +{t.mfe_r}R · {Math.round(t.mfe_tp_pct)}% TP{t.partial_tp && <span className="ml-1 rounded-sm bg-emerald-500/20 px-1 text-[9px] text-emerald-300">½</span>}
+          <span data-testid={`trade-mfe-${t.id}`} className={`mt-0.5 block text-[10px] ${!hideTp && t.reason !== "TP" && t.mfe_tp_pct >= 70 ? "text-amber-300" : "text-slate-500"}`}
+            title={`Máximo a favor +${t.mfe_r} R${hideTp ? "" : ` (${t.mfe_tp_pct} % del camino al TP)`} · máximo en contra ${t.mae_r} R${t.partial_tp ? " · con cierre parcial" : ""}`}>
+            máx +{t.mfe_r}R{hideTp ? "" : ` · ${Math.round(t.mfe_tp_pct)}% TP`}{t.partial_tp && <span className="ml-1 rounded-sm bg-emerald-500/20 px-1 text-[9px] text-emerald-300">½</span>}
           </span>
         )}
       </TD>
@@ -50,17 +89,7 @@ function TradeRow({ t, onOpen }) {
         <span className="block text-[10px]">{t.pnl_pct > 0 ? "+" : ""}{t.pnl_pct.toFixed(2)}%{t.pips != null && <span data-testid={`trade-pips-${t.id}`} className="ml-1" title={PIPS_HINT}>= {fmtPips(t.pips)}</span>}</span>
       </TD>
       <TD right>
-        <span className="inline-flex items-center gap-1.5">
-          {hasNote && <StickyNote data-testid={`trade-note-icon-${t.id}`} className="h-3 w-3 text-amber-400" title={[...(t.tags || []), t.note].filter(Boolean).join(" · ")} />}
-          <button data-testid={`trade-analyze-btn-${t.id}`} onClick={() => onOpen(t, true)} title={t.ai_review ? `Análisis IA: ${t.ai_review.verdict} (${t.ai_review.confidence} %)` : "Pedir a la IA un análisis detallado de esta operación"}
-            className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-1 font-mono text-[10px] uppercase tracking-wider transition-colors ${t.ai_review ? "border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10" : "border-violet-400/40 text-violet-300 hover:bg-violet-500/10"}`}>
-            <Sparkles className="h-3 w-3" strokeWidth={2.2} /> {t.ai_review ? "IA ✓" : "Analizar IA"}
-          </button>
-          <button data-testid={`trade-detail-btn-${t.id}`} onClick={() => onOpen(t, false)} title="Ver todos los detalles"
-            className="inline-flex items-center gap-1 rounded-sm border border-amber-500/30 px-1.5 py-1 font-mono text-[10px] uppercase tracking-wider text-amber-300 transition-colors hover:bg-amber-500/10">
-            <Search className="h-3 w-3" strokeWidth={2.2} /> Ver
-          </button>
-        </span>
+        <Actions t={t} onOpen={onOpen} />
       </TD>
     </tr>
   );
@@ -72,6 +101,7 @@ export default function TradeHistory({ trades }) {
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [selected, setSelected] = useState(null);
   const [autoAnalyze, setAutoAnalyze] = useState(false);
+  const mobile = useIsMobile();
   const open = (t, analyze) => { setAutoAnalyze(!!analyze); setSelected(t); };
   const firstId = trades[0]?.id;
   const base = http.defaults.baseURL;
@@ -90,7 +120,9 @@ export default function TradeHistory({ trades }) {
     <div>
       <TradeFilters trades={source} filters={filters} onChange={setFilters} shown={shown.length} onExport={() => downloadCsv(shown, botLabel())} />
       <div className="max-h-[420px] overflow-auto thin-scroll">
-        {!shown.length ? <Empty testId="trades-filter-empty" text="Ninguna operación coincide con los filtros." /> : (
+        {!shown.length ? <Empty testId="trades-filter-empty" text="Ninguna operación coincide con los filtros." /> : mobile ? (
+          <div data-testid="trades-cards" className="grid gap-3 p-3">{shown.map((t) => <TradeCard key={t.id} t={t} onOpen={open} />)}</div>
+        ) : (
           <table data-testid="trades-table" className="w-full text-sm">
             <thead className="sticky top-0 border-b border-[#1E293B] bg-[#0D111A]">
               <tr><TH>Cierre</TH><TH>Símbolo</TH><TH>Lado</TH><TH right>Entrada</TH><TH right>Salida</TH><TH>Motivo</TH><TH right>Comisiones</TH><TH right>PnL</TH><TH right>Detalle</TH></tr>

@@ -2,6 +2,9 @@ import { X, Sparkles, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { SideBadge, Empty } from "./Panel";
+import { PositionCard } from "./PositionCards";
+import PositionChartDialog from "./PositionChartDialog";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -40,10 +43,13 @@ const TD = ({ children, right, className = "" }) => (
 );
 
 export default function PositionsTable({ positions, onClose, onCloseAll, aiReview = true }) {
+  const mobile = useIsMobile();
+  const [chart, setChart] = useState(null);
   if (!positions.length) return <Empty testId="positions-empty" text="Sin posiciones abiertas. El bot abrirá operaciones cuando una señal pase los filtros de riesgo y la IA." />;
   const anyLive = positions.some((p) => p.live);
   return (
     <div className="overflow-x-auto thin-scroll">
+      <PositionChartDialog position={chart} onClose={() => setChart(null)} />
       <div className="flex items-center justify-end gap-2 border-b border-[#1E293B] px-3 py-1.5">
         {aiReview && <AiReviewNowButton />}
         {onCloseAll && positions.length > 1 && (
@@ -66,6 +72,11 @@ export default function PositionsTable({ positions, onClose, onCloseAll, aiRevie
           </AlertDialog>
         )}
       </div>
+      {mobile ? (
+        <div data-testid="positions-cards" className="grid gap-3 p-3 [grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr))]">
+          {positions.map((p) => <PositionCard key={p.id} p={p} onClose={onClose} onChart={setChart} />)}
+        </div>
+      ) : (
       <table data-testid="positions-table" className="w-full text-sm">
         <thead className="border-b border-[#1E293B]">
           <tr><TH>Símbolo</TH><TH>Lado</TH><TH right>Entrada</TH><TH right>Marca</TH><TH right>SL</TH><TH right>TP</TH><TH right>Tamaño</TH><TH right>Margen</TH><TH right>PnL</TH><TH right>Acción</TH></tr>
@@ -113,6 +124,7 @@ export default function PositionsTable({ positions, onClose, onCloseAll, aiRevie
           })}
         </tbody>
       </table>
+      )}
     </div>
   );
 }
