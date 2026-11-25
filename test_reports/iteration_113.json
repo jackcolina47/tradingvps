@@ -1,0 +1,15 @@
+{
+  "summary": "Verified iter113 flow calibration end-to-end. Backend constants and prompt text are correct: funnel.SL_ATR_BAND=(0.85,4.0), RANGE_RSI=(42,58), RANGE_ROOM_ATR=1.3, RANGE_ZONE_ATR=0.35, RANGE_TOUCHES=2; stage2 prompt renders 'entre 0.85 y 4 ATR'. trade_guard.WINDOWS['fx'] = [('Londres + Nueva York',180,900), ('Sídney + Tokio',1140,1440)] → continuous 03:00–15:00 NY and 19:00–00:00 NY. Full pytest regression: 470 passed, 16 skipped (matches main agent expectation). API smoke: /api/fx/guard and /api/pepper/guard both return hours.windows [{03:00,15:00},{19:00,00:00}]; /api/guard (crypto) returns single 24h window. Frontend smoke: /hotforex loads cleanly after login (clave BlackCat2233@), header chips show '03:00–15:00 Londres + Nueva York' and '19:00–00:00 Sídney + Tokio'; Documentación pane shows 'El embudo solo busca entradas dentro de estas ventanas (hora de Nueva York), todos los días: 03:00–15:00 y 19:00–00:00'.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_iter113_flow_calibration.py", "/app/backend/tests/test_iter99_trade_guard.py", "/app/backend/tests/test_iter107_range_edge.py", "/app/backend/tests/test_iter110_exact_rr.py", "/app/backend/tests/test_iter111_precision.py"],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Panel password BlackCat2233@ (POST /api/auth/login)",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "iter113 calibration is live and consistent. FX guard windows merged to 03:00–15:00 + 19:00–00:00, range_edge thresholds 42/58 with 1.3 ATR room, SL band (0.85,4.0) with 0.25 buffer giving min 1.10 ATR. Full suite 470/16. Use tests/test_iter103_bybit_hardening.py FakeEngine helpers for funnel.run mocking (as iter113 does)."
+}

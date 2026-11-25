@@ -754,6 +754,12 @@ Decisión del usuario: contratendencia = 2:1 como tendencia (sustituye al TP cor
 - Simulador: `scripts/mt_bridge_mock.py` (puerto 8012, token `mocktoken`). Tests `tests/test_iter112_mt_bridge.py` (42). Suite 423 passed, 16 skipped. testing_agent `iteration_111.json` OK.
 - No verificado: ciclo completo de órdenes en REAL a través del motor (solo a nivel de `FxLiveBroker` contra el simulador) ni el puente real (rechaza la IP del preview).
 
+## Iteración 126 (2026-11) — Calibración de flujo (embudo: 3 bots · horario: bots FX)
+- `funnel.SL_ATR_BAND = (0.85, 4.0)` (stop final ≥ 1,10 ATR con el buffer; objetivo 2:1 ≥ 2,20 ATR). `_in_band()` tolera el redondeo en el borde exacto. El prompt lee la banda de la constante.
+- `range_edge`: `RANGE_RSI = (42, 58)`, `RANGE_ROOM_ATR = 1.3`. `RANGE_ZONE_ATR` sigue en 0,35 (el usuario citó 0,45 como valor «a mantener»: pendiente de confirmar).
+- `trade_guard.WINDOWS["fx"]` = 03:00–15:00 («Londres + Nueva York») y 19:00–00:00 NY; afecta a HotForex y Pepperstone. Regla del viernes sin cambios (sin entradas desde 12:00 NY, cierre 15:30 NY).
+- Tests: `tests/test_iter113_flow_calibration.py` + umbrales en iter99/100/107/110/111. Suite 470 passed, 16 skipped. testing_agent `iteration_113.json` OK.
+
 ### Pendiente
 - P1 Verificar en el VPS el puente real: formato exacto de `/users/current/accounts/{id}`, códigos de `/trade`, deals de cierre (entryType IN/OUT) y comportamiento del ticket tras parcial en MT4.
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
