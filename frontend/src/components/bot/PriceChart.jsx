@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, CandlestickChart, Loader2, Maximize2, Minimize2, PencilRuler } from "lucide-react";
 import { Panel } from "./Panel";
 import { fmtPrice } from "@/lib/api";
@@ -42,7 +42,7 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
   const end = focus ? focus.closed + AFTER * TF_STEP[tf] : 0;
   const anchor = focus && end < Date.now() / 1000 - TF_STEP[tf] ? end - (end % TF_STEP[tf]) : null;
   const { data, meta, loadOlder, loadNewer } = useHistory(symbol, tf, 10000, anchor);
-  const lines = focus ? focus.lines : meta.lines;
+  const lines = useMemo(() => focus?.lines || (focus?.hideTp ? (meta.lines || []).filter((l) => l.title !== "TP") : meta.lines), [focus, meta.lines]);
   const api = useChart(ref, () => { if (fitted.current === `${symbol}-${tf}`) loadOlder(); }, () => { if (fitted.current === `${symbol}-${tf}`) loadNewer(); });
 
   const dr = useDrawings(api, data, symbol, wrap, canvas, !!ind.zones);
