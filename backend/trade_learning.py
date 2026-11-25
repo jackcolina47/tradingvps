@@ -9,6 +9,9 @@ import ai_advisor
 import ai_funnel
 import ai_rules
 import price_action
+import chart
+from indicators import build_df
+from market import TF_SECONDS
 from models import Trade, Signal
 
 logger = logging.getLogger("learning")
@@ -40,6 +43,25 @@ async def window(engine, t: Trade, pad: int = CHART_PAD, before_unit: str = "ms"
             break
     snap = lambda ts: int(ts) - int(ts) % step  # noqa: E731
     return {"tf": tf, "step": step, "candles": candles, "opened": snap(o), "closed": snap(c)}
+
+
+async def exit_candle(engine, t: Trade, tf: str, before_unit: str = "ms") -> dict | None:
+    """Close and EMAs of the candle whose close triggered a candle-close exit (EMA27 / EMA21 close, opposite cross). Cached on the trade."""
+    if t.reason not in chart.CANDLE_CLOSE_REASONS or tf not in TF_SECONDS:
+        return None
+    doc = await engine.db.trades.find_one({"_id": ObjectId(t.id)}, {"exit_candle": 1})
+    if doc and doc.get("exit_candle"):
+        return doc["exit_candle"]
+    step = TF_SECONDS[tf]
+    ts = int(datetime.fromisoformat(t.closed_at).timestamp()) - 120  # the order goes out seconds into the next candle
+    start = ts - ts % step
+    rows = await engine.market.fetch_before(t.symbol, tf, (start + step) * (1000 if before_unit == "ms" else 1), 300)
+    if not rows or int(float(rows[-1][0])) // 1000 != start:
+        return None
+    r = build_df(rows).iloc[-1]
+    out = {"time": start, "tf": tf, **{k: float(r[k]) for k in ("close", "ema9", "ema21", "ema27")}}
+    await engine.db.trades.update_one({"_id": ObjectId(t.id)}, {"$set": {"exit_candle": out}})
+    return out
 
 
 async def _signal(engine, t: Trade) -> dict | None:

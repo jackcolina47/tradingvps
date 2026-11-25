@@ -175,7 +175,11 @@ def add_shared_routes(router, engine, label: str, currency="USDT", before_unit: 
             if sdoc:
                 signal = Signal.from_mongo(sdoc).model_dump()
         tf = (signal or {}).get("timeframe") or (await engine.get_settings()).timeframe
-        return {"trade": trade, "signal": signal, "currency": cur(), "no_tp": trade_learning.no_tp_bot(engine, t), "tf": tf, "fx": hasattr(engine, "profile")}
+        try:
+            candle = await trade_learning.exit_candle(engine, t, tf, before_unit)
+        except Exception:
+            candle = None  # candles unavailable (provider limit / too old): the detail still opens
+        return {"trade": trade, "signal": signal, "currency": cur(), "exit_candle": candle, "no_tp": trade_learning.no_tp_bot(engine, t), "tf": tf, "fx": hasattr(engine, "profile")}
 
     @router.put("/trades/{trade_id}/note")
     async def trade_note(trade_id: str, body: TradeNote):
