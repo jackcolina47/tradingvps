@@ -45,7 +45,7 @@ export function PositionCard({ p, onClose, onChart }) {
         <Field label="Máx. a favor">{p.mfe_r > 0 ? `+${p.mfe_r.toFixed(1)}R` : "—"}</Field>
         <Field label="Máx. en contra">{p.mae_r > 0 ? `-${p.mae_r.toFixed(1)}R` : "—"}</Field>
       </div>
-      <div className="mt-3 flex flex-wrap justify-end gap-2 border-t border-[#1E293B] pt-2.5">
+      <div className="mt-3 flex flex-wrap justify-between gap-2 border-t border-[#1E293B] pt-2.5">
         <button data-testid={`position-chart-btn-${p.id}`} onClick={() => onChart(p)} className={`${BTN} border-sky-500/40 text-sky-300 hover:bg-sky-500/10`}>
           <LineChart className="h-3 w-3" /> Gráfico
         </button>
