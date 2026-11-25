@@ -205,7 +205,7 @@ def register(router, engine, store, news):
                 "opened": opened - opened % step,
                 "candles": [{"time": a, "open": float(o), "high": float(h), "low": float(lo), "close": float(c)}
                             for a, o, h, lo, c in zip(t, df["open"].values, df["high"].values, df["low"].values, df["close"].values)],
-                "ema9": line("ema9"), "ema21": line("ema21")}
+                "ema9": line("ema9"), "ema21": line("ema21"), "ema27": line("ema27")}
 
     @router.post("/positions/{pos_id}/close")
     async def close_pos(pos_id: str):

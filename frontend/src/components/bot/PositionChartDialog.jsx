@@ -20,7 +20,7 @@ function draw(el, d) {
   const priceFormat = { type: "price", precision: d.digits, minMove: Number((10 ** -d.digits).toFixed(d.digits)) };
   const candles = chart.addSeries(CandlestickSeries, { upColor: "#10B981", downColor: "#EF4444", borderVisible: false, wickUpColor: "#10B981", wickDownColor: "#EF4444", priceFormat });
   candles.setData(shift(d.candles, false));
-  EMAS.forEach(([k, , color]) => chart.addSeries(LineSeries, { color, lineWidth: 2, priceLineVisible: false, lastValueVisible: false, priceFormat }).setData(shift(d[k], false)));
+  EMAS.forEach(([k, , color]) => chart.addSeries(LineSeries, { color, lineWidth: 2, priceLineVisible: false, lastValueVisible: false, priceFormat }).setData(shift(d[k] || [], false)));
   candles.createPriceLine({ price: d.entry, color: "#F8FAFC", title: "ENTRADA", lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: true });
   if (d.sl) candles.createPriceLine({ price: d.sl, color: "#EF4444", title: "SL", lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true });
   const long = d.side === "long";
