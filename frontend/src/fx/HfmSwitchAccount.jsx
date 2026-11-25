@@ -12,7 +12,7 @@ const fmt = (v, cur) => `${Number(v || 0).toLocaleString("en-US", { minimumFract
 
 export function HfmSwitchAccount({ config, account, onDone }) {
   const [busy, setBusy] = useState(false);
-  if (config.trading_mode !== "live" || !config.metaapi_account_id) return null;
+  if (config.trading_mode !== "live" || !config.hfm_verified_at) return null;
   const current = config.mt_login && config.mt_server ? `${config.mt_login}@${config.mt_server}` : "";
   const changed = !!account?.account_changed;
   const verified = !!config.hfm_verified_at;

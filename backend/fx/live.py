@@ -1,11 +1,11 @@
-"""HFM live broker for the FX engine (REAL mode): MetaApi account info/positions cache, symbol mapping (suffix), lot quantization,
+"""Live broker for the FX engine (REAL mode) over our own MetaTrader bridge: account info/positions cache, symbol mapping (suffix), lot quantization,
 market orders with SL/TP, close, stop updates and realized result from history deals."""
 import re
 import time
 import uuid
 import asyncio
 import logging
-from fx.metaapi import MetaApi, MetaApiError
+from fx.bridge import MtBridge, BridgeError
 from fx.symbols import SPECS
 
 logger = logging.getLogger("fx.live")
@@ -19,7 +19,7 @@ RECONCILE_BUDGET_SEC = 45.0  # max time spent verifying an order with unknown re
 
 
 def new_link() -> str:
-    """clientId in MetaApi's required `${strategyId}_${positionId}_${orderId}` format (≤ 31 chars, stored in the MT comment)."""
+    """clientId `AIT_<8hex>_o` (≤ 31 chars), stored by the bridge in the MetaTrader order comment."""
     return f"AIT_{uuid.uuid4().hex[:8]}_o"
 
 
@@ -66,15 +66,15 @@ def q_floor(v: float, step: float) -> float:
 
 
 class FxLiveBroker:
-    def __init__(self, token: str, account_id: str, region: str, base_url: str = "", suffix: str = "", symbol_map: dict = None, suffixes: dict = None):
-        self.api = MetaApi(token, region, base_url)
-        self.account_id, self.region, self.suffix = account_id, region, suffix or ""
+    def __init__(self, base_url: str, token: str, account_id: str, suffix: str = "", symbol_map: dict = None, suffixes: dict = None):
+        self.api = MtBridge(base_url, token)
+        self.account_id, self.suffix = account_id, suffix or ""
         self.suffixes = dict(suffixes) if suffixes is not None else dict(HFM_SUFFIXES)  # suffix → account type label (broker profile)
         self.symbol_map = dict(symbol_map or {})  # our symbol → broker name when it is not simply symbol+suffix (HFM metals, dotted suffixes…)
         self._info = {"ts": 0.0, "data": None}
         self._positions = {"ts": 0.0, "data": []}
         self._kcache = {}
-        self.chart_fail_ts = 0.0  # last failure fetching chart candles from MetaApi (chart falls back to Yahoo for 60 s)
+        self.chart_fail_ts = 0.0  # last failure fetching chart candles from the bridge (chart falls back to Yahoo for 60 s)
         self.last_error = None
 
     async def aclose(self):
@@ -88,7 +88,7 @@ class FxLiveBroker:
         if hit and time.time() - hit[0] < (600 if before_ts else cache_sec):
             return hit[1]
         start = datetime.fromtimestamp(before_ts - 1, timezone.utc).isoformat().replace("+00:00", "Z") if before_ts else None
-        rows = await self.api.candles(self.account_id, self.broker_symbol(symbol), tf, start, limit, self.region)
+        rows = await self.api.candles(self.account_id, self.broker_symbol(symbol), tf, start, limit)
         if before_ts:
             rows = [r for r in rows if r[0] // 1000 < before_ts]
         if len(self._kcache) > 300:
@@ -108,7 +108,7 @@ class FxLiveBroker:
     async def resolve_symbol(self, symbol: str):
         """`symbol+suffix` is unknown to the server: find the name this account group really uses (HFM: XAUUSDb may be GOLDb, XAUUSD.b…)
         among the account's symbols, preferring tradable variants that carry the suffix. Returns the broker name or None."""
-        names = await self.api.symbols(self.account_id, self.region)
+        names = await self.api.symbols(self.account_id)
         aliases = [symbol] + SYMBOL_ALIASES.get(symbol, [])
         cands = [n for n in names if any(_norm(n).startswith(a) for a in aliases) and len(_norm(n)) <= len(symbol) + 6]
         cands.sort(key=lambda n: (0 if self.suffix and self.suffix.upper() in _norm(n)[len(symbol) - 1:] else 1, len(n), n))
@@ -116,8 +116,8 @@ class FxLiveBroker:
             if n == f"{symbol}{self.suffix}":
                 continue
             try:
-                spec = await self.api.spec(self.account_id, n, self.region, max_age=0)
-            except MetaApiError as e:
+                spec = await self.api.spec(self.account_id, n, max_age=0)
+            except BridgeError as e:
                 if e.status not in (400, 404):
                     raise
                 continue
@@ -130,7 +130,7 @@ class FxLiveBroker:
 
     async def info(self, max_age: float = 10.0) -> dict:
         if self._info["data"] is None or time.time() - self._info["ts"] > max_age:
-            raw = await self.api.account_info(self.account_id, self.region, refresh=max_age == 0)
+            raw = await self.api.account_info(self.account_id, refresh=max_age == 0)
             self._info = {"ts": time.time(), "data": {
                 "balance": float(raw.get("balance") or 0), "equity": float(raw.get("equity") or 0), "margin": float(raw.get("margin") or 0),
                 "available": float(raw.get("freeMargin") or 0), "leverage": int(raw.get("leverage") or 0), "currency": raw.get("currency") or "",
@@ -147,7 +147,7 @@ class FxLiveBroker:
 
     async def positions(self, max_age: float = 4.0) -> list:
         if time.time() - self._positions["ts"] > max_age:
-            raw = await self.api.positions(self.account_id, self.region, refresh=max_age == 0)
+            raw = await self.api.positions(self.account_id, refresh=max_age == 0)
             self._positions = {"ts": time.time(), "data": [self._pos(p) for p in raw]}
         return self._positions["data"]
 
@@ -155,7 +155,7 @@ class FxLiveBroker:
         return next((p for p in await self.positions(max_age) if p["id"] == str(position_id)), None)
 
     async def lot(self, symbol: str) -> dict:
-        return self._lot_from(symbol, await self.api.spec(self.account_id, self.broker_symbol(symbol), self.region))
+        return self._lot_from(symbol, await self.api.spec(self.account_id, self.broker_symbol(symbol)))
 
     def _lot_from(self, symbol: str, s: dict) -> dict:
         return {"min": float(s.get("minVolume") or 0.01), "step": float(s.get("volumeStep") or 0.01), "max": float(s.get("maxVolume") or 100),
@@ -166,19 +166,19 @@ class FxLiveBroker:
         """Quote AND tradability: HFM lists every account group's symbols, but only the ones with your suffix are tradable (others → ERR_TRADE_DISABLED).
         An unknown name is looked up in the account's symbol list once (`resolve`) and remembered in `symbol_map`."""
         try:
-            spec = await self.api.spec(self.account_id, self.broker_symbol(symbol), self.region, max_age=0)
+            spec = await self.api.spec(self.account_id, self.broker_symbol(symbol), max_age=0)
             lot = self._lot_from(symbol, spec)
-            tick = await self.api.tick(self.account_id, self.broker_symbol(symbol), self.region)
+            tick = await self.api.tick(self.account_id, self.broker_symbol(symbol))
             mode = spec.get("tradeMode") or TRADE_MODE_FULL
             ok = mode == TRADE_MODE_FULL
             return {"ok": ok, "quoted": True, "broker_symbol": lot["symbol"], "min_lot": lot["min"], "lot_step": lot["step"], "digits": lot["digits"],
                     "contract": lot["contract"], "bid": tick.get("bid"), "ask": tick.get("ask"), "trade_mode": trade_mode_txt(mode), "resolved": symbol in self.symbol_map,
                     "error": None if ok else f"cotiza pero NO es operable en esta cuenta ({trade_mode_txt(mode)}) · sufijo de símbolos incorrecto"}
-        except MetaApiError as e:
+        except BridgeError as e:
             if e.status in (400, 404) and resolve:
                 try:
                     alt = await self.resolve_symbol(symbol)
-                except MetaApiError:
+                except BridgeError:
                     alt = None
                 if alt:
                     self.symbol_map[symbol] = alt
@@ -192,19 +192,19 @@ class FxLiveBroker:
     async def detect_suffix(self, probe: str = SUFFIX_PROBE) -> dict:
         """Finds which variant of `probe` (EURUSD, EURUSDb, EURUSDr…) the account can actually trade → the symbol suffix of this account type."""
         try:
-            names = await self.api.symbols(self.account_id, self.region)
+            names = await self.api.symbols(self.account_id)
             cands = sorted({n[len(probe):] for n in names if n.startswith(probe) and len(n) - len(probe) <= 4}, key=lambda s: (len(s), s))
-        except MetaApiError:
+        except BridgeError:
             cands = []
         if not cands:
             cands = list(self.suffixes)
         rows = []
         for suf in cands[:8]:
             try:
-                spec = await self.api.spec(self.account_id, probe + suf, self.region, max_age=0)
+                spec = await self.api.spec(self.account_id, probe + suf, max_age=0)
                 rows.append({"suffix": suf, "symbol": probe + suf, "trade_mode": trade_mode_txt(spec.get("tradeMode") or TRADE_MODE_FULL),
                              "tradable": (spec.get("tradeMode") or TRADE_MODE_FULL) == TRADE_MODE_FULL})
-            except MetaApiError as e:
+            except BridgeError as e:
                 if e.status not in (404, 400):
                     raise
         tradable = [r for r in rows if r["tradable"]]
@@ -221,13 +221,13 @@ class FxLiveBroker:
         return None
 
     async def _reconcile_open(self, link: str) -> dict | None:
-        """Trade result unknown (timeout / connection dropped mid-trade): MetaApi may still have executed it. Looks for a position (then a filled
+        """Trade result unknown (timeout / connection dropped mid-trade): the terminal may still have executed it. Looks for a position (then a filled
         order) carrying our clientId before deciding whether a retry is safe."""
         self.invalidate()
-        pos = await self.api.find_position_by_client_id(self.account_id, link, self.region)
+        pos = await self.api.find_position_by_client_id(self.account_id, link)
         if pos:
             return {"id": str(pos.get("id"))}
-        order = await self.api.order_filled_by_client_id(self.account_id, link, self.region)
+        order = await self.api.order_filled_by_client_id(self.account_id, link)
         return {"id": str(order.get("positionId") or "")} if order and order.get("positionId") else None
 
     async def _with_retries(self, send, on_unknown):
@@ -238,12 +238,12 @@ class FxLiveBroker:
         while True:
             try:
                 return await send(), attempts + 1, None
-            except MetaApiError as e:
+            except BridgeError as e:
                 if e.kind == "unknown":
                     try:
                         done = await asyncio.wait_for(on_unknown(), RECONCILE_BUDGET_SEC)
-                    except (MetaApiError, asyncio.TimeoutError) as ve:
-                        detail = ve.msg[:80] if isinstance(ve, MetaApiError) else f"sin respuesta en {RECONCILE_BUDGET_SEC:.0f} s"
+                    except (BridgeError, asyncio.TimeoutError) as ve:
+                        detail = ve.msg[:80] if isinstance(ve, BridgeError) else f"sin respuesta en {RECONCILE_BUDGET_SEC:.0f} s"
                         e.msg, e.attempts = f"{e.msg} · no se pudo verificar en HFM ({detail})", attempts + 1
                         raise e
                     if done is not None:
@@ -269,7 +269,7 @@ class FxLiveBroker:
 
         async def send():
             links.append(new_link())
-            return await self.api.market_order(self.account_id, lot["symbol"], side, vol, round(sl, d), tp_r, links[-1], self.region)
+            return await self.api.market_order(self.account_id, lot["symbol"], side, vol, round(sl, d), tp_r, links[-1])
 
         async def on_unknown():
             found = await self._reconcile_open(links[-1])
@@ -277,7 +277,7 @@ class FxLiveBroker:
 
         try:
             res, attempts, note = await self._with_retries(send, on_unknown)
-        except MetaApiError as e:
+        except BridgeError as e:
             e.link_id = links[-1] if links else ""
             raise
         link = links[-1]
@@ -290,7 +290,7 @@ class FxLiveBroker:
 
     async def close(self, position_id: str, link_id: str = "") -> dict:
         async def send():
-            return await self.api.close_position(self.account_id, position_id, self.region, close_link(link_id))
+            return await self.api.close_position(self.account_id, position_id, close_link(link_id))
 
         async def on_unknown():
             self.invalidate()
@@ -305,7 +305,7 @@ class FxLiveBroker:
         before = await self.position(position_id, max_age=0)
 
         async def send():
-            return await self.api.close_position_partially(self.account_id, position_id, lots, self.region, close_link(link_id)[:28] + "p")
+            return await self.api.close_position_partially(self.account_id, position_id, lots, close_link(link_id)[:28] + "p")
 
         async def on_unknown():
             self.invalidate()
@@ -322,7 +322,7 @@ class FxLiveBroker:
         want_sl, want_tp = round(sl, d), (round(tp, d) if tp is not None else None)
 
         async def send():
-            return await self.api.modify_position(self.account_id, position_id, want_sl, want_tp, self.region)
+            return await self.api.modify_position(self.account_id, position_id, want_sl, want_tp)
 
         async def on_unknown():
             self.invalidate()
@@ -336,7 +336,7 @@ class FxLiveBroker:
     async def closed_result(self, position_id: str, tries: int = 4) -> dict | None:
         """Realized result of a closed position from its exit deals: net = profit + swap + commission (both legs)."""
         for i in range(tries):
-            deals = await self.api.deals_by_position(self.account_id, position_id, self.region)
+            deals = await self.api.deals_by_position(self.account_id, position_id)
             outs = [d for d in deals if str(d.get("entryType", "")).endswith("OUT")]
             vol_in = sum(float(d.get("volume") or 0) for d in deals if str(d.get("entryType", "")).endswith("IN"))
             vol_out = sum(float(d.get("volume") or 0) for d in outs)
@@ -358,7 +358,7 @@ class FxLiveBroker:
         from datetime import datetime, timezone
         start = datetime.fromtimestamp(since_ms / 1000, timezone.utc).isoformat().replace("+00:00", "Z")
         end = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        deals = await self.api.deals_by_time(self.account_id, start, end, self.region)
+        deals = await self.api.deals_by_time(self.account_id, start, end)
         out = []
         for d in deals:
             if d.get("type") not in BALANCE_DEAL_TYPES:

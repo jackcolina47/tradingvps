@@ -1,5 +1,5 @@
-"""Broker profiles for the FX engine instances (HotForex/HFM and Pepperstone share the same engine via MetaApi): names, collections,
-MT servers, symbol suffixes, provisioning keywords and trading costs (spread factor + commission per lot)."""
+"""Broker profiles for the FX engine instances (HotForex/HFM and Pepperstone share the same engine via our own MetaTrader bridge): names, collections,
+MT servers, symbol suffixes, default bridge account and trading costs (spread factor + commission per lot)."""
 from dataclasses import dataclass, field
 from fx.symbols import SPECS, AVAILABLE, PEPPER_SYMBOLS, is_crypto
 
@@ -32,8 +32,7 @@ class BrokerProfile:
     tg_icon: str
     broker: str
     broker_long: str
-    metaapi_name: str
-    keywords: tuple
+    bridge_account: str
     suffixes: dict
     suffix_hint: str
     server_hint: str
@@ -59,7 +58,7 @@ class BrokerProfile:
 
 HFM = BrokerProfile(
     rules_only=True, dual_pair=True, key="hfm", prefix="fx_", api_prefix="/api/fx", panel="fx", ai_kind="fx", bot_name="HotForex AI Trading", tg_name="HotForex AI", tg_icon="🏦",
-    broker="HFM", broker_long="HotForex", metaapi_name="hotforex-ai-trading", keywords=("HFM", "HotForex"),
+    broker="HFM", broker_long="HotForex", bridge_account="hfm_v1",
     suffixes={"": "Premium", "b": "Zero", "r": "Pro", "c": "Cent", "x": "InfinityX"},
     suffix_hint="el símbolo cotiza pero no es operable en esta cuenta: revisa el sufijo de símbolos (HFM: Premium sin sufijo, Zero «b», Pro «r», Cent «c», InfinityX «x»)",
     server_hint="HFMarketsGlobal-Live2", servers={"mt5": ["HFMarketsGlobal-Live", "HFMarketsGlobal-Live2", "HFMarketsGlobal-Demo"], "mt4": ["HFMarketsEurope-Live", "HFMarketsGlobal-Demo"]},
@@ -69,7 +68,7 @@ HFM = BrokerProfile(
 
 PEPPERSTONE = BrokerProfile(
     ema_only=True, symbols=tuple(PEPPER_SYMBOLS), key="pepperstone", prefix="pep_", api_prefix="/api/pepper", panel="pepper", ai_kind="pep", bot_name="Pepperstone AI trading", tg_name="Pepperstone AI", tg_icon="🌶",
-    broker="Pepperstone", broker_long="Pepperstone", metaapi_name="pepperstone-ai-trading", keywords=("Pepperstone",),
+    broker="Pepperstone", broker_long="Pepperstone", bridge_account="pepperstone_v1",
     suffixes={"": "Standard / Razor (sin sufijo)"},
     suffix_hint="el símbolo cotiza pero no es operable en esta cuenta: en Pepperstone los símbolos no llevan sufijo (EURUSD, XAUUSD); revisa el nombre exacto en MetaTrader",
     server_hint="Pepperstone-MT5-Live01",

@@ -1,4 +1,4 @@
-"""Shared broker-connection health (HFM/MetaApi in FX, Bybit in crypto): one alert per outage, reminder every 6 h, recovery notice."""
+"""Shared broker-connection health (HFM/puente MT in FX, Bybit in crypto): one alert per outage, reminder every 6 h, recovery notice."""
 import time
 from datetime import datetime, timezone
 

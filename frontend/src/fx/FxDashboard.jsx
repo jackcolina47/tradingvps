@@ -163,8 +163,8 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
         {(data.status.broker_error || data.status.broker_health?.ok === false) && (
           <div data-testid="fx-broker-error-banner" className="rounded-md border border-rose-500/40 bg-rose-500/10 px-4 py-2 font-mono text-[11px] text-rose-200">
             {data.status.broker_health?.down_since
-              ? <>Cuenta {brand.broker} sin conexión con MetaApi desde las {fmtTime(data.status.broker_health.down_since)} ({data.status.broker_health.down_sec < 60 ? `${data.status.broker_health.down_sec} s` : `${Math.round(data.status.broker_health.down_sec / 60)} min`}) · {data.status.broker_health.error} · el bot no abrirá nuevas operaciones hasta reconectar{data.status.broker_health.alerted ? " · aviso enviado por Telegram" : ""}</>
-              : <>{brand.broker} / MetaApi sin respuesta: {data.status.broker_error} · equidad y posiciones reales pendientes de sincronizar</>}
+              ? <>Cuenta {brand.broker} sin conexión con el puente MT desde las {fmtTime(data.status.broker_health.down_since)} ({data.status.broker_health.down_sec < 60 ? `${data.status.broker_health.down_sec} s` : `${Math.round(data.status.broker_health.down_sec / 60)} min`}) · {data.status.broker_health.error} · el bot no abrirá nuevas operaciones hasta reconectar{data.status.broker_health.alerted ? " · aviso enviado por Telegram" : ""}</>
+              : <>{brand.broker} / puente MT sin respuesta: {data.status.broker_error} · equidad y posiciones reales pendientes de sincronizar</>}
           </div>
         )}
         <SessionsStrip hours={data.status.market_hours} allowed={data.settings.sessions_allowed} />

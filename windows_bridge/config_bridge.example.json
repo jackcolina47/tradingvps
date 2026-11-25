@@ -1,0 +1,38 @@
+{
+  "host": "0.0.0.0",
+  "port": 8000,
+  "token": "PON_AQUI_UN_TOKEN_LARGO_DE_AL_MENOS_24_CARACTERES",
+  "allowed_ips": ["IP_PUBLICA_DE_TU_VPS_LINUX"],
+  "allow_any_ip": false,
+  "accounts": {
+    "hfm_v1": {
+      "platform": "mt4",
+      "files_dir": "C:\\Users\\Administrator\\AppData\\Roaming\\MetaQuotes\\Terminal\\HASH_DEL_TERMINAL_HFM_1\\MQL4\\Files",
+      "symbol_suffix": "",
+      "symbol_map": {},
+      "slippage_points": 30,
+      "magic": 777001,
+      "server_utc_offset_hours": null
+    },
+    "hfm_v2": {
+      "platform": "mt4",
+      "files_dir": "C:\\Users\\Administrator\\AppData\\Roaming\\MetaQuotes\\Terminal\\HASH_DEL_TERMINAL_HFM_2\\MQL4\\Files",
+      "symbol_suffix": "",
+      "symbol_map": {},
+      "slippage_points": 30,
+      "magic": 777002,
+      "server_utc_offset_hours": null
+    },
+    "pepperstone_v1": {
+      "platform": "mt5",
+      "terminal_path": "C:\\Program Files\\Pepperstone MetaTrader 5\\terminal64.exe",
+      "login": null,
+      "password": null,
+      "server": null,
+      "symbol_suffix": "",
+      "symbol_map": {},
+      "deviation_points": 30,
+      "server_utc_offset_hours": null
+    }
+  }
+}

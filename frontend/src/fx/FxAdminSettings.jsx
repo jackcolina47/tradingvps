@@ -20,7 +20,7 @@ const WEEKLY_DESC = "PnL y pips netos de la semana, mejores y peores pares, deci
 
 const liveLabels = (bk) => ({
   exchange: bk,
-  liveDesc: (d) => <>Operando con dinero real en {bk} <span className="text-slate-200">{d.env}</span> vía MetaApi desde {fmtDateTime(d.live_since)}. Las órdenes a mercado llevan SL/TP adjuntos, el trailing stop se actualiza en el bróker y los cierres por SL/TP se detectan desde el historial de la cuenta.</>,
+  liveDesc: (d) => <>Operando con dinero real en {bk} <span className="text-slate-200">{d.env}</span> vía puente MT propio desde {fmtDateTime(d.live_since)}. Las órdenes a mercado llevan SL/TP adjuntos, el trailing stop se actualiza en el bróker y los cierres por SL/TP se detectan desde el historial de la cuenta.</>,
   paperDesc: () => <>Deja el bot en paper hasta que el historial demuestre expectativa positiva. Cuando los requisitos estén en verde, pasa a real: el bot usará la misma estrategia, el mismo riesgo y la equidad real de tu cuenta {bk} (apalancamiento del bróker) para dimensionar cada orden en lotes.</>,
   dialogDesc: (d) => <>El bot enviará órdenes reales a {bk} <b className="text-slate-200">{d.env}</b> con una equidad verificada de <b className="text-slate-200">{(d.verified_equity || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })} {d.currency}</b>. Riesgo por operación, lote mínimo, límites diarios y filtros de sesión y noticias se aplican tal cual.</>,
   resetLabel: `Reiniciar estadísticas con la equidad real de ${bk}`,
@@ -51,7 +51,7 @@ export default function FxAdminSettings({ account, refresh }) {
     <div data-testid="fx-admin-settings" className="space-y-4">
       <div>
         <h2 className="font-display text-base font-bold uppercase tracking-[0.12em] text-slate-100 md:text-lg">Ajustes · {brand.name}</h2>
-        <p className="text-[12px] text-slate-500">Cuenta real de {brand.broker} (vía MetaApi) y cambio de modo, agente de noticias y trading por noticias, revisión IA automática, resumen semanal y cuenta paper. La clave de acceso, la IA y Telegram son compartidos con los otros bots. La estrategia y el riesgo se configuran desde el panel principal.</p>
+        <p className="text-[12px] text-slate-500">Cuenta real de {brand.broker} (vía puente MT propio) y cambio de modo, agente de noticias y trading por noticias, revisión IA automática, resumen semanal y cuenta paper. La clave de acceso, la IA y Telegram son compartidos con los otros bots. La estrategia y el riesgo se configuran desde el panel principal.</p>
       </div>
       <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
         <HfmSection config={config} onSave={save} onRefresh={() => { load(); refresh?.(); }} account={account} />

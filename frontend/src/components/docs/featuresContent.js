@@ -4,7 +4,7 @@ export function buildFeatures(bot) {
   const pep = bot === "pepper";
   const name = pep ? "Pepperstone AI trading" : fx ? "HotForex AI Trading" : "Bybit AI Trader";
   const market = fx ? "forex y metales (oro, plata y 10 pares mayores/cruces) con precios de Yahoo Finance" : "futuros perpetuos USDT de Bybit (BTC, ETH, SOL, XRP, AVAX, LINK y hasta 12 pares)";
-  const broker = pep ? "tu cuenta MetaTrader de Pepperstone a través de MetaApi.cloud" : fx ? "tu cuenta HFM (HotForex) a través de MetaApi.cloud" : "tu cuenta de Bybit (API V5 firmada)";
+  const broker = pep ? "tu cuenta MetaTrader de Pepperstone a través de tu propio puente MT (VPS Windows)" : fx ? "tu cuenta HFM (HotForex) a través de tu propio puente MT (VPS Windows)" : "tu cuenta de Bybit (API V5 firmada)";
   const cur = fx ? "USD" : "USDT";
   const hero = {
     title: `${name}: un operador algorítmico que trabaja 24/7 y piensa antes de entrar`,
@@ -141,15 +141,15 @@ export function buildFeatures(bot) {
       ],
     },
     {
-      icon: "Landmark", title: pep ? "Modo REAL con Pepperstone vía MetaApi" : fx ? "Modo REAL con HFM vía MetaApi" : "Modo REAL con Bybit",
-      text: pep ? "Vincula tu cuenta MetaTrader 4/5 de Pepperstone (demo o real) con un token de MetaApi: el bot la despliega, la verifica y opera igual que en paper. Importante: MetaApi solo conecta cuentas MetaTrader; si abres la cuenta en cTrader el bot no podrá operarla en real (sí puedes seguirla en paper). Eliges el tipo de infraestructura de MetaApi (Cloud G2 alta · recomendada y la más barata, G1 regular o G1 alta) viendo su coste por hora y por mes."
-          : fx ? "Vincula tu cuenta MT4/MT5 de HFM (demo o real) con un token de MetaApi: el bot la despliega, la verifica y opera igual que en paper. Eliges el tipo de infraestructura de MetaApi (Cloud G2 alta · recomendada y la más barata, G1 regular o G1 alta) viendo su coste por hora y por mes."
+      icon: "Landmark", title: pep ? "Modo REAL con Pepperstone vía puente MT propio" : fx ? "Modo REAL con HFM vía puente MT propio" : "Modo REAL con Bybit",
+      text: pep ? "Conecta tu cuenta MetaTrader 5 de Pepperstone (demo o real) mediante tu puente MT en el VPS Windows (cuenta pepperstone_v1): el bot la verifica y opera igual que en paper. Importante: el puente solo conecta terminales MetaTrader; si abres la cuenta en cTrader el bot no podrá operarla en real (sí puedes seguirla en paper)."
+          : fx ? "Conecta tu cuenta MetaTrader 4 de HFM (demo o real) mediante tu puente MT en el VPS Windows (cuenta hfm_v1): el bot la verifica y opera igual que en paper."
                 : "Introduce una API key de Bybit (mainnet, testnet o demo) y el bot opera con órdenes a mercado con stop y objetivo adjuntos.",
       bullets: [
         pep ? "Tipo de cuenta Pepperstone seleccionable en Ajustes: Razor (spread crudo + comisión de 7 USD por lote ida y vuelta, por defecto) o Standard (solo spread, sin comisión). El bot usa ese perfil de costes en paper, backtests, optimizador, plan Monte Carlo y para el PnL esperado; los símbolos van sin sufijo (EURUSD, XAUUSD) y el servidor es del tipo Pepperstone-Demo / Pepperstone-MT5-Live01." : null,
         "Lista de comprobación antes de cambiar de modo: credenciales verificadas, bot detenido, sin posiciones abiertas; confirmación escribiendo REAL y reinicio de estadísticas con la equidad real.",
         "Sincronización continua: marca, PnL, trailing enviado al bróker, detección de cierres hechos fuera del bot y de posiciones externas.",
-        fx ? "Alerta de desconexión: si MetaApi pierde la conexión con HFM más de 180 s (configurable), banner rojo + Telegram, y el bot no abre nada hasta que vuelve."
+        fx ? "Alerta de desconexión: si el puente MT o el terminal pierden la conexión con HFM más de 180 s (configurable), banner rojo + Telegram, y el bot no abre nada hasta que vuelve."
            : "Alerta de desconexión: si Bybit deja de responder más de 180 s (configurable), banner rojo + Telegram, y el bot no abre nada hasta que vuelve; cierre total de posiciones con confirmación.",
         "Depósitos y retiros detectados automáticamente en la cuenta real (cada minuto o al instante si la equidad salta) y excluidos de las estadísticas.",
       ],

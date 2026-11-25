@@ -138,7 +138,7 @@ class SignalsMixin:
                  else f"máximo de posiciones alcanzado ({settings.max_positions})" if only and len(open_docs) >= settings.max_positions
                  else "viernes desde las 12:00 de Nueva York: sin nuevas entradas" if settings.close_before_weekend and friday_stage() and not is_crypto(symbol)
                  else f"fuera de las sesiones permitidas ({session_names(settings.sessions_allowed)})" if only and not is_crypto(symbol) and not in_sessions(settings.sessions_allowed)
-                 else f"cuenta {self.bk} sin conexión con MetaApi" if self.live and self.hfm["down_since"]
+                 else f"cuenta {self.bk} sin conexión con el puente MT" if self.live and self.hfm["down_since"]
                  else f"par no operable en {self.bk} con el sufijo de símbolos configurado" if self.live and self.cfg and symbol in (self.cfg.hfm_symbols_bad or [])
                  else None if only else await ai_advisor.balance_block())
         if block:
@@ -178,7 +178,7 @@ class SignalsMixin:
             if exp:
                 return exp, "EXPOSICION", open_syms
         if self.live and self.hfm["down_since"]:
-            return f"cuenta {self.bk} sin conexión con MetaApi", "BLOQUEADA", open_syms
+            return f"cuenta {self.bk} sin conexión con el puente MT", "BLOQUEADA", open_syms
         if self.live and self.cfg and symbol in (self.cfg.hfm_symbols_bad or []):
             return f"par no operable en {self.bk} con el sufijo de símbolos configurado (Ajustes → {self.bl} → Comprobar símbolos)", "BLOQUEADA", open_syms
         return None, None, open_syms
@@ -226,7 +226,7 @@ class SignalsMixin:
         price, spread = self.market.tickers.get(symbol, {}).get("price"), self.costs.spread(symbol)
         if self.live and self.broker:
             try:
-                tick = await self.broker.api.tick(self.broker.account_id, self.broker.broker_symbol(symbol), self.broker.region)
+                tick = await self.broker.api.tick(self.broker.account_id, self.broker.broker_symbol(symbol))
                 if tick.get("bid") and tick.get("ask"):
                     price, spread = tick["ask"] if sig["side"] == "long" else tick["bid"], tick["ask"] - tick["bid"]
             except Exception as e:

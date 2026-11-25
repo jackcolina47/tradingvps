@@ -3,7 +3,7 @@ export function buildHowTo(bot) {
   const fx = bot === "fx" || bot === "pepper";
   const pep = bot === "pepper";
   const cur = fx ? "USD" : "USDT";
-  const brokerName = pep ? "Pepperstone (MetaApi)" : fx ? "HFM (MetaApi)" : "Bybit";
+  const brokerName = pep ? "Pepperstone (puente MT)" : fx ? "HFM (puente MT)" : "Bybit";
   return [
     {
       id: "inicio", icon: "Compass", title: "1 · Primeros pasos y recorrido por el panel",
@@ -111,8 +111,8 @@ export function buildHowTo(bot) {
         "Telegram: crea un bot con @BotFather y pega el token; escribe un mensaje a tu bot y pulsa «Detectar chat ID»; activa los avisos que quieras y envía una prueba. Tarjeta «Resumen semanal»: vista previa y «Enviar ahora».",
         "Revisión IA automática: activar, frecuencia (diaria/semanal + día), aplicar cambios o solo avisar, «Ejecutar ahora» y última revisión con resumen y cambios.",
         "Agente de noticias" + (fx ? "" : " y Filtro de funding") + ": intervalos, ventanas de bloqueo, factores de tamaño" + (fx ? " y trading por noticias." : " y umbrales ALTO/EXTREMO."),
-        pep ? "Pepperstone · cuenta real: token de MetaApi, login, contraseña master, servidor (lista de servidores habituales: Pepperstone-Demo, Pepperstone-MT5-Live01…), plataforma MT4/MT5 (cTrader no es compatible con MetaApi), región, sufijo de símbolos (en Pepperstone vacío) y «Tipo de cuenta Pepperstone · costes» (Razor: spread crudo + 7 USD/lote · Standard: solo spread) que el bot usa en paper, backtests y plan; tipo de cuenta MetaApi con su coste y «Recrear con el nuevo tipo»; Vincular, Probar conexión, Comprobar símbolos, Redesplegar y Quitar; aviso de desconexión; «Cambiar de cuenta · re-basar capital»."
-           : fx ? "HotForex · cuenta real: token de MetaApi, login, contraseña master, servidor, plataforma MT4/MT5, región, tipo de cuenta HFM · sufijo de símbolos (autodetectado al probar la conexión) y endpoint avanzado; tipo de cuenta MetaApi con su coste (Cloud G2 alta · recomendada, G1 regular, G1 alta) y «Recrear con el nuevo tipo» si la cuenta ya existe con otro; Vincular, Probar conexión, Comprobar símbolos, Redesplegar y Quitar; aviso de desconexión (segundos); «Cambiar de cuenta · re-basar capital» para pasar de la demo a dinero real sin perder historial."
+        pep ? "Pepperstone · cuenta real: URL del puente MT, token, ID de cuenta (pepperstone_v1), sufijo de símbolos (en Pepperstone vacío) y «Tipo de cuenta Pepperstone · costes» (Razor: spread crudo + 7 USD/lote · Standard: solo spread) que el bot usa en paper, backtests y plan; Probar conexión, Comprobar símbolos, Reconectar y Quitar; aviso de desconexión; «Cambiar de cuenta · re-basar capital»."
+           : fx ? "HotForex · cuenta real: URL del puente MT, token, ID de cuenta (hfm_v1) y tipo de cuenta HFM · sufijo de símbolos (autodetectado al probar la conexión); Probar conexión, Comprobar símbolos, Reconectar y Quitar; aviso de desconexión (segundos); «Cambiar de cuenta · re-basar capital» para pasar de la demo a dinero real sin perder historial."
            : "Bybit · cuenta real: entorno (mainnet/testnet/demo), API key y secret, endpoint avanzado y aviso de desconexión (segundos), Probar conexión (equidad, disponible, posiciones, desfase horario) y Quitar.",
         "Modo de operación: lista de comprobación y botón «Pasar a modo REAL» / «Volver a paper».",
         `Cuenta paper: capital inicial, aportes netos, equidad y operaciones; «Depositar / Retirar» para simular aportes; «Reiniciar con este capital» (borra operaciones, señales, sombras y movimientos; también disponible desde la cabecera con $500 ${cur}).`,
@@ -122,16 +122,16 @@ export function buildHowTo(bot) {
     {
       id: "real", icon: "Landmark", title: `12 · Pasar a modo REAL con ${brokerName}`,
       steps: pep ? [
-        "Abre tu cuenta en Pepperstone eligiendo la plataforma MetaTrader 5 (o MT4), no cTrader: MetaApi, el puente que usa el bot, solo conecta cuentas MetaTrader. Elige el tipo de cuenta (Razor con comisión o Standard solo spread) y selecciónalo igual en Ajustes → Pepperstone para que los costes del bot coincidan.",
-        "Crea una cuenta en MetaApi.cloud y copia tu token (API access token). En Pepperstone necesitas el login, la contraseña MASTER (no la de inversor) y el nombre exacto del servidor (p. ej. Pepperstone-Demo o Pepperstone-MT5-Live01; el campo te sugiere los habituales).",
-        "Ajustes → Pepperstone · cuenta real: pega token, login, contraseña, servidor, plataforma y región; «Guardar» y luego «Vincular cuenta» (el bot la crea/despliega en MetaApi; tarda 1–3 min la primera vez).",
+        "Abre tu cuenta en Pepperstone eligiendo la plataforma MetaTrader 5 (o MT4), no cTrader: el puente que usa el bot solo conecta terminales MetaTrader. Elige el tipo de cuenta (Razor con comisión o Standard solo spread) y selecciónalo igual en Ajustes → Pepperstone para que los costes del bot coincidan.",
+        "Instala el puente MT (carpeta windows_bridge) en tu VPS Windows, abre el terminal MetaTrader de la cuenta con Algo Trading activo y arranca mt_bridge.py. En Pepperstone necesitas el login, la contraseña MASTER (no la de inversor) y el nombre exacto del servidor (p. ej. Pepperstone-Demo o Pepperstone-MT5-Live01; el campo te sugiere los habituales).",
+        "Ajustes → Pepperstone · cuenta real: pega token, login, contraseña, servidor, plataforma y región; «Guardar» y luego «Probar conexión» (el bot lee la cuenta del terminal a través del puente; tarda 1–3 min la primera vez).",
         "«Probar conexión» debe mostrar equidad, moneda, apalancamiento y «trading permitido». En Pepperstone los símbolos no llevan sufijo; «Comprobar símbolos» verifica que los 12 pares cotizan y son operables en tu cuenta.",
         "Modo de operación: cumple la lista (cuenta vinculada y verificada, trading permitido, bot detenido, sin posiciones, modo laboratorio desactivado; se recomienda haber superado la Fase 0 del plan), escribe REAL y confirma. Las estadísticas se reinician con la equidad real.",
         "Inicia el bot. A partir de ahora las órdenes, el PnL y la equidad vienen de Pepperstone; las señales se siguen calculando con velas de Yahoo. Si la conexión cae más del tiempo configurado te avisará y no abrirá nada hasta recuperarse.",
         "Para volver a paper: detén el bot, cierra posiciones y pulsa «Volver a paper» (la cuenta paper vuelve a $500).",
       ] : fx ? [
-        "Crea una cuenta en MetaApi.cloud y copia tu token (API access token). En HFM necesitas el login, la contraseña MASTER (no la de inversor: con ella el bot solo podría leer) y el nombre exacto del servidor (p. ej. HFMarketsGlobal-Demo).",
-        "Ajustes → HotForex · cuenta real: pega token, login, contraseña, servidor, plataforma y región; «Guardar» y luego «Vincular cuenta» (el bot la crea/despliega en MetaApi; tarda 1–3 min la primera vez).",
+        "Instala el puente MT (carpeta windows_bridge) en tu VPS Windows, abre el terminal MetaTrader de la cuenta con Algo Trading activo y arranca mt_bridge.py. En HFM necesitas el login, la contraseña MASTER (no la de inversor: con ella el bot solo podría leer) y el nombre exacto del servidor (p. ej. HFMarketsGlobal-Demo).",
+        "Ajustes → HotForex · cuenta real: pega token, login, contraseña, servidor, plataforma y región; «Guardar» y luego «Probar conexión» (el bot lee la cuenta del terminal a través del puente; tarda 1–3 min la primera vez).",
         "«Probar conexión» debe mostrar equidad, moneda, apalancamiento y «trading permitido». Al probar la conexión el bot detecta el sufijo de símbolos de tu tipo de cuenta HFM (Premium sin sufijo, Zero «b», Pro «r», Cent «c», InfinityX «x») y lo aplica; «Comprobar símbolos» verifica que tus pares cotizan Y son operables en el bróker (un par de otro tipo de cuenta cotiza pero HFM responde «Trade is disabled»).",
         "Modo de operación: cumple la lista (cuenta vinculada y verificada, trading permitido, bot detenido, sin posiciones; se recomienda haber superado la Fase 0 del plan), escribe REAL y confirma. Las estadísticas se reinician con la equidad real.",
         "Inicia el bot. A partir de ahora las órdenes, el PnL y la equidad vienen de HFM; las señales se siguen calculando con velas de Yahoo. Si la conexión cae más de 60 s te avisará y no abrirá nada hasta recuperarse.",

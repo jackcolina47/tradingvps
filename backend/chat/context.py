@@ -63,7 +63,7 @@ async def snapshot(panel: str) -> dict:
     out = {"ahora_utc": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"), "panel_abierto_por_el_usuario": PANEL_LABEL.get(panel, PANEL_LABEL["crypto"]),
            "ia_activa": {k: v for k, v in ai_current().items() if k != "health"}, "ia_salud": ai_current()["health"].get("ok"),
            "llamadas_ia_hoy": ai_usage.snapshot(panel if panel in PANEL_LABEL else "crypto"),
-           "bots": {"crypto": "Bybit AI Trader (clave de bot: crypto)", **{e.profile.panel: f"{e.profile.bot_name} · bróker {e.profile.broker} vía MetaApi (clave de bot: {e.profile.panel})" for e, _, _ in FX_BOTS}}}
+           "bots": {"crypto": "Bybit AI Trader (clave de bot: crypto)", **{e.profile.panel: f"{e.profile.bot_name} · bróker {e.profile.broker} vía puente MT propio (clave de bot: {e.profile.panel})" for e, _, _ in FX_BOTS}}}
     try:
         out["cripto"] = await _bot(engine, PROFILES, detect_profile, c_cfg, store.cfg, news, {"fuente_datos": engine.market.provider, "exchange_error": engine.exchange_error})
     except Exception as e:

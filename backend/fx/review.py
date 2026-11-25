@@ -33,7 +33,7 @@ def new_job() -> dict:
 async def build_context(engine, settings, acc: dict, with_backtest: bool = False) -> dict:
     pol = ai_policy(settings.risk_profile)
     bk = engine.profile.broker
-    ctx = {"mercado": f"forex y metales ({bk}, paper trading)" if not engine.live else f"forex y metales ({bk}, cuenta REAL vía MetaApi)",
+    ctx = {"mercado": f"forex y metales ({bk}, paper trading)" if not engine.live else f"forex y metales ({bk}, cuenta REAL vía puente MT propio)",
            "settings_actuales": settings.model_dump(exclude={"bot_running"}), "cuenta": acc,
            "perfil_riesgo": {"nivel": pol["level"], "nombre": pol["name"], "topes_ia": pol["caps"]},
            "rendimiento_real": await performance(engine.db, fx_shadow_stats), "chequeo_plan": await engine.checkin(settings, acc),

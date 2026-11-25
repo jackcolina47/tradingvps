@@ -1,7 +1,7 @@
 // Content of the "Instalar en tu VPS" guide. Mirrors deploy/INSTALACION.md (shipped inside the zip).
 export const REQUIREMENTS = [
   { icon: "Server", title: "Servidor (VPS)", text: "Ubuntu 22.04 / 24.04 o Debian 12 · 2 vCPU · 2–4 GB de RAM (con menos de 3,5 GB el instalador crea 2 GB de swap) · 20 GB de disco. Hetzner, Vultr, DigitalOcean, Contabo u OVH sirven." },
-  { icon: "Globe", title: "Región del servidor", text: "Para operar en REAL con Bybit el VPS NO puede estar en EE. UU. (Bybit bloquea su API). Funcionan bien Europa (Ámsterdam, Fráncfort) o Asia (Tokio, Singapur). HotForex/MetaApi no tiene esta restricción." },
+  { icon: "Globe", title: "Región del servidor", text: "Para operar en REAL con Bybit el VPS NO puede estar en EE. UU. (Bybit bloquea su API). Funcionan bien Europa (Ámsterdam, Fráncfort) o Asia (Tokio, Singapur). HotForex/Pepperstone (puente MT propio) no tiene esta restricción." },
   { icon: "KeyRound", title: "Acceso", text: "Usuario root (o con sudo) por SSH. Puertos 22 (SSH), 80 y 443 abiertos en el proveedor." },
   { icon: "Lock", title: "Dominio (opcional)", text: "Un subdominio tipo bot.midominio.com apuntando a la IP del VPS activa HTTPS automático con Let's Encrypt. Sin dominio, el panel va por http://IP." },
   { icon: "Monitor", title: "En tu ordenador", text: "Un terminal con ssh y scp (Windows 10/11: PowerShell ya los trae). También valen WinSCP o FileZilla (SFTP) para subir el zip." },
@@ -56,14 +56,14 @@ export const STEPS = [
       "Seguridad → cambia la contraseña.",
       "Inteligencia artificial → Emergent (si pusiste la clave) o Google Gemini con tu API key · «Probar conexión».",
       "Telegram → token del bot + «Detectar chat ID» + «Enviar prueba».",
-      "Bybit · cuenta real / HotForex y Pepperstone (MetaApi; cuentas MetaTrader 4/5, cTrader no es compatible) → solo cuando quieras pasar a REAL.",
+      "Bybit · cuenta real / HotForex y Pepperstone (puente MT propio en un VPS Windows; cuentas MetaTrader 4/5, cTrader no es compatible) → solo cuando quieras pasar a REAL.",
       "Pulsa «Iniciar bot». Si el servidor se reinicia, los contenedores arrancan solos y el bot continúa donde estaba.",
     ],
   },
   {
     id: "migrate", icon: "Database", title: "Traer tus datos desde este panel (opcional)",
     text: "Aquí: Ajustes → Copias de seguridad → «Crear copia ahora» → «Descargar». En el VPS: Ajustes → Copias de seguridad → «Restaurar desde archivo…», elige el .json.gz y escribe RESTAURAR (todos los bots detenidos). La contraseña del VPS se conserva.",
-    after: "Las API keys (Bybit, MetaApi, Gemini, Telegram) van cifradas con la CREDENTIAL_ENCRYPTION_KEY de la instalación de origen: en el VPS tendrás que volver a introducirlas en Ajustes.",
+    after: "Las API keys (Bybit, puente MT, Gemini, Telegram) van cifradas con la CREDENTIAL_ENCRYPTION_KEY de la instalación de origen: en el VPS tendrás que volver a introducirlas en Ajustes.",
   },
   {
     id: "update", icon: "RefreshCw", title: "Actualizar a una versión nueva",
