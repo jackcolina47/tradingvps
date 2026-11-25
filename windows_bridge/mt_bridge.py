@@ -148,7 +148,7 @@ class Driver:
         return self._names[1]
 
     def resolve(self, symbol: str) -> str:
-        """Broker name of `symbol`: exact, configured map/suffix, case-insensitive, or the tradable variant with a suffix (EURUSD → EURUSD.a / EURUSDm)."""
+        """Broker name of `symbol`: exact, configured map/suffix, case-insensitive, USDT → USD for crypto CFDs, or the tradable variant with a suffix (EURUSD → EURUSD.a / EURUSDm)."""
         if symbol in self._resolved:
             return self._resolved[symbol]
         names = self.names()
@@ -157,8 +157,11 @@ class Driver:
         found = next((c for c in (mapped, symbol, f"{symbol}{suffix}") if c and c in names), None)
         if not found:
             found = next((n for n in names if n.upper() == symbol.upper()), None)
+        roots = [symbol] + ([symbol[:-1]] if symbol.upper().endswith("USDT") else [])  # crypto CFDs are quoted in USD at most brokers (SOLUSDT → SOLUSD)
         if not found:
-            cands = sorted((n for n in names if norm(n).startswith(norm(symbol)) and len(norm(n)) - len(norm(symbol)) <= 4), key=lambda n: (len(n), n))
+            found = next((n for r in roots[1:] for n in names if n.upper() == r.upper()), None)
+        if not found:
+            cands = sorted((n for r in roots for n in names if norm(n).startswith(norm(r)) and len(norm(n)) - len(norm(r)) <= 4), key=lambda n: (len(n), n))
             for n in cands[:6]:
                 try:
                     if self._spec(n)["tradeMode"] == MODE_FULL:

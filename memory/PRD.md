@@ -725,3 +725,15 @@
 - CORS: `allow_credentials=False` (el token va en cabecera). `python-jose` eliminado de requirements.
 - Decisiones del usuario: factores de tamaño al 100 % son intencionales; bloqueo global de login se deja como está.
 - Tests: `tests/test_iter119_maintenance.py` (6); iter45/iter46 adaptados (sin régimen/rotación).
+
+## Iteración 120 · Puente MetaTrader propio (MetaApi eliminado)
+- Decisiones del usuario: quitar MetaApi del todo; puente protegido con token + solo la IP del VPS Linux (HTTP sin cifrar).
+- `/app/windows_bridge/` (para copiar al VPS Windows 94.72.105.219): `mt_bridge.py` (FastAPI, puerto 8000, multi-cuenta por `account_id`), `HFM_Bridge_EA.mq4`, `requirements_windows.txt`, `config_bridge.example.json`, `start_bridge.bat`, `README.md` (pasos de instalación).
+  - MT4 (`hfm_v1`, `hfm_v2`): archivos JSON atómicos en `MQL4/Files/aitb` (req_/res_/status.json) atendidos por el EA cada 100 ms. Peticiones con `ts`: el EA descarta las de más de 20 s; el puente borra la petición si el EA no la leyó (nunca se ejecuta tarde). Cierre parcial: alias ticket nuevo → id raíz en `state/<cuenta>.json`.
+  - MT5 (`pepperstone_v1`): librería `MetaTrader5` en un proceso hijo por cuenta (`Mt5Core`/`mt5_worker`).
+  - Rutas con el mismo esquema que usaba el cliente anterior (`/users/current/accounts/{id}/...`), más `/health`, `/reconnect`, `/lot-size`. Resolución de símbolos (sufijos, USDT→USD), lotes al paso del bróker, hora del servidor → UTC autodetectada.
+- Backend: `fx/bridge.py` (`MtBridge`, `BridgeError`, códigos) sustituye a `fx/metaapi.py` (borrado). `fx/config.py`: campos `bridge_url`, `bridge_token` (cifrado), `bridge_account_id`; `bridge_settings()` = panel > env (`MT_BRIDGE_URL`, `MT_BRIDGE_TOKEN`, `MT_BRIDGE_ACCOUNT_HFM`, `MT_BRIDGE_ACCOUNT_PEPPERSTONE`) > perfil (`hfm_v1` / `pepperstone_v1`). Quitados `metaapi_*`, `mt_password`, planes y regiones. `fx/routes_hfm.py`: `/hfm/test`, `/hfm/reconnect`, `/hfm/symbols`, `/hfm/detect-suffix`, `/mode`; eliminados `/hfm/link`, `/hfm/recreate`, `/hfm/redeploy`.
+- Migración: una config con `metaapi_account_id` pierde la verificación una sola vez (`bridge_migrated`); los campos antiguos quedan en Mongo sin usar. Un bot que estuviera en REAL por MetaApi no abre ni cierra hasta configurar y probar el puente.
+- Frontend: `fx/HfmSection.jsx` reescrito (URL, token, ID de cuenta, sufijo, Probar conexión, Comprobar símbolos, Reconectar, Quitar); borrado `HfmPlanPicker.jsx`; textos y documentación sin MetaApi.
+- Pruebas: `tests/test_iter120_mt_bridge.py` (11) con EA falso y módulo MT5 falso; `tests/fake_bridge_server.py` (puente real + EA falso en 127.0.0.1:8765, token en el archivo); `tests/test_iter120_e2e_review.py`; informe `/app/test_reports/iteration_106.json` (todo en verde, incluido modo REAL contra el puente falso). Borrados tests iter32/34/35 (MetaApi). Otros tests antiguos con mock de MetaApi (iter18, 21, 28, 33, 36, 37, 38, 42, 44, 85) quedan obsoletos.
+- NO verificado: compilación del EA en MetaEditor, librería MetaTrader5 real, terminales y bróker reales, red entre los dos VPS.

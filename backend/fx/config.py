@@ -118,6 +118,11 @@ class FxConfigStore:
         if not doc:
             doc = {"_id": "main", **FxConfig().model_dump()}
             await self.col.insert_one(doc)
+        if doc.get("metaapi_account_id") and not doc.get("bridge_migrated"):
+            # account linked through MetaApi before the own bridge existed: it must be verified again through the bridge (legacy fields are kept, unused)
+            reset = {"bridge_migrated": True, "hfm_verified_at": None, "hfm_verified_equity": None, "hfm_state": "", "hfm_connection": "", "hfm_trade_allowed": None}
+            await self.col.update_one({"_id": "main"}, {"$set": reset})
+            doc.update(reset)
         self.cfg = FxConfig.model_validate({k: (_dec(v) if k in SECRET_FIELDS else v) for k, v in doc.items()})
         await self._apply()
 

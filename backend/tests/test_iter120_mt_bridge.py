@@ -30,7 +30,7 @@ NOW = int(time.time())
 # ---------------------------------------------------------------- fake MT4 Expert Advisor
 class FakeEA(threading.Thread):
     """Answers the request files like HFM_Bridge_EA.mq4 (server clock = UTC+2)."""
-    SPECS = {"EURUSD": (5, 0), "EURUSDb": (5, 4), "GOLDb": (2, 4)}
+    SPECS = {"EURUSD": (5, 0), "EURUSDb": (5, 4), "GOLDb": (2, 4), "SOLUSD": (2, 4), "XRPUSD.a": (4, 4)}
 
     def __init__(self, files_dir: Path):
         super().__init__(daemon=True)
@@ -181,6 +181,7 @@ def test_symbol_suffix_resolution_ticks_candles_and_lot_size(stack):
         assert (await api.spec("hfm_v1", "EURUSD"))["tradeMode"] == "SYMBOL_TRADE_MODE_DISABLED"  # exact name wins: the backend's own suffix detection decides
         gold = await api.spec("hfm_v1", "GOLD")
         assert gold["symbol"] == "GOLDb" and gold["digits"] == 2  # only a suffixed variant exists → resolved
+        assert (await api.spec("hfm_v1", "SOLUSDT"))["symbol"] == "SOLUSD" and (await api.spec("hfm_v1", "XRPUSDT"))["symbol"] == "XRPUSD.a"
         tick = await api.tick("hfm_v1", "EURUSDb")
         assert tick["bid"] == 1.1 and tick["ask"] == 1.1002 and abs(tick["spread"] - 0.0002) < 1e-9
         with pytest.raises(BridgeError) as e:
@@ -409,3 +410,23 @@ def test_mt5_core_orders(tmp_path):
     with pytest.raises(mt_bridge.Fault) as e:
         d.spec("NOPEUSD")
     assert e.value.status == 404
+
+
+def test_legacy_metaapi_link_must_be_verified_again():
+    class Col:
+        def __init__(self):
+            self.doc = {"_id": "main", "trading_mode": "live", "metaapi_account_id": "abc", "metaapi_token": "x", "hfm_verified_at": "2026-01-01", "hfm_state": "DEPLOYED", "mt_symbol_suffix": "b"}
+
+        async def find_one(self, q):
+            return dict(self.doc)
+
+        async def update_one(self, q, u, **kw):
+            self.doc.update(u["$set"])
+    col = Col()
+    store = FxConfigStore({"fx_config": col}, HFM)
+    run(store.load())
+    assert store.cfg.hfm_verified_at is None and store.cfg.hfm_state == "" and store.cfg.trading_mode == "live" and store.cfg.mt_symbol_suffix == "b"
+    assert col.doc["bridge_migrated"] is True and col.doc["metaapi_token"] == "x" and not store.bridge_ready()
+    col.doc.update(hfm_verified_at="2026-02-02")  # verified later through the bridge: a restart must not reset it again
+    run(store.load())
+    assert store.cfg.hfm_verified_at == "2026-02-02"
