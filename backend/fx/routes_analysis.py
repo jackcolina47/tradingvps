@@ -56,7 +56,7 @@ def register(router, engine, store, news):
             klines = await engine.market.fetch_klines(req.symbol, req.timeframe, 1000, cache_sec=60)
         result = await asyncio.to_thread(run_backtest, klines, req.strategy, req.risk_per_trade, req.leverage, trade_rules(s), await _initial_balance(),
                                          req.symbol, s.signal_mode, s.disabled_strategies, dict(engine.market.tickers), s.min_lot_max_risk, s.close_before_weekend and not crypto,
-                                         () if crypto else tuple(s.sessions_allowed), engine.costs, params or None, not engine.profile.ema_only, engine.profile.ema_only)
+                                         () if crypto else tuple(s.sessions_allowed), engine.costs, params or None, not engine.profile.ema_only, engine.profile.ema_only, engine.fxr())
         result.pop("r_multiples", None)
         return {"symbol": req.symbol, "strategy": req.strategy, "timeframe": tf, "params": params or None, "spread_pips": round(pips(req.symbol, engine.costs.spread(req.symbol)), 1), "commission_lot_usd": engine.costs.commission_lot_usd,
                 "sessions_allowed": s.sessions_allowed, **result}
@@ -67,7 +67,7 @@ def register(router, engine, store, news):
             raise HTTPException(400, "Símbolo inválido")
         s = await engine.get_settings()
         klines = await engine.market.fetch_klines(req.symbol, s.timeframe, 1000, cache_sec=300)
-        res = await asyncio.to_thread(optimize, klines, s, await _initial_balance(), req.symbol, dict(engine.market.tickers), engine.costs)
+        res = await asyncio.to_thread(optimize, klines, s, await _initial_balance(), req.symbol, dict(engine.market.tickers), engine.costs, engine.fxr())
         return {**res, "timeframe": s.timeframe, "applied": s.symbol_params.get(req.symbol)}
 
     @router.post("/optimize/walk-forward")
@@ -76,7 +76,7 @@ def register(router, engine, store, news):
             raise HTTPException(400, "Símbolo inválido")
         s = await engine.get_settings()
         klines = await engine.market.fetch_klines(req.symbol, s.timeframe, WF_CANDLES, cache_sec=600)
-        res = await asyncio.to_thread(walk_forward, klines, s, await _initial_balance(), req.symbol, dict(engine.market.tickers), engine.costs)
+        res = await asyncio.to_thread(walk_forward, klines, s, await _initial_balance(), req.symbol, dict(engine.market.tickers), engine.costs, engine.fxr())
         return {**res, "timeframe": s.timeframe, "applied_params": s.symbol_params.get(req.symbol)}
 
     def _check_payload():
@@ -127,7 +127,7 @@ def register(router, engine, store, news):
             req.scenario = "base"
         if (settings.plan_scenario, settings.plan_target_monthly, settings.plan_monthly_deposit) != (req.scenario, req.target_monthly, req.monthly_deposit):
             settings = await engine.update_settings({"plan_scenario": req.scenario, "plan_target_monthly": req.target_monthly, "plan_monthly_deposit": req.monthly_deposit})
-        return fx_plan.build_plan(req.model_dump(), await fx_plan.plan_stats(engine, settings, req.initial_capital))
+        return fx_plan.build_plan(req.model_dump(), await fx_plan.plan_stats(engine, settings, req.initial_capital), engine.ccy)
 
     @router.get("/plan/checkin")
     async def plan_checkin():

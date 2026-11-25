@@ -49,3 +49,21 @@ def test_engine_currency_and_summary():
         e.live = False
         assert e.ccy == "USD"  # paper account is always in USD
     asyncio.run(run())
+
+
+def test_backtest_runs_in_the_account_currency():
+    """Iter125: with a GBP account (1 GBP = 1.25 USD) the same price history gives the same % result, lots 1.25× bigger and per-lot costs / PnL expressed in pounds."""
+    from fx.backtest import run_backtest
+    from fx.models import FxSettings
+    import math
+    rows, t0 = [], 1_700_000_000_000
+    for k in range(900):
+        p = 1.1 + 0.01 * math.sin(k / 15.0)
+        rows.append([t0 + k * 300_000, p, p * 1.0005, p * 0.9995, p, 0.0])
+    args = (rows, "ema_test", 1.0, 100, risk.trade_rules(FxSettings()), 10000.0, "EURUSD", "relaxed", [], TICK, 4.0, True, (), None)
+    usd, gbp = run_backtest(*args), run_backtest(*args, fxr=1.25)
+    assert usd["total_trades"] == gbp["total_trades"] > 5
+    tu, tg = usd["trades"][-1], gbp["trades"][-1]  # oldest trade: both start from 10,000 of their own currency
+    assert tg["lots"] == pytest.approx(tu["lots"] * 1.25, abs=0.011)
+    assert tg["pnl"] == pytest.approx(tu["pnl"] * (tg["lots"] / tu["lots"]) / 1.25, abs=0.02)
+    assert tg["r"] == pytest.approx(tu["r"], abs=0.02) and gbp["return_pct"] == pytest.approx(usd["return_pct"], abs=0.3)

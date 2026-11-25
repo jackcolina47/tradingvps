@@ -97,6 +97,10 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
             return None
         return broker_health.summary(self.hfm, self.cfg.hfm_alert_after_sec if self.cfg else None)
 
+    def fxr(self) -> float:
+        """USD per unit of the account currency (1.0 in paper or for USD accounts): backtests, optimizer and growth plan run in the account currency."""
+        return risk.account_usd(self.ccy, self.market.tickers)
+
     @property
     def mode_label(self) -> str:
         return "REAL" if self.live else "PAPER"

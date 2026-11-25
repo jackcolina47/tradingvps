@@ -10,7 +10,7 @@ def new_job() -> dict:
 
 async def _wf(engine, settings, initial: float, sym: str) -> dict:
     klines = await engine.market.fetch_klines(sym, settings.timeframe, WF_CANDLES, cache_sec=600)
-    return await asyncio.to_thread(walk_forward, klines, settings, initial, sym, dict(engine.market.tickers), engine.costs)
+    return await asyncio.to_thread(walk_forward, klines, settings, initial, sym, dict(engine.market.tickers), engine.costs, engine.fxr())
 
 
 async def _notify(engine, msg: str):

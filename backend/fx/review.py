@@ -133,7 +133,7 @@ async def run_auto_review(engine, db, store) -> dict:
 async def _safe_walk_forward(engine, settings, initial: float, sym: str):
     try:
         klines = await engine.market.fetch_klines(sym, settings.timeframe, WF_CANDLES, cache_sec=600)
-        wf = await asyncio.to_thread(walk_forward, klines, settings, initial, sym, dict(engine.market.tickers), engine.costs)
+        wf = await asyncio.to_thread(walk_forward, klines, settings, initial, sym, dict(engine.market.tickers), engine.costs, engine.fxr())
         out = {k: wf[k] for k in ("verdict", "verdict_text", "wfe", "oos", "baseline_oos", "is_expectancy_r", "beats_baseline", "params_stable", "params_unique")} | {"folds": len(wf["folds"])}
         if wf["applied"]:
             out["symbol_params_aplicados"] = {k: wf["applied"][k] for k in ("params", "verdict", "verdict_text", "wfe", "oos")}
@@ -154,9 +154,9 @@ async def run_global_optimization(engine, db) -> dict:
     for sym in settings.symbols:
         job["step"] = f"Optimizando {sym}"
         klines = await engine.market.fetch_klines(sym, settings.timeframe, 1000, cache_sec=300)
-        res = await asyncio.to_thread(optimize, klines, settings, initial, sym, tickers, engine.costs)
+        res = await asyncio.to_thread(optimize, klines, settings, initial, sym, tickers, engine.costs, engine.fxr())
         bt = await asyncio.to_thread(run_backtest, klines, settings.strategy, settings.risk_per_trade, settings.leverage, trade_rules(settings), initial,
-                                     sym, settings.signal_mode, settings.disabled_strategies, tickers, settings.min_lot_max_risk, settings.close_before_weekend, costs=engine.costs)
+                                     sym, settings.signal_mode, settings.disabled_strategies, tickers, settings.min_lot_max_risk, settings.close_before_weekend, costs=engine.costs, fxr=engine.fxr())
         job["step"] = f"Validando {sym} (walk-forward)"
         wf = await _safe_walk_forward(engine, settings, initial, sym)
         results.append({**res, "timeframe": settings.timeframe, "applied": settings.symbol_params.get(sym), "walk_forward": wf,

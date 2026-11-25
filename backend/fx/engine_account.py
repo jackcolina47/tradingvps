@@ -120,8 +120,8 @@ class AccountMixin:
         acc = await self.db.account.find_one({"_id": "main"})
         last30 = await last30_stats(self.db, s["equity"])
         days = (datetime.now(timezone.utc) - datetime.fromisoformat(acc["created_at"])).days
-        contrib = await fx_plan.contributions(self.db, acc, settings)
-        return fx_plan.build_checkin(s, acc, last30, settings, days, contrib)
+        contrib = await fx_plan.contributions(self.db, acc, settings, self.ccy)
+        return fx_plan.build_checkin(s, acc, last30, settings, days, contrib, self.ccy)
 
     async def _update_account_metrics(self, settings: FxSettings):
         s = await self.account_summary()
