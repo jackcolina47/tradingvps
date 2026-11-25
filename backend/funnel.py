@@ -28,7 +28,7 @@ OVEREXT_RSI, OVEREXT_ATR = (32, 68), 2.0   # late entries: RSI beyond these and 
 SL_BUFFER_ATR = 0.25                        # safety margin added behind an AI stop (rich engines)
 SWING_BARS, RANGE_BARS, RANGE_CROSSES = 20, 15, 3
 # range-edge path: a sideways pair (ADX < 18 or RANGO / CHOPPY) still reaches the AI when the price sits on a tested edge of the range
-RANGE_ZONE_ATR, RANGE_TOUCHES, RANGE_RSI, RANGE_ROOM_ATR = 0.35, 2, (38, 62), 1.8
+RANGE_ZONE_ATR, RANGE_TOUCHES, RANGE_RSI, RANGE_ROOM_ATR = 0.35, 2, (42, 58), 1.3
 TURN_VOLUME, TURN_BARS, TURN_ADX = 2.0, 6, 20   # structural turn: break of the last swing + ADX >= 20 + an impulse candle this strong within the last 6 closed candles
 TURN_SIDE = {"GIRO_ALCISTA_CONFIRMADO": "long", "GIRO_BAJISTA_CONFIRMADO": "short"}
 TREND_RR, RANGE_RR = 2.0, 1.0   # exact reward:risk of every trade: trend / breakout / counter-trend vs range (edge tag or RANGO / CHOPPY regime)
@@ -46,7 +46,7 @@ def next_trigger(now: float = None) -> float:
 MAX_CANDIDATES = 3
 CONFIDENCE_LEVELS = (10, 20, 30, 40, 50, 60, 70, 80, 90)
 FAST_TIMEOUT_SEC, DEEP_TIMEOUT_SEC = 25, 75
-SL_ATR_BAND = (1.1, 4.0)   # an AI stop must sit between 1.1 and 4 ATR from the entry (before the safety buffer)
+SL_ATR_BAND = (0.85, 4.0)   # an AI stop must sit between 0.85 and 4 ATR from the entry (before the safety buffer → final stop ≥ 1.10 ATR)
 MIN_RR = 1.0
 DEEP_COOLDOWN_SEC = 300    # guard against manual re-scans: a candidate goes back to the strong model on every 15-min trigger, never sooner than 5 min
 REPEAT_MOVE_ATR = 0.15     # stage 1 is not repeated while no eligible pair moved this much (in ATR) since the last call on the same candle
@@ -199,6 +199,11 @@ def overext_discard(m: dict, trend_4h: str = None) -> str | None:
     return None
 
 
+def _in_band(risk: float, atr: float) -> bool:
+    """AI stop distance inside SL_ATR_BAND (inclusive; tolerant to float rounding at the edges)."""
+    return SL_ATR_BAND[0] * atr - 1e-6 * atr <= risk <= SL_ATR_BAND[1] * atr + 1e-6 * atr
+
+
 def levels(side: str, price: float, atr: float, settings, ai_sl=None, ai_tp=None, digits: int = None, buffer_atr: float = 0.0) -> tuple:
     """(sl, tp, source). Fixed toggle ON → sl_mult×ATR / tp_mult×ATR. OFF → the AI's levels when sane, otherwise the same ATR multiples.
     `buffer_atr` moves an accepted AI stop that many ATR further away (the position size is computed afterwards from the final stop)."""
@@ -206,7 +211,7 @@ def levels(side: str, price: float, atr: float, settings, ai_sl=None, ai_tp=None
     sl, tp, source = price - d * settings.atr_sl_mult * atr, price + d * settings.atr_tp_mult * atr, "atr"
     if not settings.atr_levels_enabled and ai_sl and ai_tp:
         risk, reward = (price - ai_sl) * d, (ai_tp - price) * d
-        if SL_ATR_BAND[0] * atr <= risk <= SL_ATR_BAND[1] * atr and reward >= MIN_RR * (risk + buffer_atr * atr):
+        if _in_band(risk, atr) and reward >= MIN_RR * (risk + buffer_atr * atr):
             sl, tp, source = float(ai_sl) - d * buffer_atr * atr, float(ai_tp), "ia"
     if digits is not None:
         sl, tp = round(sl, digits), round(tp, digits)
@@ -214,10 +219,10 @@ def levels(side: str, price: float, atr: float, settings, ai_sl=None, ai_tp=None
 
 
 def stop_level(side: str, price: float, atr: float, settings, ai_sl=None, digits: int = None, buffer_atr: float = 0.0) -> tuple:
-    """(sl, source). Fixed toggle ON → sl_mult×ATR. OFF → the AI's stop when sane (1.1–4 ATR) pushed `buffer_atr` further away, otherwise the ATR stop."""
+    """(sl, source). Fixed toggle ON → sl_mult×ATR. OFF → the AI's stop when sane (0.85–4 ATR) pushed `buffer_atr` further away, otherwise the ATR stop."""
     d = 1 if side == "long" else -1
     sl, source = price - d * settings.atr_sl_mult * atr, "atr"
-    if not settings.atr_levels_enabled and ai_sl and SL_ATR_BAND[0] * atr <= (price - ai_sl) * d <= SL_ATR_BAND[1] * atr:
+    if not settings.atr_levels_enabled and ai_sl and _in_band((price - ai_sl) * d, atr):
         sl, source = float(ai_sl) - d * buffer_atr * atr, "ia"
     return (sl if digits is None else round(sl, digits)), source
 

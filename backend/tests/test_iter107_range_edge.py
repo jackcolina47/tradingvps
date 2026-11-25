@@ -46,13 +46,18 @@ class TestRangeEdge:
         assert m["range_edge"] is None and funnel.stage0(m) is not None
 
     def test_rsi_not_extreme_blocked(self):
-        assert _m(rsi=61.9)["range_edge"] is None
-        assert _demand_edge(rsi=38.1)["range_edge"] is None
-        assert _m(rsi=62)["range_edge"] == "EXTREMO_OFERTA" and _demand_edge(rsi=38)["range_edge"] == "EXTREMO_DEMANDA"
+        assert funnel.RANGE_RSI == (42, 58)
+        assert _m(rsi=57.9)["range_edge"] is None
+        assert _demand_edge(rsi=42.1)["range_edge"] is None
+        assert _m(rsi=58)["range_edge"] == "EXTREMO_OFERTA" and _demand_edge(rsi=42)["range_edge"] == "EXTREMO_DEMANDA"
+        assert _m(rsi=60)["range_edge"] == "EXTREMO_OFERTA" and _demand_edge(rsi=40)["range_edge"] == "EXTREMO_DEMANDA"   # blocked with the old 62 / 38
 
     def test_no_room_to_opposite_zone_blocked(self):
-        assert _m(demand={"low": 108.4, "high": 108.6, "touches": 2, "dist_atr": 1.79})["range_edge"] is None
-        assert _m(demand={"low": 108.4, "high": 108.6, "touches": 2, "dist_atr": 1.8})["range_edge"] == "EXTREMO_OFERTA"
+        assert _m(demand={"low": 108.4, "high": 108.6, "touches": 2, "dist_atr": 1.29})["range_edge"] is None
+        assert _m(demand={"low": 108.4, "high": 108.6, "touches": 2, "dist_atr": 1.3})["range_edge"] == "EXTREMO_OFERTA"
+        assert funnel.RANGE_ROOM_ATR == 1.3 and funnel.RANGE_ZONE_ATR == 0.35
+        assert _demand_edge(supply={"low": 110.2, "high": 110.6, "touches": 2, "dist_atr": 1.29})["range_edge"] is None
+        assert _demand_edge(supply={"low": 110.2, "high": 110.6, "touches": 2, "dist_atr": 1.3})["range_edge"] == "EXTREMO_DEMANDA"
 
     def test_missing_opposite_zone_blocked(self):
         assert _m(demand=None)["range_edge"] is None
@@ -350,7 +355,7 @@ class TestUnitMetricsPipeline:
         assert m["supply"]["touches"] >= 1   # at least key exists
         assert "touches" in m["supply"]
         # Force RSI high and ensure pipeline returns tag when zone is at the edge and demand is far
-        if m["supply"].get("touches", 0) >= 2 and m["supply"]["dist_atr"] <= 0.35 and m["demand"] and m["demand"]["dist_atr"] >= 1.8:
+        if m["supply"].get("touches", 0) >= 2 and m["supply"]["dist_atr"] <= 0.35 and m["demand"] and m["demand"]["dist_atr"] >= 1.3:
             m2 = {**m, "rsi": 65}
             assert funnel.range_edge(m2) == "EXTREMO_OFERTA"
         # Mid-range: price in the middle → range_edge None

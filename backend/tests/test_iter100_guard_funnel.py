@@ -45,10 +45,13 @@ class TestHours:
 
     def test_fx_windows_exact(self):
         assert tg.in_hours("fx", self._ny(3, 30)) is True
-        assert tg.in_hours("fx", self._ny(4, 0)) is False  # end-exclusive
+        assert tg.in_hours("fx", self._ny(4, 0)) is True   # continuous London + New York session
         assert tg.in_hours("fx", self._ny(8, 0)) is True
-        assert tg.in_hours("fx", self._ny(11, 59)) is True
-        assert tg.in_hours("fx", self._ny(12, 0)) is False
+        assert tg.in_hours("fx", self._ny(12, 0)) is True
+        assert tg.in_hours("fx", self._ny(14, 59)) is True
+        assert tg.in_hours("fx", self._ny(15, 0)) is False  # end-exclusive
+        assert tg.in_hours("fx", self._ny(18, 59)) is False
+        assert tg.in_hours("fx", self._ny(0, 0)) is False
         assert tg.in_hours("fx", self._ny(19, 0)) is True
         assert tg.in_hours("fx", self._ny(23, 59)) is True
         assert tg.in_hours("fx", self._ny(2, 59)) is False
@@ -67,7 +70,7 @@ class TestHours:
     def test_hours_status_shape(self):
         s = tg.hours_status("fx", self._ny(10, 0))
         assert set(["in_hours", "window", "next_window", "next_change", "seconds_left", "ny_time", "windows"]).issubset(s.keys())
-        assert len(s["windows"]) == 3
+        assert len(s["windows"]) == 2
         assert s["in_hours"] is True
         # when inside, seconds_left counts until window end
         assert s["seconds_left"] > 0
@@ -257,11 +260,11 @@ class TestGuardAPI:
         hrs = data["hours"]
         for k in ("in_hours", "window", "next_window", "next_change", "seconds_left", "ny_time", "windows"):
             assert k in hrs
-        assert len(hrs["windows"]) == (3 if kind == "fx" else 1)
+        assert len(hrs["windows"]) == (2 if kind == "fx" else 1)
         # windows should match expected per spec
         got = sorted([(w["start"], w["end"]) for w in hrs["windows"]])
         if kind == "fx":
-            assert got == sorted([("03:00", "04:00"), ("08:00", "12:00"), ("19:00", "00:00")])
+            assert got == sorted([("03:00", "15:00"), ("19:00", "00:00")])
         else:
             assert got == [("00:00", "00:00")] and hrs["in_hours"] is True and hrs["next_change"] is None
 

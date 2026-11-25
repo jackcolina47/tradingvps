@@ -1,5 +1,5 @@
 """Iter111 — orderly pullback through the EMA9/21 filter (EMA50 lock), free path by obstacle timeframe (75 % 4H / 50 % 15m),
-brake-candle rule in DEEP_SYSTEM and SL_ATR_BAND floor at 1.1 ATR."""
+brake-candle rule in DEEP_SYSTEM and SL_ATR_BAND floor (0.85 ATR since iter113)."""
 import pytest
 import funnel
 from tests.test_iter103_bybit_hardening import FakeEngine, _settings, _force_in_hours
@@ -12,21 +12,21 @@ def _s(fixed=False):
 # ---------- (4) SL_ATR_BAND ----------
 class TestStopBand:
     def test_band(self):
-        assert funnel.SL_ATR_BAND == (1.1, 4.0) and funnel.SL_BUFFER_ATR == 0.25
+        assert funnel.SL_ATR_BAND == (0.85, 4.0) and funnel.SL_BUFFER_ATR == 0.25
 
-    @pytest.mark.parametrize("ai_sl,expected", [(98.85, (98.6, "ia")), (98.95, (98.0, "atr")), (99.5, (98.0, "atr")), (96.0, (95.75, "ia")), (95.9, (98.0, "atr"))])
+    @pytest.mark.parametrize("ai_sl,expected", [(99.1, (98.85, "ia")), (98.85, (98.6, "ia")), (99.2, (98.0, "atr")), (99.5, (98.0, "atr")), (96.0, (95.75, "ia")), (95.9, (98.0, "atr"))])
     def test_stop_level_floor_and_ceiling(self, ai_sl, expected):
         sl, src = funnel.stop_level("long", 100.0, 1.0, _s(), ai_sl, None, 0.25)
         assert (round(sl, 6), src) == expected
 
     def test_short_side(self):
-        assert funnel.stop_level("short", 100.0, 1.0, _s(), 101.0, None, 0.25) == (102.0, "atr")
-        sl, src = funnel.stop_level("short", 100.0, 1.0, _s(), 101.15, None, 0.25)
-        assert round(sl, 6) == 101.4 and src == "ia"
+        assert funnel.stop_level("short", 100.0, 1.0, _s(), 100.8, None, 0.25) == (102.0, "atr")
+        sl, src = funnel.stop_level("short", 100.0, 1.0, _s(), 100.9, None, 0.25)
+        assert round(sl, 6) == 101.15 and src == "ia"
 
     def test_levels_uses_same_band(self):
-        assert funnel.levels("long", 100.0, 1.0, _s(), 99.0, 103.0)[2] == "atr"
-        assert funnel.levels("long", 100.0, 1.0, _s(), 98.85, 103.0)[2] == "ia"
+        assert funnel.levels("long", 100.0, 1.0, _s(), 99.2, 103.0)[2] == "atr"
+        assert funnel.levels("long", 100.0, 1.0, _s(), 99.1, 103.0)[2] == "ia"
 
     def test_prompt_states_band(self):
         import inspect

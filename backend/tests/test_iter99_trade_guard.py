@@ -13,8 +13,8 @@ def ny(day, h, m=0):
     return datetime(2026, 11, day, h, m, tzinfo=NY).astimezone(timezone.utc)   # Nov 2026: 16 Mon … 20 Fri, 21 Sat, 22 Sun
 
 
-@pytest.mark.parametrize("h,m,ok", [(2, 59, False), (3, 0, True), (3, 59, True), (4, 0, False), (7, 59, False), (8, 0, True), (11, 59, True), (12, 0, False),
-                                    (18, 59, False), (19, 0, True), (23, 59, True), (0, 0, False)])
+@pytest.mark.parametrize("h,m,ok", [(2, 59, False), (3, 0, True), (3, 59, True), (4, 0, True), (7, 59, True), (8, 0, True), (11, 59, True), (12, 0, True),
+                                    (14, 59, True), (15, 0, False), (16, 55, False), (18, 59, False), (19, 0, True), (23, 59, True), (0, 0, False)])
 def test_fx_windows(h, m, ok):
     assert tg.in_hours("fx", ny(18, h, m)) is ok
 
@@ -33,11 +33,14 @@ def test_weekends():
 def test_hours_status_countdown():
     st = tg.hours_status("crypto", ny(18, 6))
     assert st["in_hours"] and st["window"] == "24 horas" and st["next_change"] is None and st["seconds_left"] is None
-    st = tg.hours_status("fx", ny(18, 6))
+    st = tg.hours_status("fx", ny(18, 1))
     assert not st["in_hours"] and st["next_window"] == "Londres + Nueva York" and st["seconds_left"] == 120 * 60
     st = tg.hours_status("fx", ny(18, 9))
-    assert st["in_hours"] and st["window"] == "Londres + Nueva York" and st["seconds_left"] == 3 * 3600
-    st = tg.hours_status("fx", ny(20, 13))   # Friday afternoon → next tradable window is Sunday 19:00
+    assert st["in_hours"] and st["window"] == "Londres + Nueva York" and st["seconds_left"] == 6 * 3600
+    st = tg.hours_status("fx", ny(18, 16))   # 15:00–19:00 pause → next window is the night session
+    assert not st["in_hours"] and st["next_window"] == "Sídney + Tokio" and st["seconds_left"] == 3 * 3600
+    assert [(w["start"], w["end"]) for w in st["windows"]] == [("03:00", "15:00"), ("19:00", "00:00")]
+    st = tg.hours_status("fx", ny(20, 16))   # Friday afternoon → next tradable window is Sunday 19:00
     assert datetime.fromisoformat(st["next_change"]) == ny(22, 19)
     assert tg.hours_status("fx", ny(18, 20))["seconds_left"] == 4 * 3600   # 19:00–00:00 ends at midnight
 
@@ -62,7 +65,7 @@ def test_block_window(event):
         assert bool(tg.calendar.blocking("fx", "EURUSD", event + timedelta(minutes=delta))) is blocked
     assert tg.calendar.blocking("fx", "EURJPY", event) is None
     assert tg.entry_block("fx", "EURUSD", event)[1] == "NOTICIAS" and tg.entry_block("fx", "EURJPY", event) == (None, None)
-    assert tg.entry_block("fx", "EURJPY", ny(18, 6))[1] == "HORARIO"
+    assert tg.entry_block("fx", "EURJPY", ny(18, 16))[1] == "HORARIO"
     assert tg.calendar.pre_event("crypto", "BTCUSDT", event - timedelta(minutes=10)) and not tg.calendar.pre_event("crypto", "BTCUSDT", event + timedelta(minutes=1))
 
 

@@ -4,7 +4,7 @@ export function buildHowTo(bot) {
   const pep = bot === "pepper";
   const cur = fx ? "USD" : "USDT";
   const brokerName = pep ? "Pepperstone (puente MetaTrader)" : fx ? "HFM (puente MetaTrader)" : "Bybit";
-  const hours = fx ? "03:00–04:00, 08:00–12:00 y 19:00–00:00" : "las 24 horas (sin ventanas)";
+  const hours = fx ? "03:00–15:00 y 19:00–00:00" : "las 24 horas (sin ventanas)";
   return [
     {
       id: "inicio", icon: "Compass", title: "1 · Primeros pasos y recorrido por el panel",

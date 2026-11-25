@@ -4,7 +4,7 @@ export function buildFaq(bot) {
   const pep = bot === "pepper";
   const cur = fx ? "USD" : "USDT";
   const broker = pep ? "Pepperstone" : fx ? "HFM" : "Bybit";
-  const hours = fx ? "03:00–04:00, 08:00–12:00 y 19:00–00:00" : "las 24 horas (sin ventanas)";
+  const hours = fx ? "03:00–15:00 y 19:00–00:00" : "las 24 horas (sin ventanas)";
   return [
     { cat: "General", q: "¿Qué hace exactamente este bot?", tags: ["resumen", "qué es", "embudo"],
       a: `Vigila ${fx ? "12 pares de forex y metales" : "los pares de futuros perpetuos USDT que actives"} y, dentro del horario operativo de Nueva York, pasa cada par por un embudo de IA: filtro técnico gratuito → modelo rápido que elige hasta 3 candidatos → modelo potente que decide BUY, SELL o PASS con un % de confianza. Si la confianza supera tu umbral, abre la operación con stop y objetivo y un tamaño calculado por riesgo fijo.` },

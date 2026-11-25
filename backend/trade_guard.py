@@ -20,7 +20,7 @@ RETRY_SEC = 600
 PROTECT_RETRY_SEC = 30
 # (name, start minute, end minute) in New York local time
 WINDOWS = {
-    "fx": [("Tokio + Londres", 180, 240), ("Londres + Nueva York", 480, 720), ("Sídney + Tokio", 1140, 1440)],
+    "fx": [("Londres + Nueva York", 180, 900), ("Sídney + Tokio", 1140, 1440)],   # 03:00–15:00 and 19:00–00:00 NY · pause 15:00–19:00 (rollover) and 00:00–03:00
     "crypto": [("24 horas", 0, 1440)],   # Bybit trades around the clock, every day
 }
 

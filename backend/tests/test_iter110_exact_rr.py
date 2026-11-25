@@ -17,7 +17,7 @@ class TestStopLevel:
 
     def test_fixed_or_insane_stop_uses_atr(self):
         assert funnel.stop_level("long", 100.0, 1.0, _s(True), 99.0, None, 0.25) == (98.0, "atr")
-        assert funnel.stop_level("long", 100.0, 1.0, _s(), 99.0, None, 0.25) == (98.0, "atr")   # closer than 1.1 ATR
+        assert funnel.stop_level("long", 100.0, 1.0, _s(), 99.2, None, 0.25) == (98.0, "atr")   # closer than 0.85 ATR
         assert funnel.stop_level("long", 100.0, 1.0, _s(), None, None, 0.25) == (98.0, "atr")
 
 
