@@ -1,4 +1,4 @@
-import { REASON_LABELS, STRATEGY_LABELS, tzOpts } from "@/lib/api";
+import { REASON_LABELS, STRATEGY_LABELS, tzOpts, noTp } from "@/lib/api";
 
 const esc = (v) => {
   const s = v == null ? "" : String(v).replace(/\r?\n/g, " ");
@@ -21,8 +21,9 @@ const COLUMNS = [
 ];
 
 export function tradesToCsv(trades) {
-  const rows = [COLUMNS.map(([h]) => esc(h)).join(";")];
-  for (const t of trades) rows.push(COLUMNS.map(([, f]) => esc(f(t))).join(";"));
+  const cols = noTp() ? COLUMNS.filter(([h]) => h !== "TP" && h !== "% camino al TP") : COLUMNS;  // Pepperstone: no take profit
+  const rows = [cols.map(([h]) => esc(h)).join(";")];
+  for (const t of trades) rows.push(cols.map(([, f]) => esc(f(t))).join(";"));
   return "\uFEFF" + rows.join("\r\n");
 }
 

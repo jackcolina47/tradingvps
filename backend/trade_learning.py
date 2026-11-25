@@ -17,6 +17,11 @@ CHART_PAD = 25
 RULE_VERDICTS = ("EVITABLE", "MALA")
 
 
+def no_tp_bot(engine) -> bool:
+    """Pepperstone (single EMA-cross strategy): trades have no take profit, the stored `tp` is a virtual sizing reference."""
+    return bool(getattr(getattr(engine, "profile", None), "ema_only", False))
+
+
 async def window(engine, t: Trade, pad: int = CHART_PAD, before_unit: str = "ms") -> dict:
     """Candles around a trade (timeframe picked so the hold spans ~≤ 90 candles); widens the timeframe when the window is empty (market closed)."""
     o = datetime.fromisoformat(t.opened_at).timestamp()
@@ -50,8 +55,11 @@ async def review(engine, t: Trade, currency: str, before_unit: str = "ms", known
     w = await window(engine, t, 60, before_unit)
     before = [x for x in w["candles"] if x["time"] < w["opened"]]
     during = [x for x in w["candles"] if w["opened"] <= x["time"] <= w["closed"]]
-    pa = price_action.facts(before, t.side, t.entry_price, t.atr or 0, t.initial_sl or t.sl, t.tp)
-    out = await ai_advisor.analyze_trade(t.model_dump(), signal, pa, before[-12:], during, w["tf"], currency, known_rules)
+    no_tp = no_tp_bot(engine)
+    if no_tp and signal:
+        signal = {k: v for k, v in signal.items() if k != "tp"}
+    pa = price_action.facts(before, t.side, t.entry_price, t.atr or 0, t.initial_sl or t.sl, None if no_tp else t.tp)
+    out = await ai_advisor.analyze_trade(t.model_dump(), signal, pa, before[-12:], during, w["tf"], currency, known_rules, no_tp)
     await engine.db.trades.update_one({"_id": ObjectId(t.id)}, {"$set": {"ai_review": out}})
     return out
 

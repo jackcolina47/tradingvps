@@ -8,7 +8,7 @@ import { DrawToolbar, DrawingBar } from "./chart/DrawToolbar";
 import ChartLegend from "./chart/ChartLegend";
 import ChartStyle from "./chart/ChartStyle";
 import ManualOrderDialog from "./chart/ManualOrderDialog";
-import { useHistory } from "./chart/useHistory";
+import { useHistory, TF_STEP } from "./chart/useHistory";
 
 const TFS = ["1m", "5m", "15m", "1h", "4h", "1d"];
 const SOURCE = { bybit: "Velas Bybit", bitget: "Velas Bitget", hfm: "Velas del bróker · MetaTrader", yahoo: "Velas Yahoo Finance" };
@@ -24,7 +24,11 @@ const loadInd = () => {
   try { return { ...DEFAULT_IND, ...JSON.parse(localStorage.getItem("chart.indicators") || "{}") }; } catch (e) { return DEFAULT_IND; }
 };
 
-export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs = TFS, trade }) {
+const AFTER = 150;  // candles shown after the close of a focused (closed) trade
+const lastAtOrBefore = (candles, t) => { let i = -1; for (let k = 0; k < candles.length && candles[k].time <= t; k++) i = k; return i; };
+
+/** `focus` = { opened, closed (unix s), lines }: the chart opens on that past trade instead of the live market (trade detail). */
+export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs = TFS, trade, focus }) {
   const [order, setOrder] = useState(null);
   const [tf, setTf] = useState(defaultTf);
   const [fs, setFs] = useState(false);
@@ -35,8 +39,11 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
   const wrap = useRef(null);
   const canvas = useRef(null);
   const fitted = useRef("");
-  const { data, meta, loadOlder } = useHistory(symbol, tf);
-  const api = useChart(ref, () => { if (fitted.current === `${symbol}-${tf}`) loadOlder(); });
+  const end = focus ? focus.closed + AFTER * TF_STEP[tf] : 0;
+  const anchor = focus && end < Date.now() / 1000 - TF_STEP[tf] ? end - (end % TF_STEP[tf]) : null;
+  const { data, meta, loadOlder, loadNewer } = useHistory(symbol, tf, 10000, anchor);
+  const lines = focus ? focus.lines : meta.lines;
+  const api = useChart(ref, () => { if (fitted.current === `${symbol}-${tf}`) loadOlder(); }, () => { if (fitted.current === `${symbol}-${tf}`) loadNewer(); });
 
   const dr = useDrawings(api, data, symbol, wrap, canvas, !!ind.zones);
   const [ready, setReady] = useState(false);
@@ -48,7 +55,7 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
   useEffect(() => {
     localStorage.setItem("chart.style", JSON.stringify(style));
     const a = api.current;
-    if (a && applyStyle(a, style) && data) render(a, data, meta.lines, tf);
+    if (a && applyStyle(a, style) && data) render(a, data, lines, tf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [style, api]);
 
@@ -72,19 +79,25 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
   useEffect(() => {
     const a = api.current;
     if (!a || !data) return;
-    render(a, data, meta.lines, tf);
+    render(a, data, lines, tf);
     const key = `${symbol}-${tf}`;
     if (fitted.current !== key) {
       const n = data.candles.length;
+      let range = { from: n - 120, to: n + 4 };
+      if (focus) {  // the whole trade in view, with room on both sides
+        const o = Math.max(lastAtOrBefore(data.candles, focus.opened), 0), c = Math.max(lastAtOrBefore(data.candles, focus.closed), o);
+        const pad = Math.max(30, Math.round((110 - (c - o)) / 2));
+        range = { from: o - pad, to: c + pad };
+      }
       resetScales(a);
       // the chart applies new data on its next frame; fit after that so the default range does not override us
       requestAnimationFrame(() => {
         if (!api.current) return;
-        api.current.chart.timeScale().setVisibleLogicalRange({ from: n - 120, to: n + 4 });
+        api.current.chart.timeScale().setVisibleLogicalRange(range);
         fitted.current = key;
       });
     }
-  }, [data, meta.lines, symbol, tf, api]);
+  }, [data, lines, symbol, tf, api]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     localStorage.setItem("chart.indicators", JSON.stringify(ind));
@@ -103,7 +116,7 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
   const last = data?.candles?.[data.candles.length - 1];
   return (
     <Panel testId="price-chart-panel" title={`${symbol} · ${kind}`} icon={CandlestickChart} bodyClass="flex flex-col" delay={120}
-      className={fs ? "fixed inset-0 z-[70] rounded-none !bg-[#07090E] !backdrop-blur-0" : "lg:col-span-6"}
+      className={fs ? "fixed inset-0 z-[70] rounded-none !bg-[#07090E] !backdrop-blur-0" : focus ? "" : "lg:col-span-6"}
       actions={
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 rounded-sm border border-[#1E293B] p-0.5">
@@ -119,10 +132,10 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
           <ChartStyle style={style} setStyle={setStyle} />
           <button data-testid="chart-screenshot-btn" onClick={screenshot} title="Descargar captura del gráfico (PNG)"
             className="rounded-sm border border-[#1E293B] p-1 text-slate-400 transition-colors hover:text-slate-100"><Camera className="h-3.5 w-3.5" /></button>
-          <button data-testid="chart-fullscreen-btn" onClick={() => setFs((v) => !v)} title={fs ? "Salir de pantalla completa (Esc)" : "Pantalla completa"}
+          {!focus && <button data-testid="chart-fullscreen-btn" onClick={() => setFs((v) => !v)} title={fs ? "Salir de pantalla completa (Esc)" : "Pantalla completa"}
             className="rounded-sm border border-[#1E293B] p-1 text-slate-400 transition-colors hover:text-slate-100">
             {fs ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-          </button>
+          </button>}
         </div>
       }>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-3 font-mono text-[11px]">
@@ -145,7 +158,7 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
           {meta.source && <span data-testid="chart-source">{SOURCE[meta.source] || meta.source} · {data?.candles?.length || 0} velas · hora local</span>}
         </span>
       </div>
-      <div ref={wrap} data-testid="price-chart-wrap" className={`relative mt-1 w-full ${fs ? "h-[calc(100vh-120px)]" : "h-[560px]"}`}>
+      <div ref={wrap} data-testid="price-chart-wrap" className={`relative mt-1 w-full ${fs ? "h-[calc(100vh-120px)]" : focus ? "h-[62vh] min-h-[380px]" : "h-[560px]"}`}>
         <div ref={ref} data-testid="price-chart" className="absolute inset-0" />
         <canvas ref={canvas} data-testid="chart-drawings-canvas" onPointerDown={dr.onDown} onPointerMove={dr.onMove}
           className="absolute inset-0 z-10 h-full w-full" style={{ pointerEvents: dr.tool ? "auto" : "none", cursor: "crosshair", touchAction: "none" }} />

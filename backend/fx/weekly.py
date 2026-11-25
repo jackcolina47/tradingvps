@@ -14,6 +14,7 @@ async def build(engine, db) -> dict:
     w = await weekly.build_weekly(engine, db)
     rows = await db.trades.find({"closed_at": {"$gte": w["from"]}}, {"_id": 0, "symbol": 1, "side": 1, "entry_price": 1, "exit_price": 1}).to_list(5000)
     w["pips"] = round(sum(pips(r["symbol"], (r["exit_price"] - r["entry_price"]) * (1 if r["side"] == "long" else -1) - engine.costs.spread(r["symbol"])) for r in rows), 1)
+    w["no_tp"] = engine.profile.ema_only
     try:
         w["fx_gates"] = await gates_context(engine, await engine.get_settings())
     except Exception:

@@ -144,8 +144,8 @@ def format_weekly(w: dict, currency: str = "USDT", extra: str = None) -> str:
     exc = w.get("excursion")
     if exc and exc.get("tracked"):
         tr = next((r for r in exc["by_reason"] if r["key"] == "TRAILING"), None)
-        lines.append(f"Recorrido: {exc['tracked']} ops con MFE medio +{exc['avg_mfe_r']:.2f} R (MAE {exc['avg_mae_r']:.2f} R) · "
-                     f"{exc['near_miss']} rozaron el TP (≥70 %) sin tocarlo ({exc['near_miss_pct']}%)"
+        lines.append(f"Recorrido: {exc['tracked']} ops con MFE medio +{exc['avg_mfe_r']:.2f} R (MAE {exc['avg_mae_r']:.2f} R)"
+                     + ("" if w.get("no_tp") else f" · {exc['near_miss']} rozaron el TP (≥70 %) sin tocarlo ({exc['near_miss_pct']}%)")
                      + (f" · salidas por trailing: {tr['trades']} con MFE {tr['avg_mfe_r']:.2f} R" if tr else "")
                      + (f" · cierres parciales: {exc['partial']['trades']} ({exc['partial']['pnl']:+.2f} {currency})" if exc["partial"]["trades"] else ""))
     if mkt:

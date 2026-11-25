@@ -417,22 +417,28 @@ REVIEW_SYSTEM = (
     '"lesson":"1 regla práctica y accionable para el futuro (máx. 25 palabras)","confidence":entero 0-100}'
 )
 
+NO_TP_RULE = (" IMPORTANTE: esta estrategia NO usa take profit ni objetivo de beneficio: la operación sale por el cruce contrario de las EMA 9/21, por una vela que cierra "
+              "al otro lado de la EMA 27, por trailing/breakeven/cierre parcial si están activos, o por el stop loss de seguridad. No menciones TP, take profit, objetivos "
+              "de precio ni ratios riesgo/beneficio (R:R, 2:1…) en ninguna parte del análisis ni en la lección.")
+
 
 def _candles_txt(cs: list, digits: int = 6) -> str:
     return "; ".join(f"O{c['open']:.{digits}g} H{c['high']:.{digits}g} L{c['low']:.{digits}g} C{c['close']:.{digits}g}" for c in cs)
 
 
-async def analyze_trade(t: dict, signal: dict | None, pa: dict, before: list, during: list, tf: str, currency: str, known_rules: list = None) -> dict:
+async def analyze_trade(t: dict, signal: dict | None, pa: dict, before: list, during: list, tf: str, currency: str, known_rules: list = None, no_tp: bool = False) -> dict:
     sig_txt = "Sin señal vinculada (operación anterior al registro de señales)."
     if signal:
         sig_txt = (f"Puntuación {signal.get('score')} · motivos técnicos: {'; '.join(signal.get('reasons') or [])}\n"
                    f"Indicadores en la señal: {json.dumps(signal.get('indicators') or {})}\n"
                    f"IA en el momento de abrir: {signal.get('ai_decision')} (confianza {signal.get('ai_confidence')}, riesgo {signal.get('ai_risk')}) · {signal.get('ai_reasoning') or '—'}")
-    mfe = f"MFE {t.get('mfe_r')} R · MAE {t.get('mae_r')} R · llegó al {t.get('mfe_tp_pct')} % del camino al TP" if t.get("mfe_r") is not None else "sin recorrido registrado"
+    mfe = (f"MFE {t.get('mfe_r')} R · MAE {t.get('mae_r')} R" + ("" if no_tp else f" · llegó al {t.get('mfe_tp_pct')} % del camino al TP")) if t.get("mfe_r") is not None else "sin recorrido registrado"
+    tp_txt = "" if no_tp else f" · TP {t.get('tp')}"
+    system = REVIEW_SYSTEM.replace("otro nivel de SL/TP", "otro nivel de SL") + NO_TP_RULE if no_tp else REVIEW_SYSTEM
     prompt = (
         f"OPERACIÓN: {t['side'].upper()} {t['symbol']} · estrategia {t['strategy']} · {t.get('entry_type') or ''} · horizonte {t.get('horizon') or ''}\n"
         f"Abierta {t['opened_at']} · cerrada {t['closed_at']} ({t.get('hold_min')} min) · motivo de cierre {t['reason']}\n"
-        f"Entrada {t['entry_price']} · salida {t['exit_price']} · SL inicial {t.get('initial_sl')} · SL final {t.get('sl')} · TP {t.get('tp')} · ATR {t.get('atr')}\n"
+        f"Entrada {t['entry_price']} · salida {t['exit_price']} · SL inicial {t.get('initial_sl')} · SL final {t.get('sl')}{tp_txt} · ATR {t.get('atr')}\n"
         f"Resultado: {t['pnl']:+.2f} {currency} ({t['pnl_pct']:+.2f} %) · {mfe} · breakeven {'sí' if t.get('breakeven') else 'no'} · parcial {'sí' if t.get('partial_tp') else 'no'}\n"
         f"SEÑAL ORIGINAL: {sig_txt}\n"
         f"ACCIÓN DEL PRECIO CALCULADA (antes de entrar): {' '.join(pa.get('summary') or [])} · datos: {json.dumps({k: v for k, v in pa.items() if k != 'summary'})}\n"
@@ -453,7 +459,7 @@ async def analyze_trade(t: dict, signal: dict | None, pa: dict, before: list, du
            "o está duplicada. Si dudas, no toques nada.\n" if known_rules is not None else "")
         + "Haz el análisis."
     )
-    data = parse_json(await _ask(_chat(REVIEW_SYSTEM, "trade-review"), prompt), "análisis de operación")
+    data = parse_json(await _ask(_chat(system, "trade-review"), prompt), "análisis de operación")
     verdict = str(data.get("verdict", "ACEPTABLE")).upper()
     return {
         "why_opened": str(data.get("why_opened", ""))[:900], "chart_context": str(data.get("chart_context", ""))[:1200],

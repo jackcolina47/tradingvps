@@ -101,10 +101,12 @@ function syncPanes(a, ind, d, style) {
   a.subKey = want.join();
 }
 
-export function useChart(ref, onNeedOlder) {
+export function useChart(ref, onNeedOlder, onNeedNewer) {
   const api = useRef(null);
   const need = useRef(onNeedOlder);
   need.current = onNeedOlder;
+  const newer = useRef(onNeedNewer);
+  newer.current = onNeedNewer;
   useEffect(() => {
     const chart = createChart(ref.current, {
       autoSize: true,
@@ -122,7 +124,10 @@ export function useChart(ref, onNeedOlder) {
       a.over[k] = def.keys.map((key) => ({ key, series: chart.addSeries(LineSeries, { ...lineOpts(def.color, def.width), lineStyle: key === "bb_mid" ? LineStyle.Dotted : LineStyle.Solid }) }));
     });
     addMain(a, DEFAULT_STYLE);
-    chart.timeScale().subscribeVisibleLogicalRangeChange((r) => { if (r && r.from < 80) need.current?.(); });
+    chart.timeScale().subscribeVisibleLogicalRangeChange((r) => {
+      if (r && r.from < 80) need.current?.();
+      if (r && a.count && r.to > a.count - 20) newer.current?.();
+    });
     api.current = a;
     return () => { chart.remove(); api.current = null; };
   }, [ref]);
@@ -141,6 +146,7 @@ export function render(a, d, lines, tf) {
     Object.values(a.sub).flat().filter((s) => s.fine).forEach((s) => s.series.applyOptions({ priceFormat: fineFormat(digits) }));
     a.lines = [];
   }
+  a.count = d.candles.length;
   a.main.setData(shift(mainData(d.candles, a.mainType), daily));
   a.vol.setData(shift(d.volume, daily));
   [...Object.values(a.over).flat(), ...Object.values(a.sub).flat()].forEach((s) => s.series.setData(shift(d[s.key] || [], daily)));

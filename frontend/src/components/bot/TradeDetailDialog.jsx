@@ -1,14 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { SideBadge } from "./Panel";
-import TradeMiniChart from "./TradeMiniChart";
+import PriceChart from "./PriceChart";
 import TradeNoteEditor from "./TradeNoteEditor";
 import TradeAiReview from "./TradeAiReview";
 import {
   http, errMsg, fmtPrice, fmtQty, fmtSignedUsd, fmtPct, pnlClass,
   REASON_LABELS, STRATEGY_LABELS, HORIZON_LABELS, ENTRY_LABELS, fmtPips, PIPS_HINT,
-  tzOpts,
+  tzOpts, noTp,
 } from "@/lib/api";
 
 const fmtFull = (iso) =>
@@ -25,6 +25,19 @@ const distPct = (from, to) => (from && to ? `${(Math.abs(to - from) / from * 100
 const yesNo = (v) => (v ? "Sí" : "No");
 const AI_LABELS = { APROBADA: "Aprobada", RECHAZADA: "Rechazada", SIN_IA: "Sin IA", BLOQUEADA: "Bloqueada" };
 
+const FX_TFS = ["5m", "15m", "1h", "4h", "1d"];
+const LEVELS = [["entry_price", "ENTRADA", "#F8FAFC"], ["exit_price", "SALIDA", "#F7A600"], ["tp", "TP", "#10B981"], ["initial_sl", "SL inicial", "#EF4444"], ["sl", "SL final", "#FB7185"]];
+
+/** The main chart (indicators, drawings, timeframes, infinite history) opened on the candles of this closed trade. */
+function TradeChart({ trade: t, tf, fx, hideTp }) {
+  const focus = useMemo(() => {
+    const seen = new Set();
+    const lines = LEVELS.filter(([k]) => !(hideTp && k === "tp") && t[k] && !seen.has(t[k]) && seen.add(t[k])).map(([k, title, color]) => ({ price: t[k], title, color }));
+    return { opened: Math.floor(new Date(t.opened_at).getTime() / 1000), closed: Math.floor(new Date(t.closed_at).getTime() / 1000), lines };
+  }, [t.id, hideTp]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <div data-testid="trade-chart"><PriceChart symbol={t.symbol} defaultTf={tf} kind="Gráfico de la operación" tfs={fx ? FX_TFS : undefined} focus={focus} /></div>;
+}
+
 const Section = ({ title, children, testId }) => (
   <div data-testid={testId} className="rounded-sm border border-[#1E293B] bg-[#0B0F17]">
     <p className="border-b border-[#1E293B] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-amber-400/90">{title}</p>
@@ -38,7 +51,8 @@ const Row = ({ label, value, className = "", testId }) => (
   </div>
 );
 
-function TradeDetailBody({ trade: t, signal: s, currency, onSaved, autoAnalyze }) {
+function TradeDetailBody({ trade: t, signal: s, currency, onSaved, autoAnalyze, tf, fx }) {
+  const hideTp = noTp();
   const price = (v) => (v == null || v === 0 ? "—" : fmtPrice(v));
   const rr = t.initial_sl && t.tp ? (Math.abs(t.tp - t.entry_price) / Math.abs(t.entry_price - t.initial_sl)).toFixed(2) : null;
   return (
@@ -54,7 +68,7 @@ function TradeDetailBody({ trade: t, signal: s, currency, onSaved, autoAnalyze }
         </span>
       </div>
 
-      <TradeMiniChart tradeId={t.id} />
+      {tf && <TradeChart trade={t} tf={tf} fx={fx} hideTp={hideTp} />}
       <TradeAiReview trade={t} autoRun={autoAnalyze} onReviewed={(review) => onSaved?.({ id: t.id, ai_review: review })} />
       <TradeNoteEditor trade={t} onSaved={onSaved} />
 
@@ -68,13 +82,13 @@ function TradeDetailBody({ trade: t, signal: s, currency, onSaved, autoAnalyze }
       <Section title="Precios y niveles" testId="trade-detail-prices">
         <Row label="Entrada" value={price(t.entry_price)} />
         <Row label="Salida" value={price(t.exit_price)} />
-        <Row label="Take Profit" value={price(t.tp)} className="text-emerald-300" testId="trade-detail-tp" />
+        {!hideTp && <Row label="Take Profit" value={price(t.tp)} className="text-emerald-300" testId="trade-detail-tp" />}
         <Row label="Stop Loss inicial" value={price(t.initial_sl)} className="text-rose-300" testId="trade-detail-sl" />
         <Row label="Stop Loss final" value={price(t.sl)} className="text-rose-300" />
         <Row label="ATR" value={price(t.atr)} />
         <Row label="Distancia al SL" value={distPct(t.entry_price, t.initial_sl)} />
-        <Row label="Distancia al TP" value={distPct(t.entry_price, t.tp)} />
-        <Row label="R:R planificado" value={rr ? `1 : ${rr}` : "—"} />
+        {!hideTp && <Row label="Distancia al TP" value={distPct(t.entry_price, t.tp)} />}
+        {!hideTp && <Row label="R:R planificado" value={rr ? `1 : ${rr}` : "—"} />}
       </Section>
 
       <Section title="Tamaño y resultado" testId="trade-detail-size">
@@ -94,7 +108,7 @@ function TradeDetailBody({ trade: t, signal: s, currency, onSaved, autoAnalyze }
         <Row label="Cierre parcial" value={yesNo(t.partial_tp)} />
         <Row label="Máx. a favor (MFE)" value={t.mfe_r != null ? `+${t.mfe_r} R` : "—"} />
         <Row label="Máx. en contra (MAE)" value={t.mae_r != null ? `${t.mae_r} R` : "—"} />
-        <Row label="Camino al TP" value={t.mfe_tp_pct != null ? `${Math.round(t.mfe_tp_pct)} %` : "—"} />
+        {!hideTp && <Row label="Camino al TP" value={t.mfe_tp_pct != null ? `${Math.round(t.mfe_tp_pct)} %` : "—"} />}
         {t.order_id && <Row label="ID orden" value={t.order_id} />}
         <Row label="ID operación" value={t.id} className="text-slate-500" />
       </Section>
@@ -105,7 +119,7 @@ function TradeDetailBody({ trade: t, signal: s, currency, onSaved, autoAnalyze }
           <Row label="Timeframe" value={s.timeframe} />
           <Row label="Puntuación" value={`${s.score} / 100`} />
           <Row label="Precio señal" value={price(s.price)} />
-          <Row label="SL / TP señal" value={`${price(s.sl)} / ${price(s.tp)}`} />
+          <Row label={hideTp ? "SL señal" : "SL / TP señal"} value={hideTp ? price(s.sl) : `${price(s.sl)} / ${price(s.tp)}`} />
           <Row label="Decisión IA" value={AI_LABELS[s.ai_decision] || s.ai_decision} />
           <Row label="Confianza IA" value={s.ai_confidence ? `${s.ai_confidence} %${s.ai_min_confidence != null ? ` (mín. ${s.ai_min_confidence} %)` : ""}` : "—"} />
           <Row label="Riesgo IA" value={s.ai_risk} />
@@ -153,14 +167,14 @@ export default function TradeDetailDialog({ trade, onClose, onSaved, autoAnalyze
   const t = trade && data?.trade ? { ...data.trade, note: trade.note ?? data.trade.note, tags: trade.tags ?? data.trade.tags } : trade;
   return (
     <Dialog open={!!trade} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent data-testid="trade-detail-dialog" className="max-h-[90vh] max-w-2xl overflow-y-auto thin-scroll border-[#1E293B] bg-[#0D111A] text-slate-200">
+      <DialogContent data-testid="trade-detail-dialog" className="max-h-[94vh] w-[97vw] max-w-6xl overflow-y-auto thin-scroll border-[#1E293B] bg-[#0D111A] text-slate-200">
         <DialogHeader>
           <DialogTitle className="font-display text-sm uppercase tracking-[0.14em]">Detalle de la operación</DialogTitle>
           <DialogDescription className="text-xs text-slate-500">Todos los datos registrados para análisis manual.</DialogDescription>
         </DialogHeader>
         {err && <p data-testid="trade-detail-error" className="text-xs text-rose-400">{err}</p>}
         {!data && !err && t && <div className="flex items-center gap-2 text-xs text-slate-500"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando detalle…</div>}
-        {t && (data || err) && <TradeDetailBody trade={t} signal={data?.signal} currency={data?.currency || "USD"} onSaved={onSaved} autoAnalyze={autoAnalyze} />}
+        {t && (data || err) && <TradeDetailBody trade={t} signal={data?.signal} currency={data?.currency || "USD"} onSaved={onSaved} autoAnalyze={autoAnalyze} tf={data?.tf} fx={data?.fx} />}
       </DialogContent>
     </Dialog>
   );
