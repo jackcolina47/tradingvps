@@ -1,0 +1,19 @@
+{
+  "summary": "Iter114 candle-close scheduler verified end-to-end. Full backend regression: 519 passed, 16 skipped (matches main agent expectation). funnel.next_trigger / schedule / closed_index / fresh_sec / mtf_of / _relabel behave exactly as specified, and the 49 new tests in tests/test_iter114_candle_scheduler.py all pass. Live preview checks: Bybit, HotForex and Pepperstone all have settings.timeframe=1h and dashboard.status.next_scan_in aligned with next HH:00:05 UTC. PUT /api/fx/settings {timeframe:'15m'} immediately logs INFO 'Próximo escaneo al cierre de vela 15m: HH:MM:05 UTC' and recalculates next_scan_in without a restart; restoring to 1h logs 'Próximo escaneo al cierre de vela 1h: ...' again. Bots are independent (bybit kept 1h while fx switched to 15m). POST /api/bot/scan, /api/fx/bot/scan and /api/pepper/bot/scan return ok and produce no 'Sin datos de 1D/4H' log for the live pairs. Frontend smoke: /hotforex and Bybit BotPanel render 'TEMPORALIDAD 1H · ANÁLISIS AL CIERRE DE CADA VELA 1H (+5 S, UTC)' and the header shows 'Análisis en Ns' counting down to the next candle close +5s. Original timeframes preserved (Bybit 1h, FX 1h, Pepper 1h).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter114_candle_scheduler.py",
+    "/app/backend/tests/test_iter100_guard_funnel.py",
+    "/app/backend/tests/test_iter103_bybit_hardening.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Panel password BlackCat2233@ (POST /api/auth/login)",
+  "seed_data_creation": "None. FX settings temporarily toggled 1h→15m→1h and restored.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Scheduler constants live in funnel.py: TRIGGER_DELAY_SEC=5, TF_SECONDS, MTF_BY_TF (15m/5m/30m→4h/1h; 1h/4h→1d/4h), MTF_DEFAULT. Scan loop pattern (engine.TradingEngine._scan_loop and fx.engine_signals.SignalsMixin._scan_loop): get_settings → scan_once → next_scan_ts = funnel.schedule(self, settings.timeframe) → wait_for(scan_event, timeout). update_settings sets scan_event so PUT /api/settings and /api/fx/settings recalc without restart. Dashboard endpoints expose status.next_scan_in (seconds). Log line uses engine.log('INFO', 'Próximo escaneo al cierre de vela {tf}: HH:MM:SS UTC') and is emitted only on start/tf change (string equality guard in funnel.schedule)."
+}

@@ -760,6 +760,13 @@ Decisión del usuario: contratendencia = 2:1 como tendencia (sustituye al TP cor
 - `trade_guard.WINDOWS["fx"]` = 03:00–15:00 («Londres + Nueva York») y 19:00–00:00 NY; afecta a HotForex y Pepperstone. Regla del viernes sin cambios (sin entradas desde 12:00 NY, cierre 15:30 NY).
 - Tests: `tests/test_iter113_flow_calibration.py` + umbrales en iter99/100/107/110/111. Suite 470 passed, 16 skipped. testing_agent `iteration_113.json` OK.
 
+## Iteración 127 (2026-11) — Planificador sincronizado con el cierre de vela de cada bot (3 bots)
+- `funnel.next_trigger(tf, now)`: cierre de vela UTC + `TRIGGER_DELAY_SEC = 5` (`TF_SECONDS`: 1m, 5m, 15m, 30m, 1h, 4h, 1d). `funnel.schedule(engine, tf)` lo usan los dos `_scan_loop` con `settings.timeframe` y registra «Próximo escaneo al cierre de vela {tf}: HH:MM:SS UTC» al arrancar y al cambiar de temporalidad (sin reinicio: `update_settings` despierta el bucle).
+- Velas cerradas: `closed_index(df, tf)` (última fila si el reloj prueba que ya cerró; si no, len-2) en `run`, `_htf` y `_mtf`; `fresh_sec(tf, default)` impide reutilizar caché anterior al cierre (funnel_frame de ambos motores y caché MTF).
+- Contexto: `MTF_BY_TF` → 1h y 4h usan 1D/4H; el resto 4H/1H (`mtf_of`). `engine.funnel_mtf` pasa a ser un flag; claves de `m["mtf"]` dinámicas; `_relabel` reescribe 4H/1H en los prompts.
+- 30m: soportado por el cálculo, pero NO es temporalidad seleccionable (`TIMEFRAMES`). Guardar ajustes y el botón de escaneo siguen lanzando un escaneo inmediato extra.
+- Tests `tests/test_iter114_candle_scheduler.py` (49). Suite 519 passed, 16 skipped (un fallo intermitente no reproducido en 1 de 4 ejecuciones). testing_agent `iteration_114.json` OK.
+
 ### Pendiente
 - P1 Verificar en el VPS el puente real: formato exacto de `/users/current/accounts/{id}`, códigos de `/trade`, deals de cierre (entryType IN/OUT) y comportamiento del ticket tras parcial en MT4.
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
