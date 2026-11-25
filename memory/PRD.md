@@ -745,7 +745,17 @@ Decisión del usuario: contratendencia = 2:1 como tendencia (sustituye al TP cor
 - `SL_ATR_BAND = (1.1, 4.0)` (antes del buffer de 0,25 ATR); el prompt de niveles lee la banda de la constante.
 - Tests: `tests/test_iter111_precision.py` (38) + umbrales actualizados en iter100/103/110. Suite: 381 passed, 16 skipped. testing_agent `iteration_110.json` sin incidencias.
 
+## Iteración 125 (2026-11) — MetaApi retirado → puente MetaTrader propio (HotForex y Pepperstone)
+- `fx/bridge.py` (sustituye a `fx/metaapi.py`, borrado): `MtBridge(url, token)` con `Authorization: Bearer` y rutas `/users/current/accounts/{account_id}/…` (health, account, reconnect, account-information, positions, symbols, specification, current-tick, candles, history-deals/orders, lot-size, trade). `tradable(spec)` (tradeMode FULL o tradeAllowed/allowed), `account_state()`, `BridgeError`. Cierre parcial = `POSITION_CLOSE_ID` + `volume`; el id de seguimiento viaja en `comment` (y `clientId`).
+- `fx/config.py`: campos `bridge_url`, `bridge_token` (cifrado), `bridge_account_id`; `bridge_conn()` = panel → env `MT_BRIDGE_URL`/`MT_BRIDGE_TOKEN` → por defecto (`http://94.72.105.219:8000`, `hfm_v2` / `pepperstone_v2`). `mt_login`/`mt_server` quedan como datos de solo lectura rellenados al probar. Migración al cargar (`LEGACY_KEYS`): vuelve a paper, borra verificación, sufijo por defecto del perfil y descarta posiciones REAL antiguas.
+- `fx/broker.py`: `bridge_account`, `default_suffix` («b» en HFM), `symbol_aliases` (HFM Zero: XAUUSD→GOLDb, XAGUSD→SILVERb). `fx/live.py` aplica el alias en velas, ticks, specs y órdenes; sigue el nuevo ticket tras un parcial en MT4 (`_remainder_id`).
+- Rutas: `/hfm/test`, `/hfm/reconnect`, `/hfm/symbols`, `/hfm/detect-suffix`, `/mode`. Eliminadas `/hfm/link`, `/hfm/recreate`, `/hfm/redeploy`.
+- Frontend: `HfmSection.jsx` (URL del Puente, ID de Cuenta, Token del Puente, sufijo, costes; Guardar / Probar conexión / Comprobar símbolos / Reconectar / Quitar); borrado `HfmPlanPicker.jsx`; textos y docs sin MetaApi.
+- Simulador: `scripts/mt_bridge_mock.py` (puerto 8012, token `mocktoken`). Tests `tests/test_iter112_mt_bridge.py` (42). Suite 423 passed, 16 skipped. testing_agent `iteration_111.json` OK.
+- No verificado: ciclo completo de órdenes en REAL a través del motor (solo a nivel de `FxLiveBroker` contra el simulador) ni el puente real (rechaza la IP del preview).
+
 ### Pendiente
+- P1 Verificar en el VPS el puente real: formato exacto de `/users/current/accounts/{id}`, códigos de `/trade`, deals de cierre (entryType IN/OUT) y comportamiento del ticket tras parcial en MT4.
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
 - P3 funding.py y campos funding_* de config siguen en backend (solo informan la watchlist); la sección de Ajustes ya se quitó.
 - P2 Redondeo del umbral de confianza para valores antiguos (45 → 40).

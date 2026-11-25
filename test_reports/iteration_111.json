@@ -1,0 +1,32 @@
+{
+  "summary": "Full stack review of iter112 MetaApi removal + MT bridge integration. Backend pytest 423 passed, 16 skipped (matches baseline); new file test_iter112_mt_bridge.py 42/42 green. End-to-end HTTP tests against the preview URL exercising /api/fx and /api/pepper verify: bridge_* keys present with masked token, bridge_defaults differ per bot (hfm_v2 vs pepperstone_v2), bridge_effective token_source='panel', hfm_configured flag, legacy metaapi_* / mt_password / mt_platform absent. /hfm/test against local simulator returns token_valid=true, DEPLOYED/CONNECTED, equity 1000 USD, suffix 'b' (HFM Zero), GOLDb/SILVERb aliases; wrong token -> HTTP 424 with 'Token del Puente' hint; unknown account id -> hint referencing 'ID de Cuenta'; /hfm/symbols lists GOLDb/SILVERb; /hfm/reconnect ok; deprecated /hfm/link,/hfm/recreate,/hfm/redeploy -> 404. /fx/mode returns required checklist keys (keys, linked, verified, trade_allowed, symbols, stopped, flat) and can_go_live=true. /pepper/hfm/test -> account UNDEPLOYED/DISCONNECTED with Reconectar hint, never verified. /api/fx/klines?symbol=XAUUSD&tf=15m returns source='hfm' 300 bars. PUT /api/fx/config validation rejects bad URL (422 'La URL del puente debe empezar por http://'). Frontend /hotforex -> Ajustes shows data-testid hfm-section with hfm-bridge-url-input, hfm-bridge-account-input, hfm-token-input, hfm-account-kind-select, hfm-save-button, hfm-test-button, hfm-symbols-button, hfm-clear-button, hfm-state-badge='Verificada'; no MetaApi text, no login/password/server/platform fields, no 'Vincular cuenta/Redesplegar/Recrear' buttons. Probar conexión displays token válido + equity; Comprobar símbolos lists GOLDb/SILVERb. /pepperstone Ajustes shows pepperstone_v2 placeholder and Razor/Standard select; paper mode with 'Pasar a modo REAL' disabled. Documentación page contains no 'MetaApi' text. DB left clean: clear_hfm applied, mode=paper, bot stopped, can_go_live=false.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/fx/hfm/test", "issue": "Spec says 'without token -> 400' but endpoint returns 200 when the request omits bridge_token while a token is saved in the panel/env. This is intentional fallback behavior (uses saved token); worth clarifying the spec wording but not a defect."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter112_mt_bridge.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "fx/config.public() still exposes mt_login, mt_server, mt_symbol_suffix even though the UI no longer shows those as editable fields. They are populated from the bridge account info and used for display (last verification line). Consider documenting them as read-only mirrors.",
+    "fx/routes_hfm.py /hfm/test is lenient when bridge_token is omitted and a token is already saved (falls back silently). If the spec intends to force explicit token in request, add a 400 path when neither request nor saved token is present (currently only the no-token-at-all path returns 400).",
+    "Frontend login form: the first interactive element after the password input is not the submit; keep using get_by_role('button', name='ENTRAR') or data-testid rather than nth-of-type to avoid test flakiness. Non-blocking."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Panel password BlackCat2233@ from /app/memory/test_credentials.md; bridge simulator token mocktoken @ http://127.0.0.1:8012.",
+  "seed_data_creation": "None. Temporarily saved bridge_url/token on fx config during testing; cleared at end via PUT /api/fx/config {clear_hfm:true}. Mode left in paper, bot stopped.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter112 (MetaApi removal + MT bridge) is fully implemented and green. Preview backend reaches the local simulator at http://127.0.0.1:8012 (start it if missing: `nohup python3 /app/scripts/mt_bridge_mock.py &`). Full REAL-mode order lifecycle through the engine against the simulator was not exercised (would require starting the FX bot in REAL on the panel, allocating state, placing orders via engine helpers). All other requested behaviors verified. Preview DB left clean (clear_hfm, paper, stopped). Baseline for next iter: 423 passed, 16 skipped.",
+  "rca of the issue": "n/a — no defects found."
+}
