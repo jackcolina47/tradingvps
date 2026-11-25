@@ -56,7 +56,7 @@ function Status({ s }) {
       <span className={`inline-flex items-center gap-1.5 uppercase tracking-wider ${s.running ? "text-emerald-400" : "text-slate-400"}`}>
         <span className={`pulse-dot ${s.running ? "bg-emerald-400" : "bg-slate-500"}`} /> {s.running ? "Bot en ejecución" : "Bot detenido"}
       </span>
-      <span className="text-slate-300">Equidad <span className="num text-slate-100">{fmtUsd(s.equity)}</span></span>
+      <span className="text-slate-300">Equidad <span className="num text-slate-100">{fmtUsd(s.equity, 2, s.currency)}</span></span>
       <span className={`num ${pnlClass(s.total_return_pct)}`}>{fmtPct(s.total_return_pct)}</span>
       <span className="text-slate-400">{s.open_positions} {s.open_positions === 1 ? "posición" : "posiciones"}</span>
       {s.mode && <span className={`rounded-sm border px-1.5 py-px text-[9px] uppercase ${s.mode === "REAL" ? "border-rose-500/50 text-rose-300" : "border-[#1E293B] text-slate-400"}`}>{s.mode}</span>}

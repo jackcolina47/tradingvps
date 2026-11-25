@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Layers, Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { http, errMsg, setApiBase, setDisplayTz, SESSION_NAMES, fmtTime } from "@/lib/api";
+import { http, errMsg, setApiBase, setDisplayTz, setMoney, SESSION_NAMES, fmtTime } from "@/lib/api";
 import { usePolling } from "@/hooks/usePolling";
 import Header from "@/components/bot/Header";
 import KpiStrip from "@/components/bot/KpiStrip";
@@ -120,6 +120,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
     }
   };
 
+  setMoney(data?.account?.currency);  // real account in GBP → every amount of this dashboard shows £
   if (!data) {
     return (
       <div data-testid="fx-dashboard-loading" className="flex min-h-screen items-center justify-center gap-3 font-mono text-sm text-slate-400">
@@ -172,7 +173,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <Watchlist items={data.watchlist} selected={symbol} onSelect={setSymbol} />
           <PriceChart symbol={symbol} defaultTf={data.settings.timeframe} kind={meta?.symbol_info?.[symbol]?.name || "Forex"} tfs={FX_TFS}
-            trade={{ riskPct: data.settings.risk_per_trade, equity: data.account.equity, live: data.status.mode === "REAL", currency: "USD", onDone: refresh, noTp: emaOnly }} />
+            trade={{ riskPct: data.settings.risk_per_trade, equity: data.account.equity, live: data.status.mode === "REAL", currency: data.account.currency || "USD", onDone: refresh, noTp: emaOnly }} />
           {emaOnly
             ? <AiSignals rulesOnly signals={data.signals} title="Cruces detectados" emptyText="Cuando el bot detecte un cruce de EMAs válido aparecerá aquí." className="lg:col-span-3" />
             : <BotPanel settings={data.settings} meta={meta} account={data.account} equity={data.equity} profileActive={data.profile_active} fmtLeverage={fmtLev} rulesOnly={rulesOnly} />}
@@ -226,7 +227,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
               </TabsContent>
               <TabsContent value="news" className="mt-0"><FxNewsPanel summary={data.news} symbols={data.settings.symbols} currencyNames={meta?.currency_names} /></TabsContent>
               <TabsContent value="plan" className="mt-0">
-                <GrowthPlan account={data.account} settings={data.settings} checkin={data.checkin} refresh={refresh} currency="USD" intro={PLAN_INTRO(brand)}
+                <GrowthPlan account={data.account} settings={data.settings} checkin={data.checkin} refresh={refresh} currency={data.account.currency || "USD"} intro={PLAN_INTRO(brand)}
                   onSave={(body) => act(() => http.put("/settings", body), "Plan actualizado")} />
               </TabsContent>
             </Tabs>

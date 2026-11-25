@@ -166,7 +166,7 @@ def register(router, engine, store, news):
     @router.get("/overview")
     async def overview():
         acc = await engine.account_summary()
-        return {"running": engine.running, "mode": engine.mode_label, "equity": acc["equity"], "total_return_pct": acc["total_return_pct"],
+        return {"running": engine.running, "mode": engine.mode_label, "equity": acc["equity"], "currency": acc["currency"], "total_return_pct": acc["total_return_pct"],
                 "open_positions": acc["open_positions"], "market_open": market_status()["open"]}
 
     @router.get("/settings")
@@ -332,7 +332,7 @@ def register(router, engine, store, news):
 def build_router(engine, store, news):
     router = protected_router()
     router.prefix = engine.profile.api_prefix
-    add_shared_routes(router, engine, engine.profile.bot_name, "USD", before_unit="s")
+    add_shared_routes(router, engine, engine.profile.bot_name, lambda: engine.ccy, before_unit="s")
     register(router, engine, store, news)
     routes_analysis.register(router, engine, store, news)
     routes_hfm.register(router, engine, store)

@@ -32,6 +32,7 @@ export const EMA_MAIN_NAME = "Cruce EMA 9 y 21 Personalizado";
 export const setApiBase = (bot) => {
   http.defaults.baseURL = BOT_API[bot] ? `${BACKEND}${BOT_API[bot]}` : API;
   DISPLAY_TZ = null;
+  MONEY = "$";
   STRATEGY_LABELS.ema_test = bot === "pepper" ? EMA_MAIN_NAME : "Test cruce EMA 9/21";  // Pepperstone: the EMA cross is the bot's only, main strategy
 };
 // Global features (chat, backups, VPS package) always talk to /api, whichever dashboard is open. Use relative paths ("/chat").
@@ -41,9 +42,14 @@ export const api = withAuth(axios.create({ baseURL: API, timeout: 90000 }));
 const num = (v, d) =>
   Number(v).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
 
-export const fmtUsd = (v, d = 2) => (v == null ? "—" : `$${num(v, d)}`);
+// Money prefix of the open dashboard: "$" by default; the FX bots switch it to the real account's currency (GBP → £) once the terminal reports it.
+const MONEY_SYMBOLS = { USD: "$", USDT: "$", GBP: "£", EUR: "€", JPY: "¥", AUD: "A$", CAD: "C$", NZD: "NZ$", CHF: "CHF " };
+let MONEY = "$";
+export const moneySymbol = (code) => (code ? MONEY_SYMBOLS[String(code).toUpperCase()] || `${String(code).toUpperCase()} ` : "$");
+export const setMoney = (code) => { MONEY = moneySymbol(code); };
+export const fmtUsd = (v, d = 2, code = null) => (v == null ? "—" : `${code ? moneySymbol(code) : MONEY}${num(v, d)}`);
 export const fmtSignedUsd = (v, d = 2) =>
-  v == null ? "—" : `${v > 0 ? "+" : v < 0 ? "-" : ""}$${num(Math.abs(v), d)}`;
+  v == null ? "—" : `${v > 0 ? "+" : v < 0 ? "-" : ""}${MONEY}${num(Math.abs(v), d)}`;
 export const fmtPct = (v, d = 2) => (v == null ? "—" : `${v > 0 ? "+" : ""}${Number(v).toFixed(d)}%`);
 export const fmtPrice = (v, digits) => {
   if (v == null) return "—";

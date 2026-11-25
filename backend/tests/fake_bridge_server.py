@@ -16,6 +16,7 @@ if __name__ == "__main__":
     accounts = {}
     for acc, suffix in (("hfm_v1", "b"), ("pepperstone_v1", "")):
         ea = FakeEA(tmp / acc)
+        ea.CURRENCY = "GBP" if acc == "pepperstone_v1" else "USD"  # Pepperstone UK accounts are in GBP
         ea.SPECS = {**({s: (SPECS[s]["digits"], 0) for s in SPECS} if suffix else {}), **{f"{s}{suffix}": (SPECS[s]["digits"], 4) for s in SPECS}}
         ea.start()
         accounts[acc] = {"platform": "mt4", "files_dir": str(tmp / acc)}

@@ -31,6 +31,7 @@ NOW = int(time.time())
 class FakeEA(threading.Thread):
     """Answers the request files like HFM_Bridge_EA.mq4 (server clock = UTC+2)."""
     MODES = {0: "DISABLED", 4: "FULL"}
+    CURRENCY = "USD"
     SPECS = {"EURUSD": (5, 0), "EURUSDb": (5, 4), "GOLDb": (2, 4), "SILVERb": (3, 4), "SOLUSD": (2, 4), "XRPUSD.a": (4, 4)}
 
     def __init__(self, files_dir: Path):
@@ -43,7 +44,7 @@ class FakeEA(threading.Thread):
                              "profit": 500.0, "swap": 0, "commission": 0, "comment": "Deposit", "magic": 0})
 
     def beat(self):
-        s = {"login": 123456, "server": "HFMarketsGlobal-Demo", "company": "HF Markets", "name": "Test", "currency": "USD", "connected": 1, "trade_allowed": 1, "balance": 1000.0,
+        s = {"login": 123456, "server": "HFMarketsGlobal-Demo", "company": "HF Markets", "name": "Test", "currency": self.CURRENCY, "connected": 1, "trade_allowed": 1, "balance": 1000.0,
              "equity": 1010.5, "margin": 20.0, "free_margin": 990.5, "leverage": 500, "server_time": int(time.time()) + 7200, "gmt_time": int(time.time()), "tick_age": 0}
         tmp = self.dir / "status.tmp"
         tmp.write_text(json.dumps(s))

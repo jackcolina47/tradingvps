@@ -102,6 +102,11 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
         return "REAL" if self.live else "PAPER"
 
     @property
+    def ccy(self) -> str:
+        """Currency of the money figures: the real account's deposit currency in REAL mode (read from the terminal), USD in paper."""
+        return (self.cfg.hfm_currency if self.live and self.cfg and self.cfg.hfm_currency else "USD").upper()
+
+    @property
     def env(self) -> str:
         return (self.cfg.mt_server if self.cfg and self.cfg.mt_server else self.bk)
 
@@ -279,7 +284,7 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
         await monitor_shadows(self, tickers, settings, now)
         await self._update_account_metrics(settings)
         if market_open(now) and position_review.due(self, settings):
-            await position_review.review_open_positions(self, settings, "USD", self.profile.bot_name)
+            await position_review.review_open_positions(self, settings, self.ccy, self.profile.bot_name)
 
     async def _hfm_health(self, synced: bool):
         """Watches the bridge account (terminal / Expert Advisor alive + broker connection) in REAL mode; alerts once per outage, reminds every 6 h, confirms recovery."""

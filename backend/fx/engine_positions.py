@@ -121,7 +121,7 @@ class PositionsMixin:
                     updates.update(qty=rest, margin=round(p.margin * rest / p.qty, 6), partial_gross=round(p.partial_gross + gross, 6), partial_fees=round(p.partial_fees + fee, 6),
                                    initial_qty=p.initial_qty or p.qty, **({} if p.live else {"fees": round(p.fees + fee, 6), "unrealized_pnl": round(risk.pnl(p.symbol, p.side, p.entry_price, price, rest, tickers), 4)}))
                     p.qty = rest
-                    msg = f"cerrado {pct:g}% ({part:.2f} lotes) @ {f(price)} a +{k:g}×ATR · PnL {gross - fee:+.2f} USD · resto {rest:.2f} lotes"
+                    msg = f"cerrado {pct:g}% ({part:.2f} lotes) @ {f(price)} a +{k:g}×ATR · PnL {gross - fee:+.2f} {self.ccy} · resto {rest:.2f} lotes"
                     await self.log("ORDER", f"PARCIAL {tag}{p.side.upper()} {p.symbol} · {msg}")
                     await self.tg(f"🎯 <b>PARCIAL {tag}{p.side.upper()} {p.symbol}</b>\n{msg[0].upper() + msg[1:]}", "orders")
                 except Exception as e:
@@ -152,9 +152,9 @@ class PositionsMixin:
             await self.log("RISK", f"{p.symbol}: test cruce EMA a +{k:g}×ATR · cierre parcial omitido (el lote mínimo no permite dividir) · SL movido a breakeven ({f(be)})")
             return
         await self.log("ORDER", f"PARCIAL {tag}{p.side.upper()} {p.symbol} · {EMA_TEST_TAG}: cerrado {EMA_PARTIAL_PCT}% ({part:.2f} lotes) @ {f(price)} a +{k:g}×ATR · "
-                                f"PnL {net:+.2f} USD · resto {p.qty:.2f} lotes con SL en breakeven ({f(be)}) hasta el cruce contrario")
+                                f"PnL {net:+.2f} {self.ccy} · resto {p.qty:.2f} lotes con SL en breakeven ({f(be)}) hasta el cruce contrario")
         await self.tg(f"🎯 <b>PARCIAL {tag}{p.side.upper()} {p.symbol}</b> · {EMA_TEST_TAG} @ {f(price)} (+{k:g}×ATR)\n"
-                      f"Cerrado {EMA_PARTIAL_PCT}% ({part:.2f} lotes) · PnL {net:+.2f} USD · resto {p.qty:.2f} lotes con SL en breakeven ({f(be)}) hasta el cruce contrario", "orders")
+                      f"Cerrado {EMA_PARTIAL_PCT}% ({part:.2f} lotes) · PnL {net:+.2f} {self.ccy} · resto {p.qty:.2f} lotes con SL en breakeven ({f(be)}) hasta el cruce contrario", "orders")
 
     async def _ema_partial_live(self, p: Position, price: float, rules: dict, updates: dict):
         done = p.partial_done
@@ -187,9 +187,9 @@ class PositionsMixin:
     async def _announce_partial(self, p: Position, part: float, price: float, net: float, rules: dict):
         tag = "REAL " if p.live else ""
         await self.log("ORDER", f"PARCIAL {tag}{p.side.upper()} {p.symbol}: cerrado {rules['partial_tp_pct']}% ({part:.2f} lotes) @ {fmt_price(p.symbol, price)} "
-                                f"a +{rules['partial_tp_r']:g}R · PnL {net:+.2f} USD · resto {p.qty:.2f} lotes sigue con trailing")
+                                f"a +{rules['partial_tp_r']:g}R · PnL {net:+.2f} {self.ccy} · resto {p.qty:.2f} lotes sigue con trailing")
         await self.tg(f"🎯 <b>PARCIAL {tag}{p.side.upper()} {p.symbol}</b> @ {fmt_price(p.symbol, price)} (+{rules['partial_tp_r']:g}R)\n"
-                      f"Cerrado {rules['partial_tp_pct']}% ({part:.2f} lotes) · PnL {net:+.2f} USD · resto {p.qty:.2f} lotes con trailing", "orders")
+                      f"Cerrado {rules['partial_tp_pct']}% ({part:.2f} lotes) · PnL {net:+.2f} {self.ccy} · resto {p.qty:.2f} lotes con trailing", "orders")
 
     async def _adopt_live(self, pid: str, xp: dict, settings: FxSettings, tickers: dict):
         """A broker position carries our clientId but has no DB record (order with unknown result, restored backup…): manage it like any other."""
@@ -322,17 +322,17 @@ class PositionsMixin:
     async def _announce_close(self, p: Position, trade: Trade, reason: str, estimated: bool = False):
         tag = "REAL " if p.live else ""
         est = f" · PnL estimado, pendiente de confirmar con {self.bk}" if estimated else ""
-        await self.log("ORDER", f"CERRADA {tag}{p.side.upper()} {p.symbol} @ {fmt_price(p.symbol, trade.exit_price)} · {reason} · PnL {trade.pnl:+.2f} USD{est}")
+        await self.log("ORDER", f"CERRADA {tag}{p.side.upper()} {p.symbol} @ {fmt_price(p.symbol, trade.exit_price)} · {reason} · PnL {trade.pnl:+.2f} {self.ccy}{est}")
         if reason in (TOUCH_REASON, CLOSE_EMA_REASON):
             how = ("toque de la EMA 21", "La vela cerró tocando la EMA 21 con la operación abierta.") if reason == TOUCH_REASON else \
                   ("cierre de vela al otro lado de la EMA 21", f"La vela cerró {'por debajo' if p.side == 'long' else 'por encima'} de la EMA 21 con la operación abierta.")
             await self.tg(f"{'✅' if trade.pnl >= 0 else '❌'} <b>CERRADA {tag}{p.side.upper()} {p.symbol} · {how[0]}</b>\n"
                           f"{how[1]}\n"
-                          f"{'Ganó' if trade.pnl >= 0 else 'Perdió'} <b>{abs(trade.pnl):.2f} USD</b> ({trade.pnl_pct:+.2f}%) · entrada {fmt_price(p.symbol, p.entry_price)} → "
+                          f"{'Ganó' if trade.pnl >= 0 else 'Perdió'} <b>{abs(trade.pnl):.2f} {self.ccy}</b> ({trade.pnl_pct:+.2f}%) · entrada {fmt_price(p.symbol, p.entry_price)} → "
                           f"salida {fmt_price(p.symbol, trade.exit_price)}{est}", "orders")
             return
         await self.tg(f"{'✅' if trade.pnl >= 0 else '❌'} <b>CERRADA {tag}{p.side.upper()} {p.symbol}</b> @ {fmt_price(p.symbol, trade.exit_price)} · {reason}\n"
-                      f"PnL <b>{trade.pnl:+.2f} USD</b> ({trade.pnl_pct:+.2f}%) · entrada {fmt_price(p.symbol, p.entry_price)}{est}", "orders")
+                      f"PnL <b>{trade.pnl:+.2f} {self.ccy}</b> ({trade.pnl_pct:+.2f}%) · entrada {fmt_price(p.symbol, p.entry_price)}{est}", "orders")
 
     async def _record_trade(self, p: Position, price: float, net: float, fees: float, reason: str) -> Trade:
         tp_r = risk.tp_in_r(p.side, p.entry_price, p.initial_sl, p.tp)
@@ -355,7 +355,7 @@ class PositionsMixin:
 
     async def _learn(self, trade: Trade):
         if (await self.get_settings()).rules_auto_learn:
-            await trade_learning.learn(self, trade, "USD", "s")
+            await trade_learning.learn(self, trade, self.ccy, "s")
 
     # ---------- execution ----------
     def _slot_block(self, open_docs: list, settings: FxSettings, horizon: str):
@@ -408,10 +408,12 @@ class PositionsMixin:
                         return None, f"la cuenta {self.bk} no permite operar"
                     lot = await self.broker.lot(symbol)
                     leverage = info["leverage"] or settings.leverage
-                    lots, margin, real_risk = risk.position_size(info["equity"], info["available"], risk_pct, entry, sl, leverage, symbol, tickers,
+                    fxr = risk.account_usd(info.get("currency") or self.ccy, tickers)  # USD per unit of the account currency (GBP account: ≈ 1.27): sizing maths are in USD
+                    lots, margin, real_risk = risk.position_size(info["equity"] * fxr, info["available"] * fxr, risk_pct, entry, sl, leverage, symbol, tickers,
                                                                  settings.min_lot_max_risk, lot)
+                    margin /= fxr
                     if lots <= 0 or margin < 1:
-                        need = risk.min_lot_risk_pct(info["equity"], entry, sl, symbol, tickers, lot["min"])
+                        need = risk.min_lot_risk_pct(info["equity"] * fxr, entry, sl, symbol, tickers, lot["min"])
                         reason = (f"no se puede arriesgar exactamente el {risk_pct:g}%: el lote mínimo del bróker ({lot['min']:g}) arriesgaría el {need}% de la equidad real, "
                                   f"o falta margen para el tamaño necesario")
                         await self.log("RISK", f"{symbol}: {reason}")
@@ -489,7 +491,7 @@ class PositionsMixin:
                   else f"SL {f(sl)} ({pips(symbol, abs(entry - sl)):.1f} pips) · TP {f(tp)}")
         await self.log("ORDER", f"ABIERTA {tag}{sig['side'].upper()} {symbol} @ {f(entry)} · {lots:.2f} lotes · 1:{leverage} · {levels}{reduced}")
         await self.tg(f"{'🟢' if long else '🔴'} <b>ABIERTA {tag}{sig['side'].upper()} {symbol}</b> @ {f(entry)}\n"
-                      f"{lots:.2f} lotes · 1:{leverage} · margen ${margin:,.2f}\n{levels}\n"
+                      f"{lots:.2f} lotes · 1:{leverage} · margen {margin:,.2f} {self.ccy}\n{levels}\n"
                       f"Estrategia: {self.strat_name if cross else FX_STRATEGY_INFO.get(sig['strategy'], {}).get('name', sig['strategy'])}{reduced}", "orders")
         return pos, None
 

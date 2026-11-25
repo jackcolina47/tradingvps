@@ -45,6 +45,18 @@ def round_lots(lots: float, lot: dict = None) -> float:
     return round(min(lots, mx), 8) if lots >= mn - 1e-9 else 0.0
 
 
+def account_usd(currency: str, tickers: dict) -> float:
+    """USD value of 1 unit of the account currency (1.0 for USD, or when the rate is not available)."""
+    c = (currency or "USD").upper()
+    if c == "USD":
+        return 1.0
+    t = tickers.get(f"{c}USD")
+    if t and t.get("price"):
+        return float(t["price"])
+    t = tickers.get(f"USD{c}")
+    return 1 / float(t["price"]) if t and t.get("price") else 1.0
+
+
 def position_size(equity: float, available: float, risk_pct: float, entry: float, sl: float, leverage: int, symbol: str, tickers: dict,
                   min_lot_max_risk: float = 0.0, lot: dict = None):
     """Returns (lots, margin_usd, real_risk_pct). Risk = equity × risk% lost if SL is hit; margin = notional / leverage.

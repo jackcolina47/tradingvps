@@ -71,7 +71,7 @@ class AccountMixin:
                 await self.db[col].delete_many({})
             self._trade_totals = None
             await self._new_account(initial)
-        await self.log("INFO", f"Estadísticas reiniciadas · capital inicial ${initial:,.2f} · modo {self.mode_label}")
+        await self.log("INFO", f"Estadísticas reiniciadas · capital inicial {initial:,.2f} {self.ccy} · modo {self.mode_label}")
 
     async def _broker_info(self, max_age: float = 10.0):
         if not (self.live and self.broker):
@@ -94,6 +94,8 @@ class AccountMixin:
         info = await self._broker_info()
         if info:
             balance, equity, available, unreal, used = info["balance"], info["equity"], info["available"], info["unrealised"], info["margin"]
+            if info["currency"] and self.store and info["currency"].upper() != (self.cfg.hfm_currency or "").upper():
+                await self.store.update({"hfm_currency": info["currency"].upper()})  # the account currency is whatever the terminal reports
         st = await maintenance.trade_totals(self)
         daily = equity - acc["day_start_equity"]
         return {
@@ -107,7 +109,7 @@ class AccountMixin:
             **cashflow.fields(acc, equity),
             "max_drawdown": round(acc["max_drawdown"], 2),
             "open_positions": len(positions), "mode": self.mode_label, "exchange_error": self.broker_error if self.live else None,
-            "exchange_synced": info is not None, "currency": info["currency"] if info else "USD",
+            "exchange_synced": info is not None, "currency": (info["currency"] if info and info["currency"] else self.ccy).upper(),
             "account_ref": acc.get("account_ref") or "", "account_kind": self.account_kind(),
             "account_changed": bool(self.live and acc.get("account_ref") and acc.get("account_ref") != self.account_ref),
         }
@@ -124,7 +126,7 @@ class AccountMixin:
     async def _update_account_metrics(self, settings: FxSettings):
         s = await self.account_summary()
         if self.live and self.broker and not self.hfm["down_since"] and \
-                await cashflow.poll(self, "hfm", force=cashflow.jumped(self._last_equity, s["equity"]), currency="USD"):
+                await cashflow.poll(self, "hfm", force=cashflow.jumped(self._last_equity, s["equity"]), currency=self.ccy):
             s = await self.account_summary()
         self._last_equity = s["equity"]
         acc = await self.db.account.find_one({"_id": "main"})
@@ -132,11 +134,11 @@ class AccountMixin:
         upd = {}
         if acc["day"] != today():
             upd.update(day=today(), day_start_equity=s["equity"], daily_paused=False)
-            await self.log("INFO", f"Nuevo día de trading · equidad inicial ${s['equity']:,.2f}")
+            await self.log("INFO", f"Nuevo día de trading · equidad inicial {s['equity']:,.2f} {self.ccy}")
             c = await self.checkin(settings, s)
             await self.log("PLAN", c["message"] + (" · ".join([""] + c["warnings"]) if c["warnings"] else ""))
-            await self.tg(f"📊 <b>Resumen diario</b>\nEquidad ${s['equity']:,.2f} ({s['total_return_pct']:+.2f}% total)\n"
-                          f"PnL de ayer {s['daily_pnl']:+.2f} USD ({s['daily_pnl_pct']:+.2f}%)\n"
+            await self.tg(f"📊 <b>Resumen diario</b>\nEquidad {s['equity']:,.2f} {self.ccy} ({s['total_return_pct']:+.2f}% total)\n"
+                          f"PnL de ayer {s['daily_pnl']:+.2f} {self.ccy} ({s['daily_pnl_pct']:+.2f}%)\n"
                           f"{s['total_trades']} ops · acierto {s['win_rate']}% · PF {s['profit_factor'] or '—'} · DD máx {s['max_drawdown']}%\n"
                           f"{s['open_positions']} posiciones abiertas\n\n📋 {c['message']}", "daily")
             if c["ready_to_advance"] or c["warnings"]:

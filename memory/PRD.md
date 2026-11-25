@@ -747,3 +747,11 @@
   - Pepperstone: sustituye al interruptor «toque de EMA21» (quitado de la UI; `ema_touch_exit_enabled` se ignora). Órdenes manuales: solo si el cierre CRUZA la EMA21 (vela previa al lado correcto). Backtest fx con `ema_only`. Telegram propio.
   - HotForex: sin cambios (conserva su «toque» opcional en backend).
 - Tests: `test_iter122_close_beyond_ema21.py` (4), iter101 actualizado, iter80/81 adaptados (Bybit ya no abre el test).
+
+## Iteración 123 · Moneda de la cuenta real en los bots MetaTrader (Pepperstone UK = GBP)
+- `FxEngine.ccy`: moneda de depósito de la cuenta en modo REAL (`cfg.hfm_currency`, leída del terminal en «Probar conexión» y actualizada sola por `account_summary` si cambia); en paper siempre USD.
+- Mensajes de registro y Telegram, análisis IA de operaciones, depósitos/retiros y `/overview` usan `engine.ccy`. `add_shared_routes` acepta la moneda como función.
+- Tamaño de posición en REAL: `risk.account_usd(currency, tickers)` convierte equidad y margen a USD antes de calcular lotes (GBPUSD del feed), para que el riesgo % sea sobre la equidad real en su moneda.
+- Frontend: `lib/api.js` `setMoney`/`moneySymbol` (USD $, GBP £, EUR €…); `fmtUsd`/`fmtSignedUsd` usan el símbolo del panel abierto; `FxDashboard` lo fija con `account.currency`; selector de bots con la moneda de cada bot.
+- Pendiente/conocido: el backtest y el plan de crecimiento siguen simulando en USD aunque se muestren con el símbolo de la cuenta; el PnL «estimado» (cuando el bróker no confirma el cierre) y las sombras se calculan en USD.
+- Tests: `test_iter123_account_currency.py` (3). Verificado en preview con el puente falso en GBP (paneles con £; HotForex y Bybit siguen en $).

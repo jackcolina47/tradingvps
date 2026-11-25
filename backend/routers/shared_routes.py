@@ -55,7 +55,8 @@ class CashFlowRequest(BaseModel):
 from fx.symbols import is_crypto  # noqa: E402
 
 
-def add_shared_routes(router, engine, label: str, currency: str = "USDT", before_unit: str = "ms"):
+def add_shared_routes(router, engine, label: str, currency="USDT", before_unit: str = "ms"):
+    cur = currency if callable(currency) else (lambda: currency)  # FX bots: the real account currency depends on the linked account
     @router.get("/logs/export")
     async def export_logs(hours: int = 24):
         """Every bot log line and every detected signal (funnel stage 0 / 1 / 2) of the last 24, 48 or 72 hours, oldest first."""
@@ -158,7 +159,7 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
             raise HTTPException(400, "El filtro IA está desactivado en Ajustes")
         bot_name = engine.profile.bot_name if hasattr(engine, "profile") else "Bybit"
         try:
-            reviews = await position_review.review_open_positions(engine, settings, currency, bot_name, force=True)
+            reviews = await position_review.review_open_positions(engine, settings, cur(), bot_name, force=True)
         except Exception as e:
             raise HTTPException(424, f"Error IA: {friendly_error(e)}")
         return {"ok": True, "reviews": reviews, "count": len(reviews)}
@@ -172,7 +173,7 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
             sdoc = await engine.db.signals.find_one({"_id": ObjectId(sid)})
             if sdoc:
                 signal = Signal.from_mongo(sdoc).model_dump()
-        return {"trade": trade, "signal": signal, "currency": currency}
+        return {"trade": trade, "signal": signal, "currency": cur()}
 
     @router.put("/trades/{trade_id}/note")
     async def trade_note(trade_id: str, body: TradeNote):
@@ -203,7 +204,7 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
         if t.ai_review and not force:
             return {"review": t.ai_review, "cached": True}
         try:
-            review = await trade_learning.review(engine, t, currency, before_unit)
+            review = await trade_learning.review(engine, t, cur(), before_unit)
         except Exception as e:
             raise HTTPException(424, f"Error IA: {friendly_error(e)}")
         return {"review": review, "cached": False}
@@ -212,14 +213,14 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
     async def cashflows():
         acc = await engine.account_summary()
         return {"net_deposits": acc["net_deposits"], "capital": acc["capital"], "total_pnl": acc["total_pnl"], "mode": acc["mode"],
-                "currency": currency, "items": await cashflow.history(engine)}
+                "currency": cur(), "items": await cashflow.history(engine)}
 
     @router.post("/account/cashflow")
     async def add_cashflow(body: CashFlowRequest):
         if abs(body.amount) < 0.01:
             raise HTTPException(422, "Indica un importe distinto de cero")
         try:
-            flow = await cashflow.manual(engine, body.amount, body.note.strip(), currency)
+            flow = await cashflow.manual(engine, body.amount, body.note.strip(), cur())
         except ValueError as e:
             raise HTTPException(409 if engine.live else 422, str(e))
         flow = {"id": str(flow.pop("_id")), **flow}

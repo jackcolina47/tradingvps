@@ -337,7 +337,7 @@ def api():
 class TestApi:
     def test_meta(self, api):
         d = api.get(f"{BASE_URL}/api/meta").json()
-        assert "ema_test" in d["strategies"] and "ema_test" not in d["strategy_keys"]
+        assert "ema_test" not in d["strategies"] and "ema_test" not in d["strategy_keys"]  # Iter122: removed from the Bybit bot
 
     def test_settings_defaults_and_update(self, api):
         d = api.get(f"{BASE_URL}/api/settings").json()

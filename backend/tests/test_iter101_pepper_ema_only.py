@@ -190,7 +190,7 @@ def test_ema21_closes_have_their_own_telegram_message():
     sent = []
 
     async def run():
-        e = NS(bk="Pepperstone")
+        e = NS(bk="Pepperstone", ccy="GBP")
         e.log = lambda *a, **k: asyncio.sleep(0)
 
         async def tg(msg, kind):
@@ -202,8 +202,8 @@ def test_ema21_closes_have_their_own_telegram_message():
         await M._announce_close(e, p, NS(pnl=2.5, pnl_pct=20.0, exit_price=1.12), "CRUCE")
         await M._announce_close(e, p, NS(pnl=-3.0, pnl_pct=-5.0, exit_price=1.09), "CIERRE_EMA21")
     asyncio.run(run())
-    assert "toque de la EMA 21" in sent[0] and "Perdió <b>1.25 USD</b>" in sent[0] and "toque" not in sent[1]
-    assert "cierre de vela al otro lado de la EMA 21" in sent[2] and "cerró por debajo de la EMA 21" in sent[2] and "Perdió <b>3.00 USD</b>" in sent[2]
+    assert "toque de la EMA 21" in sent[0] and "Perdió <b>1.25 GBP</b>" in sent[0] and "toque" not in sent[1]
+    assert "cierre de vela al otro lado de la EMA 21" in sent[2] and "cerró por debajo de la EMA 21" in sent[2] and "Perdió <b>3.00 GBP</b>" in sent[2]
 
 
 def test_ema_exits_three_independent_rules():
