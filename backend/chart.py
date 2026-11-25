@@ -15,8 +15,11 @@ def clamp(limit: int) -> int:
     return min(max(int(limit), 100), MAX_LIMIT)
 
 
-def _snap(iso: str, step: int) -> int:
-    ts = int(datetime.fromisoformat(iso).timestamp())
+CANDLE_CLOSE_REASONS = ("CRUCE", "CIERRE_EMA21", "TOQUE_EMA")  # exits decided by a candle that just closed: the order goes out seconds into the NEXT candle
+
+
+def _snap(iso: str, step: int, back: int = 0) -> int:
+    ts = int(datetime.fromisoformat(iso).timestamp()) - back
     return ts - ts % step
 
 
@@ -59,8 +62,8 @@ async def build(db, symbol: str, tf: str, rows: list, step: int, limit: int, bef
               for t, v, o, c in zip(times, df["volume"], df["open"], df["close"])]
     markers = []
 
-    def mark(iso, position, color, shape, text):
-        t = _snap(iso, step)
+    def mark(iso, position, color, shape, text, back=0):
+        t = _snap(iso, step, back)
         if first <= t < end:
             markers.append({"time": t, "position": position, "color": color, "shape": shape, "text": text})
 
@@ -68,7 +71,8 @@ async def build(db, symbol: str, tf: str, rows: list, step: int, limit: int, bef
         t = Trade.from_mongo(d)
         long = t.side == "long"
         mark(t.opened_at, "belowBar" if long else "aboveBar", "#10B981" if long else "#EF4444", "arrowUp" if long else "arrowDown", "LONG" if long else "SHORT")
-        mark(t.closed_at, "aboveBar" if long else "belowBar", "#F7A600", "circle", f"{t.reason} {t.pnl:+.1f}")
+        mark(t.closed_at, "aboveBar" if long else "belowBar", "#F7A600", "circle", f"{t.reason} {t.pnl:+.1f}",
+             back=120 if t.reason in CANDLE_CLOSE_REASONS else 0)  # drawn on the candle whose close triggered the exit, not on the one that had just opened
     lines = []
     async for d in db.positions.find({"symbol": symbol}):
         p = Position.from_mongo(d)
