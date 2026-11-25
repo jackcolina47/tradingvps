@@ -99,7 +99,7 @@ class LabEngine(TradingEngine):
             await self.db.equity.insert_one({"ts": now_iso(), "equity": s["equity"], "balance": s["balance"], "net_deposits": 0.0})
 
     candle_sync, candle_only, candle_delay = True, True, 7  # one scan per closed candle of the lab timeframe, 7 s after the close (entries and exits are candle-close decisions)
-    ai_gate, close_beyond_ema21 = False, True
+    ai_gate, close_beyond_exit_ema = False, True
 
     async def scan_once(self, settings: Settings, normal: bool = True):
         self.scanning = True
@@ -239,7 +239,7 @@ def build_router(lab: LabEngine, require_auth) -> APIRouter:
         s = await lab.get_settings()
         params = ema_test_params(s)
         df = build_df(await lab.market.fetch_klines(req.symbol, req.timeframe, 1000, cache_sec=60))
-        result = run_backtest(df, EMA_TEST, req.risk_per_trade, req.leverage, trade_rules(s), initial=acc["initial_balance"], symbol=req.symbol, params=params or None, close_ema21=True)
+        result = run_backtest(df, EMA_TEST, req.risk_per_trade, req.leverage, trade_rules(s), initial=acc["initial_balance"], symbol=req.symbol, params=params or None, close_exit_ema=True)
         result.pop("r_multiples", None)
         return {"symbol": req.symbol, "strategy": EMA_TEST, "timeframe": req.timeframe, "params": params or None, **result}
 

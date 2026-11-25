@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { http, errMsg, fmtPrice, fmtDateTime } from "@/lib/api";
 import { shift } from "./chart/useChart";
 
-const EMAS = [["ema9", "EMA 9", "#F7A600"], ["ema21", "EMA 21", "#38BDF8"]];
+const EMAS = [["ema9", "EMA 9", "#F7A600"], ["ema21", "EMA 21", "#38BDF8"], ["ema27", "EMA 27", "#F472B6"]];
 
 function draw(el, d) {
   const chart = createChart(el, {

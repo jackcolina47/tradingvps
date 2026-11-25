@@ -108,11 +108,11 @@ def test_max_positions_now_applies():
 
 
 def _row_df(low, high, ema21, ema9=None, ts=10 * H, close=None, prev_close=None):  # default: EMA9 above EMA21 (no opposite cross for a long), close at the high
-    row = {"ts": ts, "low": low, "high": high, "close": high if close is None else close, "ema21": ema21, "ema9": ema21 + 0.01 if ema9 is None else ema9}
+    row = {"ts": ts, "low": low, "high": high, "close": high if close is None else close, "ema21": ema21, "ema27": ema21, "ema9": ema21 + 0.01 if ema9 is None else ema9}
     return pd.DataFrame([{**row, "close": row["close"] if prev_close is None else prev_close}, row])
 
 
-def test_close_beyond_ema21_exit_always_on():
+def test_close_beyond_exit_ema_exit_always_on():
     """Pepperstone: a wick through the EMA21 keeps the trade open; a candle CLOSING on the wrong side closes it. No toggle."""
     async def run():
         out = {}
@@ -137,7 +137,7 @@ def test_close_beyond_ema21_exit_always_on():
     asyncio.run(run())
 
 
-def test_hotforex_test_closes_on_candle_close_beyond_ema21():
+def test_hotforex_test_closes_on_candle_close_beyond_exit_ema():
     """Iter124: same permanent rule in the HotForex «Test cruce EMA»; the old «toque» toggle no longer matters."""
     async def run():
         out = {}
@@ -169,7 +169,7 @@ def test_sl_multiplier():
     assert ema_test_params(FxSettings()) == {}
 
 
-def test_backtest_close_beyond_ema21_and_crypto_costs():
+def test_backtest_close_beyond_exit_ema_and_crypto_costs():
     rows, p = [], 0.5
     for i in range(400):
         p *= 1 + (0.004 if (i // 40) % 2 == 0 else -0.004)
@@ -204,10 +204,10 @@ def test_ema21_closes_have_their_own_telegram_message():
         from fx.engine_positions import PositionsMixin as M
         await M._announce_close(e, p, NS(pnl=-1.25, pnl_pct=-10.0, exit_price=1.09), "TOQUE_EMA")
         await M._announce_close(e, p, NS(pnl=2.5, pnl_pct=20.0, exit_price=1.12), "CRUCE")
-        await M._announce_close(e, p, NS(pnl=-3.0, pnl_pct=-5.0, exit_price=1.09), "CIERRE_EMA21")
+        await M._announce_close(e, p, NS(pnl=-3.0, pnl_pct=-5.0, exit_price=1.09), "CIERRE_EMA27")
     asyncio.run(run())
     assert "toque de la EMA 21" in sent[0] and "Perdió <b>1.25 GBP</b>" in sent[0] and "toque" not in sent[1]
-    assert "cierre de vela al otro lado de la EMA 21" in sent[2] and "cerró por debajo de la EMA 21" in sent[2] and "Perdió <b>3.00 GBP</b>" in sent[2]
+    assert "cierre de vela al otro lado de la EMA 27" in sent[2] and "cerró por debajo de la EMA 27" in sent[2] and "Perdió <b>3.00 GBP</b>" in sent[2]
 
 
 def test_ema_exits_three_independent_rules():

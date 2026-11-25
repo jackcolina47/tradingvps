@@ -13,7 +13,7 @@ import { useHistory } from "./chart/useHistory";
 const TFS = ["1m", "5m", "15m", "1h", "4h", "1d"];
 const SOURCE = { bybit: "Velas Bybit", bitget: "Velas Bitget", hfm: "Velas del bróker · MetaTrader", yahoo: "Velas Yahoo Finance" };
 const IND = [...Object.entries({ ...OVERLAYS, ...SUBS }).map(([k, v]) => [k, v.label]), ["vol", "Volumen"], ["zones", "Zonas oferta/demanda"]];
-const DEFAULT_IND = { ema9: true, ema21: true, ema200: true, rsi: true, adx: true, gap: true, vol: true, zones: true };
+const DEFAULT_IND = { ema9: true, ema21: true, ema27: true, ema200: true, rsi: true, adx: true, gap: true, vol: true, zones: true };
 const loadStyle = () => {
   try {
     const s = JSON.parse(localStorage.getItem("chart.style") || "{}");

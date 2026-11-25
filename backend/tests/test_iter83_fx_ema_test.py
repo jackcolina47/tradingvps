@@ -226,7 +226,7 @@ class TestBacktest:
         r = run_backtest(rows, "ema_test", 1.0, 100, trade_rules(FxSettings()), 500.0, "EURUSD", "relaxed", [], {}, 4.0, True, ("tokyo",), None)
         assert r["total_trades"] > 5 and r["skipped_session"] == 0
         reasons = {t["reason"] for t in r["trades"]}
-        assert reasons <= {"CRUCE", "CIERRE_EMA21", "SL", "FIN_SEMANA", "FIN"} and "CIERRE_EMA21" in reasons and not any(t["partial"] for t in r["trades"])  # Iter124: close beyond the EMA21
+        assert reasons <= {"CRUCE", "CIERRE_EMA27", "SL", "FIN_SEMANA", "FIN"} and "CIERRE_EMA27" in reasons and not any(t["partial"] for t in r["trades"])  # Iter124: close beyond the EMA21
 
     def test_all_excludes_test(self):
         rows = _flat(600)

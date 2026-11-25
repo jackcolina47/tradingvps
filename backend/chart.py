@@ -7,7 +7,7 @@ from models import Trade, Position
 WARMUP = 220
 MAX_LIMIT = 700
 DEFAULT_LIMIT = 300
-LINE_KEYS = ("ema9", "ema10", "ema20", "ema21", "ema50", "ema200", "bb_up", "bb_mid", "bb_low", "vwap", "rsi", "macd", "macd_signal", "adx", "gap", "atr")
+LINE_KEYS = ("ema9", "ema10", "ema20", "ema21", "ema27", "ema50", "ema200", "bb_up", "bb_mid", "bb_low", "vwap", "rsi", "macd", "macd_signal", "adx", "gap", "atr")
 EMPTY_KEYS = ("candles", "volume", "macd_hist", *LINE_KEYS, "markers", "lines")
 
 
@@ -15,7 +15,7 @@ def clamp(limit: int) -> int:
     return min(max(int(limit), 100), MAX_LIMIT)
 
 
-CANDLE_CLOSE_REASONS = ("CRUCE", "CIERRE_EMA21", "TOQUE_EMA")  # exits decided by a candle that just closed: the order goes out seconds into the NEXT candle
+CANDLE_CLOSE_REASONS = ("CRUCE", "CIERRE_EMA27", "CIERRE_EMA21", "TOQUE_EMA")  # exits decided by a candle that just closed: the order goes out seconds into the NEXT candle
 
 
 def _snap(iso: str, step: int, back: int = 0) -> int:

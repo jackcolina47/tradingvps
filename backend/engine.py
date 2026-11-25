@@ -7,7 +7,7 @@ from bson import ObjectId
 from models import Settings, Position, Trade, Signal, LogEntry, now_iso
 from market import MarketData, HTF, TF_SECONDS, candle_scan_loop
 from indicators import build_df, trend_label, htf_trend
-from strategies import evaluate, exit_signal, closed_beyond_ema21, atr_params, EXIT_ON_CROSS, EXIT_REASON, CLOSE_EMA_REASON, EMA_TEST, EMA_TEST_TAG, STRATEGY_INFO as FAST_INFO
+from strategies import evaluate, exit_signal, closed_beyond_exit_ema, atr_params, EXIT_ON_CROSS, EXIT_REASON, CLOSE_EMA_REASON, EMA_TEST, EMA_TEST_TAG, STRATEGY_INFO as FAST_INFO
 from strategies_slow import SLOW_INFO, SLOW_KEYS, evaluate_slow
 from risk import FEE_RATE, MAKER_FEE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules, move_in_r, tp_in_r, partial_qty, be_allowed, ema_partial_due, EMA_PARTIAL_PCT
 import price_action
@@ -728,17 +728,17 @@ class TradingEngine:
         finally:
             self.scanning = False
 
-    close_beyond_ema21 = False  # Bybit Labs: an EMA-cross trade also leaves when a candle CLOSES on the wrong side of the EMA21
+    close_beyond_exit_ema = False  # Bybit Labs: an EMA-cross trade also leaves when a candle CLOSES on the wrong side of the EMA27
 
     async def _exit_on_cross(self, symbol: str, df, i: int, tf: str = None):
-        """Strategy exits decided at candle close (ema_cross / ema_test: the EMAs crossed back against the position; labs: the candle closed beyond the EMA21)."""
+        """Strategy exits decided at candle close (ema_cross / ema_test: the EMAs crossed back against the position; labs: the candle closed beyond the EMA27)."""
         row = df.iloc[i]
         closed_ms = int(row["ts"]) + TF_SECONDS[tf] * 1000 if tf else 0
         async for d in self.db.positions.find({"symbol": symbol, "strategy": {"$in": list(EXIT_ON_CROSS)}}, {"_id": 1, "side": 1, "strategy": 1, "opened_at": 1}):
-            beyond = (self.close_beyond_ema21 and tf and d["strategy"] == EMA_TEST and closed_beyond_ema21(d["side"], row)
+            beyond = (self.close_beyond_exit_ema and tf and d["strategy"] == EMA_TEST and closed_beyond_exit_ema(d["side"], row)
                       and closed_ms > datetime.fromisoformat(d["opened_at"]).timestamp() * 1000)  # only candles that closed after the entry
             if beyond and not exit_signal(d["strategy"], d["side"], row):
-                await self.log("INFO", f"{symbol}: la vela cerró {'por debajo' if d['side'] == 'long' else 'por encima'} de la EMA21 ({float(row['ema21']):.6g}) con la posición {d['side'].upper()} abierta · cierre por la regla «cierre de vela al otro lado de la EMA21»")
+                await self.log("INFO", f"{symbol}: la vela cerró {'por debajo' if d['side'] == 'long' else 'por encima'} de la EMA27 ({float(row['ema27']):.6g}) con la posición {d['side'].upper()} abierta · cierre por la regla «cierre de vela al otro lado de la EMA27»")
                 await self.close_position(str(d["_id"]), None, CLOSE_EMA_REASON)
             elif exit_signal(d["strategy"], d["side"], row):
                 await self.log("INFO", f"{symbol}: las EMAs volvieron a cruzarse en contra de la posición {d['side'].upper()} · cierre por regla de la estrategia"

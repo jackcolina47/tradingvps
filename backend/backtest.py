@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 import numpy as np
-from strategies import evaluate, exit_signal, closed_beyond_ema21, EXIT_REASON, CLOSE_EMA_REASON, CROSS_ONLY
+from strategies import evaluate, exit_signal, closed_beyond_exit_ema, EXIT_REASON, CLOSE_EMA_REASON, CROSS_ONLY
 from risk import FEE_RATE, position_size, pnl, check_exit, update_trailing, trade_rules, partial_qty, tp_in_r, EMA_PARTIAL_PCT
 
 
@@ -34,12 +34,12 @@ def _levels(sig, sl_atr, tp_atr):
 
 
 def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initial: float,
-             symbol: str = None, sl_atr: float = None, tp_atr: float = None, start: int = 210, end: int = None, close_ema21: bool = False) -> dict:
+             symbol: str = None, sl_atr: float = None, tp_atr: float = None, start: int = 210, end: int = None, close_exit_ema: bool = False) -> dict:
     """`trailing` is either a bool (classic rules) or a rules dict from risk.trade_rules (trailing + partial take-profit)."""
     rules = trade_rules(trailing)
     use_trailing, use_partial = rules["trailing_enabled"], rules["partial_tp_enabled"]
     highs, lows, closes, ts = df["high"].values, df["low"].values, df["close"].values, df["ts"].values
-    e10, e20, e9, e21 = df["ema10"].values, df["ema20"].values, df["ema9"].values, df["ema21"].values
+    e10, e20, e9, e21, e27 = df["ema10"].values, df["ema20"].values, df["ema9"].values, df["ema21"].values, df["ema27"].values
     balance, peak, max_dd = initial, initial, 0.0
     trades, curve, pos, rejected = [], [], None, 0
     n = len(df)
@@ -72,7 +72,7 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
                 close(price, reason, i)
             elif exit_signal(pos["strategy"], pos["side"], {"ema9": e9[i], "ema21": e21[i], "ema10": e10[i], "ema20": e20[i]}):
                 close(closes[i], EXIT_REASON, i)
-            elif cross_only and close_ema21 and closed_beyond_ema21(pos["side"], {"close": closes[i], "ema21": e21[i]}):
+            elif cross_only and close_exit_ema and closed_beyond_exit_ema(pos["side"], {"close": closes[i], "ema27": e27[i]}):
                 close(closes[i], CLOSE_EMA_REASON, i)
             elif cross_only:
                 if rules["ema_test_partial_enabled"] and not pos["partial"] and fav >= rules["ema_test_partial_atr"] * pos["atr"]:
@@ -163,5 +163,5 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
 
 
 def run_backtest(df, strategy: str, risk_pct: float, leverage: int, trailing=True,
-                 initial: float = 10000.0, symbol: str = None, params: dict = None, mode: str = "strict", disabled=(), close_ema21: bool = False) -> dict:
-    return simulate(df, scan_signals(df, strategy, params, mode, disabled), risk_pct, leverage, trailing, initial, symbol, close_ema21=close_ema21)
+                 initial: float = 10000.0, symbol: str = None, params: dict = None, mode: str = "strict", disabled=(), close_exit_ema: bool = False) -> dict:
+    return simulate(df, scan_signals(df, strategy, params, mode, disabled), risk_pct, leverage, trailing, initial, symbol, close_exit_ema=close_exit_ema)

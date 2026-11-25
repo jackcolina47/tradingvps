@@ -32,7 +32,7 @@ export default function EmaTestSettings({ form, set, meta, main = false, lab = f
           <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-fuchsia-300" />
           <span>
             <span className="block font-display text-[13px] font-semibold uppercase tracking-wide text-fuchsia-200">Cruce EMA 9 y 21 Personalizado <span className="ml-1 rounded-sm bg-fuchsia-500/30 px-1 text-[9px] text-fuchsia-100">ESTRATEGIA ÚNICA</span></span>
-            <span className="block text-[11px] text-slate-400">EMA9 cruza EMA21 al cierre de la vela ({form.timeframe}) → largo al alza, corto a la baja, en todos los «Pares a operar». Sin TP: la operación se cierra cuando una vela cierra al otro lado de la EMA 21 o en el siguiente cruce contrario (o antes por el SL de seguridad). Sin IA en entradas ni en la gestión.</span>
+            <span className="block text-[11px] text-slate-400">EMA9 cruza EMA21 al cierre de la vela ({form.timeframe}) → largo al alza, corto a la baja, en todos los «Pares a operar». Sin TP: la operación se cierra cuando una vela cierra al otro lado de la EMA 27 o en el siguiente cruce contrario (o antes por el SL de seguridad). Sin IA en entradas ni en la gestión.</span>
           </span>
         </div>
       ) : <>
@@ -77,16 +77,16 @@ export default function EmaTestSettings({ form, set, meta, main = false, lab = f
         <div className="mt-3 rounded-sm border border-[#1E293B] bg-[#07090E]/60 p-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-[180px] flex-1">
-              <p className="text-sm text-slate-200">Cierre de vela al otro lado de la EMA 21 <span className="ml-1 rounded-sm bg-fuchsia-500/30 px-1 text-[9px] text-fuchsia-100">SIEMPRE ACTIVO</span></p>
-              <p data-testid="ema-close-beyond-hint" className="text-[11px] text-slate-500">Con la operación abierta, si una vela cierra por debajo de la EMA 21 (en un largo) o por encima (en un corto), la posición se cierra sin esperar al cruce contrario. Una mecha que cruza la EMA 21 y vuelve no cierra la operación: solo cuenta el precio de cierre. Solo cuentan las velas que cierran después de la entrada.</p>
+              <p className="text-sm text-slate-200">Cierre de vela al otro lado de la EMA 27 <span className="ml-1 rounded-sm bg-fuchsia-500/30 px-1 text-[9px] text-fuchsia-100">SIEMPRE ACTIVO</span></p>
+              <p data-testid="ema-close-beyond-hint" className="text-[11px] text-slate-500">Con la operación abierta, si una vela cierra por debajo de la EMA 27 (en un largo) o por encima (en un corto), la posición se cierra sin esperar al cruce contrario. Una mecha que cruza la EMA 27 y vuelve no cierra la operación: solo cuenta el precio de cierre. Solo cuentan las velas que cierran después de la entrada.</p>
             </div>
           </div>
         </div>
       )}
       {!main && (
         <div className="mt-3 rounded-sm border border-[#1E293B] bg-[#07090E]/60 p-2.5">
-          <p className="text-sm text-slate-200">Cierre de vela al otro lado de la EMA 21 <span className="ml-1 rounded-sm bg-fuchsia-500/30 px-1 text-[9px] text-fuchsia-100">SIEMPRE ACTIVO</span></p>
-          <p data-testid="ema-close-beyond-hint" className="text-[11px] text-slate-500">Con la operación abierta, si una vela cierra por debajo de la EMA 21 (en un largo) o por encima (en un corto), la posición se cierra sin esperar al cruce contrario. Una mecha que cruza la EMA 21 y vuelve no cierra la operación: solo cuenta el precio de cierre.</p>
+          <p className="text-sm text-slate-200">Cierre de vela al otro lado de la EMA 27 <span className="ml-1 rounded-sm bg-fuchsia-500/30 px-1 text-[9px] text-fuchsia-100">SIEMPRE ACTIVO</span></p>
+          <p data-testid="ema-close-beyond-hint" className="text-[11px] text-slate-500">Con la operación abierta, si una vela cierra por debajo de la EMA 27 (en un largo) o por encima (en un corto), la posición se cierra sin esperar al cruce contrario. Una mecha que cruza la EMA 27 y vuelve no cierra la operación: solo cuenta el precio de cierre.</p>
         </div>
       )}
       {!main && <div className="mt-3 rounded-sm border border-[#1E293B] bg-[#07090E]/60 p-2.5">

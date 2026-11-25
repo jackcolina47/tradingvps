@@ -25,6 +25,7 @@ export const OVERLAYS = {
   ema10: { label: "EMA 10", color: "#FB923C", width: 1, keys: ["ema10"] },
   ema20: { label: "EMA 20", color: "#22D3EE", width: 1, keys: ["ema20"] },
   ema21: { label: "EMA 21", color: "#38BDF8", width: 1, keys: ["ema21"] },
+  ema27: { label: "EMA 27", color: "#F472B6", width: 1, keys: ["ema27"] },
   ema50: { label: "EMA 50", color: "#C084FC", width: 1, keys: ["ema50"] },
   ema200: { label: "EMA 200", color: "#CBD5E1", width: 2, keys: ["ema200"] },
   bb: { label: "Bollinger 20,2", color: "#94A3B8", width: 1, keys: ["bb_up", "bb_mid", "bb_low"] },
