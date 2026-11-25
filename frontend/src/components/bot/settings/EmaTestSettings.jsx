@@ -19,7 +19,7 @@ const EXITS = [
     [["ema_be_atr", "Activar a + (×ATR)", 0.1, 1]]],
 ];
 
-export default function EmaTestSettings({ form, set, meta, main = false }) {
+export default function EmaTestSettings({ form, set, meta, main = false, lab = false }) {
   if (!("ema_test_enabled" in form)) return null;
   const on = main || !!form.ema_test_enabled;
   const fx = !!meta?.sessions;
@@ -32,7 +32,7 @@ export default function EmaTestSettings({ form, set, meta, main = false }) {
           <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-fuchsia-300" />
           <span>
             <span className="block font-display text-[13px] font-semibold uppercase tracking-wide text-fuchsia-200">Cruce EMA 9 y 21 Personalizado <span className="ml-1 rounded-sm bg-fuchsia-500/30 px-1 text-[9px] text-fuchsia-100">ESTRATEGIA ÚNICA</span></span>
-            <span className="block text-[11px] text-slate-400">EMA9 cruza EMA21 al cierre de la vela ({form.timeframe}) → largo al alza, corto a la baja, en todos los «Pares a operar». Sin TP: la operación se cierra en el siguiente cruce contrario (o antes por el SL de seguridad). Sin IA en entradas ni en la gestión.</span>
+            <span className="block text-[11px] text-slate-400">EMA9 cruza EMA21 al cierre de la vela ({form.timeframe}) → largo al alza, corto a la baja, en todos los «Pares a operar». Sin TP: la operación se cierra cuando una vela cierra al otro lado de la EMA 21 o en el siguiente cruce contrario (o antes por el SL de seguridad). Sin IA en entradas ni en la gestión.</span>
           </span>
         </div>
       ) : <>
@@ -77,11 +77,16 @@ export default function EmaTestSettings({ form, set, meta, main = false }) {
         <div className="mt-3 rounded-sm border border-[#1E293B] bg-[#07090E]/60 p-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-[180px] flex-1">
-              <p className="text-sm text-slate-200">Cierre por toque de la EMA 21</p>
-              <p className="text-[11px] text-slate-500">Con la operación abierta, si una vela cierra habiendo tocado la EMA 21 (la EMA queda entre el mínimo y el máximo de la vela), la posición se cierra sin esperar al cruce contrario. Solo cuentan las velas que cierran después de la entrada.</p>
+              <p className="text-sm text-slate-200">Cierre de vela al otro lado de la EMA 21 <span className="ml-1 rounded-sm bg-fuchsia-500/30 px-1 text-[9px] text-fuchsia-100">SIEMPRE ACTIVO</span></p>
+              <p data-testid="ema-close-beyond-hint" className="text-[11px] text-slate-500">Con la operación abierta, si una vela cierra por debajo de la EMA 21 (en un largo) o por encima (en un corto), la posición se cierra sin esperar al cruce contrario. Una mecha que cruza la EMA 21 y vuelve no cierra la operación: solo cuenta el precio de cierre. Solo cuentan las velas que cierran después de la entrada.</p>
             </div>
-            <Switch data-testid="settings-ema-touch-exit-switch" checked={!!form.ema_touch_exit_enabled} onCheckedChange={(v) => set("ema_touch_exit_enabled", v)} className="data-[state=checked]:bg-fuchsia-500" />
           </div>
+        </div>
+      )}
+      {lab && (
+        <div className="mt-3 rounded-sm border border-[#1E293B] bg-[#07090E]/60 p-2.5">
+          <p className="text-sm text-slate-200">Cierre de vela al otro lado de la EMA 21 <span className="ml-1 rounded-sm bg-fuchsia-500/30 px-1 text-[9px] text-fuchsia-100">SIEMPRE ACTIVO</span></p>
+          <p data-testid="ema-close-beyond-hint" className="text-[11px] text-slate-500">Con la operación abierta, si una vela cierra por debajo de la EMA 21 (en un largo) o por encima (en un corto), la posición se cierra sin esperar al cruce contrario. Una mecha que cruza la EMA 21 y vuelve no cierra la operación: solo cuenta el precio de cierre.</p>
         </div>
       )}
       {!main && <div className="mt-3 rounded-sm border border-[#1E293B] bg-[#07090E]/60 p-2.5">

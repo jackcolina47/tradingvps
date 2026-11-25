@@ -185,28 +185,21 @@ def _pos_doc(symbol="UNIUSDT", side="long", strategy="ema_test", exit_mode="cros
 
 
 class TestEngineIntegration:
-    def test_a_open_long_on_up_cross_no_ai(self, monkeypatch):
+    def test_a_bybit_main_no_longer_opens_test_trades(self, monkeypatch):
+        """Iter122: the «Test cruce EMA» section was removed from the Bybit bot; a stored toggle left on opens nothing."""
         async def body(e, db):
             await e.scan_once(_settings())
-            assert "UNIUSDT" in e.market.calls and "BTCUSDT" in e.market.calls
-            sig = await db.signals.find_one({"symbol": "UNIUSDT"})
-            assert sig and sig["strategy"] == "ema_test" and sig["ai_decision"] == "SIN_IA" and sig["key"].startswith("UNIUSDT:ema_test:long:")
-            pos = await db.positions.find_one({"symbol": "UNIUSDT"})
-            assert pos and pos["exit_mode"] == "cross" and pos["side"] == "long" and pos["strategy"] == "ema_test"
-            assert all(s != "UNIUSDT" for s, _ in e.normal_signals)  # test pair not in settings.symbols: no normal strategies
-            # dedupe: second scan, no new signal
-            await e.scan_once(_settings())
-            assert await db.signals.count_documents({"symbol": "UNIUSDT"}) == 1
+            assert "UNIUSDT" not in e.market.calls and "BTCUSDT" in e.market.calls
+            assert await db.signals.count_documents({"strategy": "ema_test"}) == 0 and await db.positions.count_documents({}) == 0
         run(body, monkeypatch, {"UNIUSDT": _rows("up")})
 
-    def test_b_stop_and_reverse(self, monkeypatch):
+    def test_b_leftover_position_closes_without_reversal(self, monkeypatch):
         async def body(e, db):
             await db.positions.insert_one(_pos_doc(side="long"))
             await e.scan_once(_settings())
             tr = await db.trades.find_one({"symbol": "UNIUSDT"})
             assert tr and tr["reason"] == "CRUCE" and tr["exit_mode"] == "cross" and tr["tags"] == ["Cruce EMAs Especial"]
-            pos = await db.positions.find({"symbol": "UNIUSDT"}).to_list(5)
-            assert len(pos) == 1 and pos[0]["side"] == "short" and pos[0]["exit_mode"] == "cross"
+            assert await db.positions.count_documents({"symbol": "UNIUSDT"}) == 0 and await db.signals.count_documents({"strategy": "ema_test"}) == 0
         run(body, monkeypatch, {"UNIUSDT": _rows("down")})
 
     def test_c1_toggle_off_pair_in_symbols_still_closes(self, monkeypatch):
@@ -226,14 +219,6 @@ class TestEngineIntegration:
             return ("UNIUSDT" in e.market.calls, await db.positions.count_documents({"symbol": "UNIUSDT"}), await db.signals.count_documents({"strategy": "ema_test"}))
         fetched, still_open, new_signals = run(body, monkeypatch, {"UNIUSDT": _rows("down")})
         assert fetched is True and still_open == 0 and new_signals == 0
-
-    def test_d_daily_paused_blocks(self, monkeypatch):
-        async def body(e, db):
-            await e.scan_once(_settings())
-            sig = await db.signals.find_one({"symbol": "UNIUSDT"})
-            assert sig["ai_decision"] == "BLOQUEADA" and "pérdida diaria" in sig["note"]
-            assert await db.positions.count_documents({}) == 0
-        run(body, monkeypatch, {"UNIUSDT": _rows("up")}, daily_paused=True)
 
     def test_e_slot_ignores_cross(self, monkeypatch):
         async def body(e, db):

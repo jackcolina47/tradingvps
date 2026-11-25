@@ -5,9 +5,9 @@ import logging
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 from models import Settings, Position, Trade, Signal, LogEntry, now_iso
-from market import MarketData, HTF, candle_scan_loop
+from market import MarketData, HTF, TF_SECONDS, candle_scan_loop
 from indicators import build_df, trend_label, htf_trend
-from strategies import evaluate, exit_signal, ema_test, ema_test_params, atr_params, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST, EMA_TEST_TAG, STRATEGY_INFO as FAST_INFO
+from strategies import evaluate, exit_signal, closed_beyond_ema21, atr_params, EXIT_ON_CROSS, EXIT_REASON, CLOSE_EMA_REASON, EMA_TEST, EMA_TEST_TAG, STRATEGY_INFO as FAST_INFO
 from strategies_slow import SLOW_INFO, SLOW_KEYS, evaluate_slow
 from risk import FEE_RATE, MAKER_FEE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules, move_in_r, tp_in_r, partial_qty, be_allowed, ema_partial_due, EMA_PARTIAL_PCT
 import price_action
@@ -687,15 +687,14 @@ class TradingEngine:
         await candle_scan_loop(self)
 
     async def scan_once(self, settings: Settings, normal: bool = True):
-        """`normal` = candle-close scan (strategies + rules/AI). False = in-between tick: only the «Test cruce EMA» acts."""
+        """`normal` = candle-close scan (strategies + rules/AI). False = in-between tick: only the exits of positions left from the removed «Test cruce EMA»."""
         self.scanning = True
         found = 0
         htf_tf = HTF[settings.timeframe]
-        test_syms = set(settings.ema_test_symbols) if settings.ema_test_enabled else set()
-        # pairs with an open test position keep being scanned (even with the toggle off) so the opposite cross can still close them
+        # the «Test cruce EMA» no longer opens trades in this bot; pairs with a position left from it keep being scanned so the opposite cross can still close them
         open_test = {d["symbol"] for d in await self.db.positions.find({"exit_mode": "cross"}, {"symbol": 1}).to_list(100)}
         try:
-            for symbol in list(dict.fromkeys([*settings.symbols, *test_syms, *open_test])):
+            for symbol in list(dict.fromkeys([*settings.symbols, *open_test])):
                 try:
                     params = settings.symbol_params.get(symbol) or {}
                     df = build_df(await self.market.fetch_klines(symbol, settings.timeframe, 300, cache_sec=0 if normal else 8), int(params.get("atr_period", 14)))
@@ -706,13 +705,8 @@ class TradingEngine:
                         htf = htf_trend(build_df(await self.market.fetch_klines(symbol, htf_tf, 200, cache_sec=120)))
                     if self.running:
                         await self._exit_on_cross(symbol, df, i)
-                    if symbol in test_syms:
-                        tsig = ema_test(df, i, params=ema_test_params(settings))
-                        if tsig and self.running:
-                            found += 1
-                            await self._handle_test_signal(symbol, tsig, settings, df)
                     if symbol not in settings.symbols:
-                        continue  # test-only pair: no regular strategies
+                        continue  # only scanned for the exit of a leftover test position
                     sig = evaluate(df, i, settings.strategy, htf, {**params, **atr_params(settings)}, settings.signal_mode, settings.disabled_strategies)
                     self.analysis[symbol] = {
                         "trend": trend_label(row), "rsi": round(float(row["rsi"]), 1),
@@ -734,11 +728,19 @@ class TradingEngine:
         finally:
             self.scanning = False
 
-    async def _exit_on_cross(self, symbol: str, df, i: int):
-        """Strategy exits decided at candle close (ema_cross / ema_test: the EMAs crossed back against the position)."""
+    close_beyond_ema21 = False  # Bybit Labs: an EMA-cross trade also leaves when a candle CLOSES on the wrong side of the EMA21
+
+    async def _exit_on_cross(self, symbol: str, df, i: int, tf: str = None):
+        """Strategy exits decided at candle close (ema_cross / ema_test: the EMAs crossed back against the position; labs: the candle closed beyond the EMA21)."""
         row = df.iloc[i]
-        async for d in self.db.positions.find({"symbol": symbol, "strategy": {"$in": list(EXIT_ON_CROSS)}}, {"_id": 1, "side": 1, "strategy": 1}):
-            if exit_signal(d["strategy"], d["side"], row):
+        closed_ms = int(row["ts"]) + TF_SECONDS[tf] * 1000 if tf else 0
+        async for d in self.db.positions.find({"symbol": symbol, "strategy": {"$in": list(EXIT_ON_CROSS)}}, {"_id": 1, "side": 1, "strategy": 1, "opened_at": 1}):
+            beyond = (self.close_beyond_ema21 and tf and d["strategy"] == EMA_TEST and closed_beyond_ema21(d["side"], row)
+                      and closed_ms > datetime.fromisoformat(d["opened_at"]).timestamp() * 1000)  # only candles that closed after the entry
+            if beyond and not exit_signal(d["strategy"], d["side"], row):
+                await self.log("INFO", f"{symbol}: la vela cerró {'por debajo' if d['side'] == 'long' else 'por encima'} de la EMA21 ({float(row['ema21']):.6g}) con la posición {d['side'].upper()} abierta · cierre por la regla «cierre de vela al otro lado de la EMA21»")
+                await self.close_position(str(d["_id"]), None, CLOSE_EMA_REASON)
+            elif exit_signal(d["strategy"], d["side"], row):
                 await self.log("INFO", f"{symbol}: las EMAs volvieron a cruzarse en contra de la posición {d['side'].upper()} · cierre por regla de la estrategia"
                                + (" (test cruce EMA: se invierte si el test sigue activo)" if d["strategy"] == EMA_TEST else ""))
                 await self.close_position(str(d["_id"]), None, EXIT_REASON)

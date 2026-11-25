@@ -5,7 +5,7 @@ from market import candle_scan_loop
 from datetime import datetime, timezone, timedelta
 from models import Signal, now_iso
 from indicators import trend_label, htf_trend, snapshot
-from strategies import evaluate, exit_signal, ema_test, ema_test_params, atr_params, EXIT_ON_CROSS, EXIT_REASON, TOUCH_REASON, EMA_TEST
+from strategies import evaluate, exit_signal, closed_beyond_ema21, ema_test, ema_test_params, atr_params, EXIT_ON_CROSS, EXIT_REASON, TOUCH_REASON, CLOSE_EMA_REASON, EMA_TEST
 from fx.models import FxSettings
 from fx.market import HTF, market_open, market_status, in_sessions, session_names, closing_soon, friday_stage
 from fx.symbols import SPECS, pips, is_crypto
@@ -97,7 +97,7 @@ class SignalsMixin:
             self.scanning = False
 
     async def _exit_on_cross(self, symbol: str, df, i: int, settings: FxSettings = None):
-        """Strategy exits decided at candle close (ema_cross: the EMAs crossed back against the position; optional: the closed candle touched the EMA21)."""
+        """Strategy exits decided at candle close (ema_cross: the EMAs crossed back against the position; Pepperstone: the candle closed beyond the EMA21; HotForex optional: the closed candle touched the EMA21)."""
         row = df.iloc[i]
         closed_ms = int(row["ts"]) + TF_SECONDS[settings.timeframe] * 1000 if settings else 0
         prev = df.iloc[i - 1]
@@ -109,10 +109,16 @@ class SignalsMixin:
                     await self.log("INFO", f"{symbol}: EMA9 cruzó {'por debajo' if d['side'] == 'long' else 'por encima'} de EMA21 · cierre de la posición manual {d['side'].upper()} por cruce contrario")
                     await self.close_position(str(d["_id"]), None, EXIT_REASON)
                     continue
-                if not (settings and settings.ema_touch_exit_enabled):
+                if not settings or not (self.profile.ema_only or settings.ema_touch_exit_enabled):
                     continue
-            touch = (settings and settings.ema_touch_exit_enabled and d.get("exit_mode") == "cross" and float(row["low"]) <= float(row["ema21"]) <= float(row["high"])
-                     and closed_ms > datetime.fromisoformat(d["opened_at"]).timestamp() * 1000)  # only candles that closed after the entry
+            after_entry = bool(settings) and d.get("exit_mode") == "cross" and closed_ms > datetime.fromisoformat(d["opened_at"]).timestamp() * 1000  # only candles that closed after the entry
+            if self.profile.ema_only:  # Pepperstone: the candle must CLOSE on the wrong side of the EMA21 (a manual order needs the close to cross it, since it may have been opened beyond it)
+                beyond = after_entry and closed_beyond_ema21(d["side"], row) and (d["strategy"] != "manual" or not closed_beyond_ema21(d["side"], prev))
+                if beyond and not exit_signal(d["strategy"], d["side"], row):
+                    await self.log("INFO", f"{symbol}: la vela cerró {'por debajo' if d['side'] == 'long' else 'por encima'} de la EMA21 ({float(row['ema21']):.6g}) con la posición {d['side'].upper()} abierta · cierre por la regla «cierre de vela al otro lado de la EMA21»")
+                    await self.close_position(str(d["_id"]), None, CLOSE_EMA_REASON)
+                    continue
+            touch = not self.profile.ema_only and after_entry and settings.ema_touch_exit_enabled and float(row["low"]) <= float(row["ema21"]) <= float(row["high"])
             if touch and not exit_signal(d["strategy"], d["side"], row):
                 await self.log("INFO", f"{symbol}: la vela cerró tocando la EMA21 ({float(row['ema21']):.6g}) con la posición {d['side'].upper()} abierta · cierre por la regla «toque de EMA21»")
                 await self.close_position(str(d["_id"]), None, TOUCH_REASON)

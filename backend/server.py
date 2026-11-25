@@ -105,7 +105,7 @@ async def put_config(body: ConfigUpdate):
 
 @api.get("/meta")
 async def meta():
-    return {"symbols": AVAILABLE_SYMBOLS, "timeframes": TIMEFRAMES, "strategies": CRYPTO_STRATEGY_KEYS + [EMA_TEST], "strategy_keys": CRYPTO_STRATEGY_KEYS[1:], "strategy_info": STRATEGY_INFO,
+    return {"symbols": AVAILABLE_SYMBOLS, "timeframes": TIMEFRAMES, "strategies": CRYPTO_STRATEGY_KEYS, "strategy_keys": CRYPTO_STRATEGY_KEYS[1:], "strategy_info": STRATEGY_INFO,
             "long_horizon_keys": list(SLOW_KEYS), "signal_modes": SIGNAL_MODES, "mode_info": MODE_INFO, "profiles": PROFILES}
 
 

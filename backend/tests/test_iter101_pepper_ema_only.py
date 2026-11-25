@@ -16,7 +16,7 @@ from fx.models import FxSettings
 from fx.symbols import SPECS, AVAILABLE, PEPPER_SYMBOLS, CRYPTO
 from fx.backtest import simulate, build_fx_df
 from fx import risk
-from strategies import ema_test, ema_test_params, EMA_TEST, TOUCH_REASON
+from strategies import ema_test, ema_test_params, EMA_TEST, TOUCH_REASON, CLOSE_EMA_REASON
 from indicators import build_df
 
 H = 3600_000
@@ -107,28 +107,50 @@ def test_max_positions_now_applies():
     asyncio.run(run())
 
 
-def _row_df(low, high, ema21, ema9=None, ts=10 * H):  # default: EMA9 above EMA21 (no opposite cross for a long)
-    return pd.DataFrame([{"ts": ts, "low": low, "high": high, "ema21": ema21, "ema9": ema21 + 0.01 if ema9 is None else ema9}] * 2)
+def _row_df(low, high, ema21, ema9=None, ts=10 * H, close=None, prev_close=None):  # default: EMA9 above EMA21 (no opposite cross for a long), close at the high
+    row = {"ts": ts, "low": low, "high": high, "close": high if close is None else close, "ema21": ema21, "ema9": ema21 + 0.01 if ema9 is None else ema9}
+    return pd.DataFrame([{**row, "close": row["close"] if prev_close is None else prev_close}, row])
 
 
-def test_touch_exit():
+def test_close_beyond_ema21_exit_always_on():
+    """Pepperstone: a wick through the EMA21 keeps the trade open; a candle CLOSING on the wrong side closes it. No toggle."""
+    async def run():
+        out = {}
+        for side in ("long", "short"):
+            e, db = await mk(f"d{side}", ema_touch_exit_enabled=False, timeframe="1h")
+            s = await e.get_settings()
+            await e._handle_test_signal("EURUSD", sig(1.1, 0.002, side), s)
+            opened = datetime.fromtimestamp(10 * H / 1000 + 60, tz=timezone.utc)  # entry 1 min into the 10:00 candle
+            await e.db.positions.update_one({}, {"$set": {"opened_at": opened.isoformat()}})
+            up = side == "long"
+            e9 = 1.11 if up else 1.09   # EMA9 still on the right side of the EMA21 (1.10): no opposite cross
+            wrong, right = (1.095, 1.105) if up else (1.105, 1.095)
+            await e._exit_on_cross("EURUSD", _row_df(1.09, 1.11, 1.10, e9, ts=9 * H, close=wrong), 1, s)   # closed beyond the EMA21 but before the entry → ignored
+            before = await e.db.positions.count_documents({})
+            await e._exit_on_cross("EURUSD", _row_df(1.09, 1.11, 1.10, e9, close=right), 1, s)             # wick crossed the EMA21 and came back: stays open
+            wick = await e.db.positions.count_documents({})
+            await e._exit_on_cross("EURUSD", _row_df(1.09, 1.11, 1.10, e9, close=wrong), 1, s)             # closed beyond the EMA21
+            t = await e.db.trades.find_one({})
+            out[side] = (before, wick, await e.db.positions.count_documents({}), (t or {}).get("reason"))
+            await db.client.drop_database(db.name)
+        assert out == {"long": (1, 1, 0, CLOSE_EMA_REASON), "short": (1, 1, 0, CLOSE_EMA_REASON)}
+    asyncio.run(run())
+
+
+def test_hotforex_keeps_its_optional_touch_exit():
     async def run():
         out = {}
         for on in (False, True):
-            e, db = await mk(f"d{int(on)}", ema_touch_exit_enabled=on, timeframe="1h")
+            e, db = await mk(f"h{int(on)}", HFM, ema_touch_exit_enabled=on, ema_test_enabled=True, ema_test_symbols=["EURUSD"], timeframe="1h", sessions_allowed=[], close_before_weekend=False)
             s = await e.get_settings()
-            await e._handle_test_signal("ADAUSDT", sig(), s)
-            opened = datetime.fromtimestamp(10 * H / 1000 + 60, tz=timezone.utc)  # entry 1 min into the 10:00 candle
-            await e.db.positions.update_one({}, {"$set": {"opened_at": opened.isoformat()}})
-            await e._exit_on_cross("ADAUSDT", _row_df(0.505, 0.53, 0.51, ts=9 * H), 0, s)   # candle closed before the entry → ignored
-            before = await e.db.positions.count_documents({})
-            await e._exit_on_cross("ADAUSDT", _row_df(0.515, 0.53, 0.51), 0, s)             # closed after the entry but no touch
-            mid = await e.db.positions.count_documents({})
-            await e._exit_on_cross("ADAUSDT", _row_df(0.505, 0.53, 0.51), 0, s)             # touch
+            await e.db.positions.insert_one({"symbol": "EURUSD", "side": "long", "strategy": EMA_TEST, "exit_mode": "cross", "entry_price": 1.1, "qty": 0.1, "initial_qty": 0.1, "leverage": 100,
+                                             "margin": 110.0, "sl": 1.09, "tp": 1.2, "initial_sl": 1.09, "atr": 0.002, "fees": 0.0, "mark_price": 1.1, "live": False,
+                                             "opened_at": datetime.fromtimestamp(10 * H / 1000 + 60, tz=timezone.utc).isoformat()})
+            await e._exit_on_cross("EURUSD", _row_df(1.09, 1.11, 1.10, 1.11, close=1.095), 1, s)  # touched AND closed below the EMA21
             t = await e.db.trades.find_one({})
-            out[on] = (before, mid, await e.db.positions.count_documents({}), (t or {}).get("reason"))
+            out[on] = (await e.db.positions.count_documents({}), (t or {}).get("reason"))
             await db.client.drop_database(db.name)
-        assert out[False] == (1, 1, 1, None) and out[True] == (1, 1, 0, TOUCH_REASON)
+        assert out == {False: (1, None), True: (0, TOUCH_REASON)}
     asyncio.run(run())
 
 
@@ -144,7 +166,7 @@ def test_sl_multiplier():
     assert ema_test_params(FxSettings()) == {}
 
 
-def test_backtest_touch_exit_and_crypto_costs():
+def test_backtest_close_beyond_ema21_and_crypto_costs():
     rows, p = [], 0.5
     for i in range(400):
         p *= 1 + (0.004 if (i // 40) % 2 == 0 else -0.004)
@@ -153,15 +175,17 @@ def test_backtest_touch_exit_and_crypto_costs():
     from strategies import STRATEGIES
     sigs = {i: s for i in range(60, len(df) - 1) if (s := STRATEGIES[EMA_TEST](df, i, None, None, None))}
 
-    def run(touch):
-        return simulate(df, sigs, 1.0, 100, {**risk.DEFAULT_RULES, "ema_touch_exit_enabled": touch}, initial=10000.0, symbol="ADAUSDT", weekend_flat=False, costs=PEPPERSTONE.costs())
-    a, b = run(False), run(True)
-    assert a["trades"] and not any(t["reason"] == TOUCH_REASON for t in a["trades"]) and any(t["reason"] == TOUCH_REASON for t in b["trades"])
+    def run(ema_only, touch=False):
+        return simulate(df, sigs, 1.0, 100, {**risk.DEFAULT_RULES, "ema_touch_exit_enabled": touch}, initial=10000.0, symbol="ADAUSDT", weekend_flat=False, costs=PEPPERSTONE.costs(), ema_only=ema_only)
+    pep, hfm_off, hfm_on = run(True), run(False), run(False, True)
+    reasons = lambda r: {t["reason"] for t in r["trades"]}  # noqa: E731
+    assert CLOSE_EMA_REASON in reasons(pep) and TOUCH_REASON not in reasons(pep)
+    assert hfm_off["trades"] and not {CLOSE_EMA_REASON, TOUCH_REASON} & reasons(hfm_off) and TOUCH_REASON in reasons(hfm_on) and CLOSE_EMA_REASON not in reasons(hfm_on)
     c = PEPPERSTONE.costs("razor")
     assert c.side_cost("ADAUSDT", 1.0, {}) == pytest.approx(SPECS["ADAUSDT"]["spread"] / 2 * 1000) and c.side_cost("EURUSD", 1.0, {}) > 3.5
 
 
-def test_touch_close_has_its_own_telegram_message():
+def test_ema21_closes_have_their_own_telegram_message():
     from types import SimpleNamespace as NS
     sent = []
 
@@ -172,12 +196,14 @@ def test_touch_close_has_its_own_telegram_message():
         async def tg(msg, kind):
             sent.append(msg)
         e.tg = tg
-        p = NS(live=False, side="long", symbol="SOLUSDT", entry_price=70.0)
+        p = NS(live=False, side="long", symbol="EURUSD", entry_price=1.1)
         from fx.engine_positions import PositionsMixin as M
-        await M._announce_close(e, p, NS(pnl=-1.25, pnl_pct=-10.0, exit_price=69.0), "TOQUE_EMA")
-        await M._announce_close(e, p, NS(pnl=2.5, pnl_pct=20.0, exit_price=72.0), "CRUCE")
+        await M._announce_close(e, p, NS(pnl=-1.25, pnl_pct=-10.0, exit_price=1.09), "TOQUE_EMA")
+        await M._announce_close(e, p, NS(pnl=2.5, pnl_pct=20.0, exit_price=1.12), "CRUCE")
+        await M._announce_close(e, p, NS(pnl=-3.0, pnl_pct=-5.0, exit_price=1.09), "CIERRE_EMA21")
     asyncio.run(run())
     assert "toque de la EMA 21" in sent[0] and "Perdió <b>1.25 USD</b>" in sent[0] and "toque" not in sent[1]
+    assert "cierre de vela al otro lado de la EMA 21" in sent[2] and "cerró por debajo de la EMA 21" in sent[2] and "Perdió <b>3.00 USD</b>" in sent[2]
 
 
 def test_ema_exits_three_independent_rules():

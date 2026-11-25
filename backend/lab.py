@@ -98,7 +98,7 @@ class LabEngine(TradingEngine):
             self._last_snapshot = time.time()
             await self.db.equity.insert_one({"ts": now_iso(), "equity": s["equity"], "balance": s["balance"], "net_deposits": 0.0})
 
-    candle_sync, ai_gate = False, False  # only the test cruce EMA: fixed-interval scan
+    candle_sync, ai_gate, close_beyond_ema21 = False, False, True  # only the test cruce EMA: fixed-interval scan
 
     async def scan_once(self, settings: Settings, normal: bool = True):
         self.scanning = True
@@ -112,7 +112,7 @@ class LabEngine(TradingEngine):
                     i = len(df) - 2
                     row = df.iloc[i]
                     if self.running:
-                        await self._exit_on_cross(symbol, df, i)
+                        await self._exit_on_cross(symbol, df, i, settings.timeframe)
                     tsig = ema_test(df, i, params=ema_test_params(settings)) if symbol in test_syms else None
                     self.analysis[symbol] = {"trend": trend_label(row), "rsi": round(float(row["rsi"]), 1), "macd_hist": float(row["macd_hist"]),
                                              "adx": round(float(row["adx"]), 1), "htf": None, "signal": tsig["side"] if tsig else None,
@@ -237,7 +237,7 @@ def build_router(lab: LabEngine, require_auth) -> APIRouter:
         s = await lab.get_settings()
         params = ema_test_params(s)
         df = build_df(await lab.market.fetch_klines(req.symbol, req.timeframe, 1000, cache_sec=60))
-        result = run_backtest(df, EMA_TEST, req.risk_per_trade, req.leverage, trade_rules(s), initial=acc["initial_balance"], symbol=req.symbol, params=params or None)
+        result = run_backtest(df, EMA_TEST, req.risk_per_trade, req.leverage, trade_rules(s), initial=acc["initial_balance"], symbol=req.symbol, params=params or None, close_ema21=True)
         result.pop("r_multiples", None)
         return {"symbol": req.symbol, "strategy": EMA_TEST, "timeframe": req.timeframe, "params": params or None, **result}
 

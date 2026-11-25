@@ -12,7 +12,7 @@ from fx.symbols import SPECS, fmt_price, pips
 from fx import risk
 from risk import be_allowed, ema_partial_due, EMA_PARTIAL_PCT
 from fx.bridge import BridgeError, TRADE_DISABLED_CODES
-from strategies import EMA_TEST_TAG, TOUCH_REASON
+from strategies import EMA_TEST_TAG, TOUCH_REASON, CLOSE_EMA_REASON
 from fx.engine_core import logger, LIVE_GRACE_SEC, TRANSIENT_TG_SEC, PENDING_TTL_SEC, HORIZON_LABEL, FX_STRATEGY_INFO
 
 
@@ -323,9 +323,11 @@ class PositionsMixin:
         tag = "REAL " if p.live else ""
         est = f" · PnL estimado, pendiente de confirmar con {self.bk}" if estimated else ""
         await self.log("ORDER", f"CERRADA {tag}{p.side.upper()} {p.symbol} @ {fmt_price(p.symbol, trade.exit_price)} · {reason} · PnL {trade.pnl:+.2f} USD{est}")
-        if reason == TOUCH_REASON:
-            await self.tg(f"{'✅' if trade.pnl >= 0 else '❌'} <b>CERRADA {tag}{p.side.upper()} {p.symbol} · toque de la EMA 21</b>\n"
-                          f"La vela cerró tocando la EMA 21 con la operación abierta.\n"
+        if reason in (TOUCH_REASON, CLOSE_EMA_REASON):
+            how = ("toque de la EMA 21", "La vela cerró tocando la EMA 21 con la operación abierta.") if reason == TOUCH_REASON else \
+                  ("cierre de vela al otro lado de la EMA 21", f"La vela cerró {'por debajo' if p.side == 'long' else 'por encima'} de la EMA 21 con la operación abierta.")
+            await self.tg(f"{'✅' if trade.pnl >= 0 else '❌'} <b>CERRADA {tag}{p.side.upper()} {p.symbol} · {how[0]}</b>\n"
+                          f"{how[1]}\n"
                           f"{'Ganó' if trade.pnl >= 0 else 'Perdió'} <b>{abs(trade.pnl):.2f} USD</b> ({trade.pnl_pct:+.2f}%) · entrada {fmt_price(p.symbol, p.entry_price)} → "
                           f"salida {fmt_price(p.symbol, trade.exit_price)}{est}", "orders")
             return

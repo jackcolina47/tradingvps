@@ -98,8 +98,7 @@ class TestToggleOffClose:
             return (await db.trades.find_one({"symbol": "UNIUSDT"}), await db.positions.find({"symbol": "UNIUSDT"}).to_list(5))
         tr, pos = run(body, monkeypatch, {"UNIUSDT": _rows("down")})
         assert tr and tr["reason"] == "CRUCE"
-        assert len(pos) == 1 and pos[0]["side"] == "short" and pos[0]["exit_mode"] == "cross"
-        assert len(calls) == 1
+        assert pos == []  # Iter122: the Bybit bot no longer opens test trades, so the leftover position closes without a reversal
 
     def test_toggle_off_no_cross_keeps_open(self, monkeypatch):
         async def body(e, db):

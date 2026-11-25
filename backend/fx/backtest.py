@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import numpy as np
 from indicators import build_df
 from backtest import scan_signals, _levels, _iso
-from strategies import exit_signal, EXIT_REASON, CROSS_ONLY, TOUCH_REASON
+from strategies import exit_signal, closed_beyond_ema21, EXIT_REASON, CROSS_ONLY, TOUCH_REASON, CLOSE_EMA_REASON
 from risk import check_exit as bar_exit, EMA_PARTIAL_PCT
 from fx import risk
 from fx.market import sessions as fx_sessions
@@ -83,7 +83,9 @@ def simulate(df, signals: dict, risk_pct: float, leverage: int, trailing, initia
                 close(closes[i], "TIEMPO", i)
             elif exit_signal(pos["strategy"], pos["side"], {"ema9": e9[i], "ema21": e21[i], "ema10": e10[i], "ema20": e20[i]}):
                 close(closes[i], EXIT_REASON, i)
-            elif cross_only and rules["ema_touch_exit_enabled"] and lows[i] <= e21[i] <= highs[i]:
+            elif cross_only and ema_only and closed_beyond_ema21(pos["side"], {"close": closes[i], "ema21": e21[i]}):
+                close(closes[i], CLOSE_EMA_REASON, i)
+            elif cross_only and not ema_only and rules["ema_touch_exit_enabled"] and lows[i] <= e21[i] <= highs[i]:
                 close(closes[i], TOUCH_REASON, i)
             elif cross_only and ema_only:
                 d = 1 if pos["side"] == "long" else -1

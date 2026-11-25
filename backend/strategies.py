@@ -429,7 +429,14 @@ TEST_ONLY = {EMA_TEST}  # never part of «all»: only via its own toggle
 EXIT_ON_CROSS = {"ema_cross", EMA_TEST}
 CROSS_ONLY = {EMA_TEST}  # no SL/TP at all: the opposite cross is the only exit
 EXIT_REASON = "CRUCE"
-TOUCH_REASON = "TOQUE_EMA"  # optional exit: a closed candle touches the EMA21 while the position is open
+TOUCH_REASON = "TOQUE_EMA"  # HotForex optional exit: a closed candle touches the EMA21 while the position is open
+CLOSE_EMA_REASON = "CIERRE_EMA21"  # Bybit Labs + Pepperstone: the candle CLOSED on the wrong side of the EMA21 (a wick through it does not count)
+
+
+def closed_beyond_ema21(side: str, r) -> bool:
+    """The closing price is on the wrong side of the EMA21: below it for a long, above it for a short."""
+    close, ema = float(r["close"]), float(r["ema21"])
+    return close < ema if side == "long" else close > ema
 
 
 def exit_signal(strategy: str, side: str, r) -> bool:

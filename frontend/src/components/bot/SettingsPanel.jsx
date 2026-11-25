@@ -205,7 +205,7 @@ export default function SettingsPanel({ settings, meta, profileActive, onSave, o
         ))}
         {!testOnly && !emaOnly && <AtrLevelsSettings form={form} set={set} />}
         {!testOnly && !emaOnly && <AiPositionReviewSettings form={form} set={set} />}
-        <EmaTestSettings form={form} set={set} meta={meta} main={emaOnly} />
+        {(testOnly || emaOnly || !!meta?.sessions) && <EmaTestSettings form={form} set={set} meta={meta} main={emaOnly} lab={testOnly} />}
       </div>
     </Panel>
   );
