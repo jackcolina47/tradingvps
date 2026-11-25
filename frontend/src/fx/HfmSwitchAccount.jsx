@@ -12,8 +12,8 @@ const fmt = (v, cur) => `${Number(v || 0).toLocaleString("en-US", { minimumFract
 
 export function HfmSwitchAccount({ config, account, onDone }) {
   const [busy, setBusy] = useState(false);
-  if (config.trading_mode !== "live" || !config.metaapi_account_id) return null;
-  const current = config.mt_login && config.mt_server ? `${config.mt_login}@${config.mt_server}` : "";
+  if (config.trading_mode !== "live" || !config.hfm_configured) return null;
+  const current = config.mt_server ? `${config.mt_login || config.bridge_effective?.account_id}@${config.mt_server}` : "";
   const changed = !!account?.account_changed;
   const verified = !!config.hfm_verified_at;
 
@@ -36,7 +36,7 @@ export function HfmSwitchAccount({ config, account, onDone }) {
         </p>
       ) : (
         <p className="text-[12px] leading-relaxed text-slate-400">
-          Tras vincular y probar una cuenta distinta, pulsa aquí: el capital inicial pasa a ser la equidad de la cuenta nueva y se conservan las operaciones
+          Tras cambiar el ID de Cuenta del puente y probar la conexión, pulsa aquí: el capital inicial pasa a ser la equidad de la cuenta nueva y se conservan las operaciones
           (etiquetadas como periodo anterior), los contadores de las fases del plan y todo lo aprendido. «Reiniciar» en la cabecera, en cambio, borra el historial.
           {account?.account_ref ? <> Estadísticas actuales: <span className="text-slate-200">{account.account_ref}</span>.</> : ""}
         </p>

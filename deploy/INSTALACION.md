@@ -13,7 +13,7 @@ La misma guía, con botones para copiar cada comando, está en el panel: botón 
 | Qué | Recomendación |
 |---|---|
 | VPS | Ubuntu 22.04 / 24.04 (o Debian 12) · 2 vCPU · 2–4 GB RAM (si hay menos de 3,5 GB el instalador crea 2 GB de swap) · 20 GB de disco |
-| Región | Si vas a operar en REAL con Bybit, el servidor NO puede estar en EE. UU. (Bybit bloquea su API). Funcionan bien Europa (Ámsterdam, Fráncfort) o Asia (Tokio, Singapur). HotForex y Pepperstone (MetaApi) no tienen esa restricción |
+| Región | Si vas a operar en REAL con Bybit, el servidor NO puede estar en EE. UU. (Bybit bloquea su API). Funcionan bien Europa (Ámsterdam, Fráncfort) o Asia (Tokio, Singapur). HotForex y Pepperstone (puente MetaTrader propio) no tienen esa restricción |
 | Acceso | Usuario `root` (o con `sudo`) por SSH; puertos 22, 80 y 443 abiertos |
 | Dominio (opcional) | Un subdominio tipo `bot.midominio.com` apuntando a la IP del VPS → HTTPS automático (Let's Encrypt). Sin dominio el panel va por `http://IP` |
 | En tu ordenador | Un terminal con `ssh` y `scp` (Windows 10/11: PowerShell ya los trae; también sirven WinSCP o FileZilla para subir el zip) |
@@ -98,14 +98,14 @@ Para cambiar de IP a dominio después: edita `SITE_ADDRESS=` en `deploy/.env` y 
    - **Seguridad**: cambia la contraseña.
    - **Inteligencia artificial**: elige Emergent (si pusiste la clave) o Google Gemini con tu API key; pulsa «Probar conexión».
    - **Telegram**: token del bot + «Detectar chat ID» + «Enviar prueba».
-   - **Bybit · cuenta real** / **HotForex y Pepperstone (MetaApi, cuentas MetaTrader; cTrader no es compatible)**: solo cuando quieras pasar a REAL.
+   - **Bybit · cuenta real** / **HotForex y Pepperstone (puente MetaTrader propio: URL, token e ID de cuenta; también con `MT_BRIDGE_URL` / `MT_BRIDGE_TOKEN` en `backend.env`; la IP del VPS debe estar en `allowed_ips` del puente)**: solo cuando quieras pasar a REAL.
 3. Pulsa **Iniciar bot**. Si el servidor se reinicia, los contenedores arrancan solos y el bot continúa donde estaba.
 
 ## 9. Traer tus datos desde el panel de desarrollo (opcional)
 
 1. En el panel de origen: Ajustes → Copias de seguridad → **Crear copia ahora** → **Descargar**.
 2. En el VPS: Ajustes → Copias de seguridad → **Restaurar desde archivo…** → elige el `.json.gz`, escribe `RESTAURAR`. Los tres bots deben estar detenidos.
-3. La contraseña del VPS se conserva. Las API keys (Bybit, MetaApi, Gemini, Telegram) van cifradas con la `CREDENTIAL_ENCRYPTION_KEY` de la instalación de origen,
+3. La contraseña del VPS se conserva. Las API keys (Bybit, token del puente MetaTrader, Gemini, Telegram) van cifradas con la `CREDENTIAL_ENCRYPTION_KEY` de la instalación de origen,
    así que en el VPS tendrás que volver a introducirlas en Ajustes.
 
 ## 10. Comandos útiles (dentro de `ai-trader/deploy`)
@@ -163,5 +163,5 @@ Para cambiar de IP a dominio después: edita `SITE_ADDRESS=` en `deploy/.env` y 
 - Las entradas las decide un embudo de IA (filtro técnico → modelo rápido → modelo potente). Ya no hay estrategias fijas, backtest, optimizador ni walk-forward.
 - El bot solo busca entradas en el horario operativo de Nueva York y bloquea ±15 min los eventos rojos del calendario económico. No necesita ninguna tarea programada para ello.
 - El cron `cron-walk-forward.sh` ya no existe. `install.sh` y `update-zip.sh` lo quitan del crontab al ejecutarse; si actualizas a mano, bórralo con `crontab -e`.
-- El servidor necesita salida a Internet hacia el proveedor de IA, el calendario económico (ForexFactory) y, según el bot, Bybit/Bitget, Yahoo Finance y MetaApi.
+- El servidor necesita salida a Internet hacia el proveedor de IA, el calendario económico (ForexFactory) y, según el bot, Bybit/Bitget, Yahoo Finance y tu puente MetaTrader (puerto 8000 del VPS Windows).
 - Mantén la hora del servidor sincronizada (NTP): el horario operativo se calcula con la hora real de Nueva York.

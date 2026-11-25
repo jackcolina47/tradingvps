@@ -174,8 +174,8 @@ async def _apply_action(p: dict) -> str:
             raise ValueError("Modo REAL sin credenciales de Bybit verificadas: pruébalas en Ajustes o vuelve a modo paper")
         if bot in FXB and eng.live:
             c = _fx_store(bot).cfg
-            if not (c.metaapi_token and c.metaapi_account_id and c.hfm_verified_at):
-                raise ValueError(f"Modo REAL: vincula y verifica la cuenta {eng.bk} (Ajustes → {eng.bl}) antes de iniciar el bot")
+            if not (eng.broker and c.hfm_verified_at):
+                raise ValueError(f"Modo REAL: configura el puente y verifica la cuenta {eng.bk} (Ajustes → {eng.bl}) antes de iniciar el bot")
             if c.hfm_trade_allowed is False:
                 raise ValueError(f"Modo REAL: la cuenta {eng.bk} no permite operar (trading deshabilitado o contraseña investor)")
         await eng.start()

@@ -56,7 +56,7 @@ export function buildFaq(bot) {
     { cat: "Riesgo", q: "¿Qué protecciones tiene una posición abierta?", tags: ["breakeven", "trailing", "parcial"],
       a: "Stop y objetivo desde la entrada, y de forma opcional stop a breakeven, trailing stop y cierre parcial de beneficios, cada uno con su interruptor. Además, la guardia de eventos rojos." },
     ...(fx ? [{ cat: "Riesgo", q: "¿De dónde sale el volumen en forex?", tags: ["volumen", "ticks", "tradingview", "yahoo"],
-      a: "Del volumen de ticks de tu bróker, a través de la cuenta MetaTrader vinculada con MetaApi. El forex no tiene volumen centralizado y TradingView no ofrece una API pública de datos para esto. Sin cuenta conectada, el bot usa precios de Yahoo y mide la actividad con el rango de la vela y el ATR." }] : []),
+      a: "Del volumen de ticks de tu bróker, a través de tu puente MetaTrader propio. El forex no tiene volumen centralizado y TradingView no ofrece una API pública de datos para esto. Sin cuenta conectada, el bot usa precios de Yahoo y mide la actividad con el rango de la vela y el ATR." }] : []),
 
     { cat: "Aprendizaje y revisión", q: "¿Qué son las reglas aprendidas?", tags: ["reglas", "aprendizaje"],
       a: "Frases que la IA extrae de las pérdidas evitables («no comprar pegado a una oferta con ADX bajo»). El modelo potente las recibe en cada análisis y responde PASS si la operación incumple alguna. Las gestionas en Ajustes → Reglas aprendidas." },
@@ -66,7 +66,7 @@ export function buildFaq(bot) {
       a: "Te dice en qué fase estás, qué criterios faltan para avanzar, cuánto capital necesitas para tu meta mensual y si vas por delante o por detrás de la proyección." },
 
     { cat: `Cuenta real · ${broker}`, q: "¿Cómo paso a modo REAL?", tags: ["real", "live", "credenciales"],
-      a: fx ? `Vincula tu cuenta MetaTrader de ${broker} con MetaApi en Ajustes, prueba la conexión, detén el bot, cierra las posiciones paper y cambia a REAL escribiendo la palabra de confirmación.`
+      a: fx ? `Configura el puente MetaTrader de ${broker} en Ajustes (URL, token e ID de cuenta), prueba la conexión, detén el bot, cierra las posiciones paper y cambia a REAL escribiendo la palabra de confirmación.`
         : "Introduce tu API key de Bybit en Ajustes, prueba la conexión, detén el bot, cierra las posiciones paper y cambia a REAL escribiendo la palabra de confirmación." },
     { cat: `Cuenta real · ${broker}`, q: "¿Qué pasa si el servidor se cae con posiciones abiertas?", tags: ["caída", "servidor", "stop"],
       a: `El stop y el objetivo viajan con cada orden a ${broker}, así que la posición queda protegida. Lo que no se ejecutaría mientras el servidor esté caído es el breakeven, el trailing y la guardia de eventos rojos.` },

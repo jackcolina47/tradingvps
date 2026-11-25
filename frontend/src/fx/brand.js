@@ -1,26 +1,26 @@
 import { createContext, useContext } from "react";
 import { Landmark, Flame } from "lucide-react";
 
-// Branding of the two MetaApi/MetaTrader bots that share the FX dashboard. `bot` = "fx" (HotForex) | "pepper" (Pepperstone).
+// Branding of the two MetaTrader bots that share the FX dashboard. `bot` = "fx" (HotForex) | "pepper" (Pepperstone).
 const liveLabel = (bk) => (status) => `Modo REAL · ${bk}${/demo/i.test(status.env || "") ? "" : " Live"}`;
 const dataLabel = (bk) => (status) => (status.mode === "REAL" ? `Señales: Yahoo · Ejecución: ${bk}` : "Datos: Yahoo Finance");
 const dataTooltip = (bk) => (status) => (status.mode === "REAL"
-  ? `Las señales se calculan con velas de Yahoo Finance; las órdenes, el PnL y la equidad vienen de tu cuenta ${bk} vía MetaApi.`
-  : `Precios y velas de Yahoo Finance (sin API key): pares spot y futuros de oro (GC=F) y plata (SI=F) que replican el spot. En modo REAL las órdenes y el PnL vienen de tu cuenta ${bk} vía MetaApi.`);
+  ? `Las señales se calculan con velas de Yahoo Finance; las órdenes, el PnL y la equidad vienen de tu cuenta ${bk} vía puente MetaTrader.`
+  : `Precios y velas de Yahoo Finance (sin API key): pares spot y futuros de oro (GC=F) y plata (SI=F) que replican el spot. En modo REAL las órdenes y el PnL vienen de tu cuenta ${bk} vía puente MetaTrader.`);
 const resetHint = (bk) => `Se borrarán posiciones, historial, señales, operaciones de noticias y curva de equidad. En paper el balance vuelve al capital inicial configurado (por defecto $500); en REAL las estadísticas parten de la equidad actual de ${bk}.`;
 
 export const BRANDS = {
   fx: {
     bot: "fx", path: "/hotforex", api: "/api/fx", name: "HotForex AI Trading", short: "HotForex", broker: "HFM", brokerLong: "HotForex", accent: "sky",
     accentText: "text-sky-400", chip: "border-sky-500/40 bg-sky-500/10 text-sky-300", spinner: "text-sky-400",
-    costsNote: "spread HFM como único coste", serverExample: "HFMarketsGlobal-Live2", icon: Landmark,
+    costsNote: "spread HFM como único coste", icon: Landmark,
     header: { title: <>HotForex <span className="text-sky-400">AI</span> Trading</>, subtitle: (s) => `Forex · Metales · ${s.ai?.label || "IA"}`, icon: Landmark,
       liveLabel: liveLabel("HFM"), dataLabel: dataLabel("HFM"), dataTooltip: dataTooltip("HFM"), resetHint: resetHint("HFM") },
   },
   pepper: {
-    bot: "pepper", path: "/pepperstone", api: "/api/pepper", name: "Pepperstone AI trading", short: "Pepperstone", broker: "Pepperstone", brokerLong: "Pepperstone", accent: "teal", ctrader: true, lab: true,
+    bot: "pepper", path: "/pepperstone", api: "/api/pepper", name: "Pepperstone AI trading", short: "Pepperstone", broker: "Pepperstone", brokerLong: "Pepperstone", accent: "teal", lab: true,
     accentText: "text-teal-300", chip: "border-teal-500/40 bg-teal-500/10 text-teal-300", spinner: "text-teal-300",
-    costsNote: "spread y comisión según tu tipo de cuenta Pepperstone (Razor o Standard)", serverExample: "Pepperstone-MT5-Live01", icon: Flame,
+    costsNote: "spread y comisión según tu tipo de cuenta Pepperstone (Razor o Standard)", icon: Flame,
     header: { title: <>Pepperstone <span className="text-teal-300">AI</span> trading</>, subtitle: (s) => `Forex · Metales · ${s.costs?.label || "Razor"} · ${s.ai?.label || "IA"}`, icon: Flame,
       liveLabel: liveLabel("Pepperstone"), dataLabel: dataLabel("Pepperstone"), dataTooltip: dataTooltip("Pepperstone"), resetHint: resetHint("Pepperstone") },
   },

@@ -1,89 +1,76 @@
-"""/api/fx/* · HFM account via MetaApi: connection test, link/recreate/redeploy, symbol suffix & tradability checks, paper ↔ REAL mode switch."""
+"""/api/fx/* · MetaTrader account through our own bridge: connection test, reconnect, symbol suffix & tradability checks, paper ↔ REAL mode switch."""
 import logging
 from fastapi import HTTPException
 
 from models import ModeRequest, now_iso
 from fx.models import HfmTestRequest
-from fx.metaapi import MetaApi, MetaApiError, PLANS, plan_key
+from fx.bridge import MtBridge, BridgeError
+from fx.engine_core import HFM_OK_STATES, HFM_OK_CONN
 
 logger = logging.getLogger(__name__)
 
 
 def register(router, engine, store):
     def _chart_backoff_reset():
-        """User re-linked / tested / redeployed the account: let the chart try HFM candles again right away."""
+        """User tested / reconnected the account: let the chart try the terminal candles again right away."""
         if engine.broker:
             engine.broker.chart_fail_ts = 0.0
 
-    def _metaapi(body: HfmTestRequest = None):
-        c = store.cfg
-        use_saved = not (body and body.metaapi_token and not body.metaapi_token.startswith("••"))
-        token = c.metaapi_token if use_saved else body.metaapi_token.strip()
+    def _bridge(body: HfmTestRequest = None):
+        url, token, account_id = store.conn
+        use_saved = not (body and body.bridge_token and not body.bridge_token.startswith("••"))
+        if not use_saved:
+            token = body.bridge_token.strip()
+            url = (body.bridge_url or "").strip().rstrip("/") or url
+            account_id = (body.bridge_account_id or "").strip() or account_id
         if not token:
-            raise HTTPException(400, "Introduce el token de MetaApi primero")
-        region = (body.metaapi_region if body and body.metaapi_region else c.metaapi_region)
-        base = (body.metaapi_base_url.strip() if body and body.metaapi_base_url is not None else c.metaapi_base_url)
-        login = (body.mt_login.strip() if body and body.mt_login else c.mt_login)
-        server = (body.mt_server.strip() if body and body.mt_server is not None else c.mt_server)
-        return MetaApi(token, region, base), use_saved, login, server
-
-    def _acc_view(acc: dict) -> dict:
-        return {"id": acc.get("_id") or acc.get("id"), "login": acc.get("login"), "server": acc.get("server"), "state": acc.get("state"),
-                "connection": acc.get("connectionStatus"), "region": acc.get("region"), "platform": acc.get("platform") or acc.get("version"),
-                "type": acc.get("type") or "", "reliability": acc.get("reliability") or "", "plan": plan_key(acc.get("type"), acc.get("reliability"))}
-
-    def _plan_patch(acc: dict) -> dict:
-        return {"hfm_account_type": acc.get("type") or "", "hfm_reliability": acc.get("reliability") or ""}
-
-    def _plan_hint(acc: dict) -> str | None:
-        current = plan_key(acc.get("type"), acc.get("reliability"))
-        if current == store.cfg.metaapi_plan:
-            return None
-        return (f"La cuenta ya existe en MetaApi como {PLANS[current]['short']} y has elegido {PLANS[store.cfg.metaapi_plan]['short']}: "
-                "MetaApi no permite cambiar el tipo, pulsa «Recrear con el nuevo tipo» (bot detenido) o vuelve a seleccionar el tipo actual.")
+            raise HTTPException(400, "Introduce el Token del Puente primero (o define MT_BRIDGE_TOKEN en el servidor)")
+        return MtBridge(url, token), use_saved, account_id
 
     @router.post("/hfm/test")
     async def hfm_test(body: HfmTestRequest = None):
-        api, saved, login, server = _metaapi(body)
-        out = {"ok": True, "token_valid": False, "account": None, "info": None, "positions": [], "saved_credentials": saved, "login": login, "server": server}
+        api, saved, account_id = _bridge(body)
+        out = {"ok": True, "token_valid": False, "account": None, "info": None, "positions": [], "saved_credentials": saved, "account_id": account_id, "url": api.url}
         try:
-            accounts = await api.list_accounts()
+            try:
+                acc = await api.account(account_id)
+            except BridgeError as e:
+                if e.status != 404:
+                    raise
+                acc = None
             out["token_valid"] = True
-            out["accounts_total"] = len(accounts)
-            acc = next((a for a in accounts if str(a.get("login")) == str(login) and (not server or str(a.get("server", "")).lower() == server.lower())), None) if login else None
             if acc:
-                out["account"] = _acc_view(acc)
-                if acc.get("state") == "DEPLOYED" and acc.get("connectionStatus") == "CONNECTED":
-                    out["info"] = await api.account_info(acc["_id"], acc.get("region") or api.region, refresh=True)
-                    out["positions"] = await api.positions(acc["_id"], acc.get("region") or api.region)
-        except MetaApiError as e:
+                out["account"] = {**acc, "id": account_id}
+                if acc["state"] in HFM_OK_STATES and acc["connection"] in HFM_OK_CONN:
+                    info = await api.account_info(account_id)
+                    info["tradeAllowed"] = info.get("tradeAllowed", acc["trade_allowed"] if acc["trade_allowed"] is not None else True)
+                    info["broker"] = info.get("broker") or info.get("name") or engine.bk
+                    info["server"] = info.get("server") or acc.get("server") or ""
+                    info["login"] = str(info.get("login") or acc.get("login") or "")
+                    out["info"] = info
+                    out["positions"] = await api.positions(account_id)
+        except BridgeError as e:
             raise HTTPException(424, e.msg)
         except Exception as e:
-            raise HTTPException(424, f"No se pudo conectar con MetaApi: {str(e)[:160]}")
+            raise HTTPException(424, f"No se pudo conectar con el puente MT: {str(e)[:160]}")
         finally:
             await api.aclose()
         if saved:
-            patch = {"hfm_state": (out["account"] or {}).get("state") or ("TOKEN_OK" if out["token_valid"] else ""),
-                     "hfm_connection": (out["account"] or {}).get("connection") or ""}
-            if out["account"]:
-                patch["metaapi_account_id"] = out["account"]["id"]
-                patch.update(hfm_account_type=out["account"]["type"], hfm_reliability=out["account"]["reliability"])
+            patch = {"hfm_state": (out["account"] or {}).get("state") or ("TOKEN_OK" if not out["account"] else "DEPLOYED" if out["info"] else ""),
+                     "hfm_connection": (out["account"] or {}).get("connection") or ("CONNECTED" if out["info"] else "")}
             if out["info"]:
                 info = out["info"]
-                patch.update(hfm_verified_at=now_iso(), hfm_verified_equity=info.get("equity"), hfm_currency=info.get("currency", ""),
-                             hfm_leverage=info.get("leverage"), hfm_broker=info.get("broker", ""), hfm_trade_allowed=bool(info.get("tradeAllowed", True)))
-                await engine.log("INFO", f"Cuenta {engine.bk} verificada vía MetaApi · {info.get('broker', engine.bk)} {server} · equidad {info.get('equity')} {info.get('currency', '')}"
-                                         + ("" if info.get("tradeAllowed", True) else " · SIN permiso de trading (contraseña investor)"))
+                patch.update(hfm_verified_at=now_iso(), hfm_verified_equity=info.get("equity"), hfm_currency=info.get("currency", ""), hfm_leverage=info.get("leverage"),
+                             hfm_broker=info["broker"], hfm_trade_allowed=bool(info["tradeAllowed"]), mt_server=info["server"], mt_login=info["login"])
+                await engine.log("INFO", f"Cuenta {engine.bk} verificada vía puente MT ({account_id}) · {info['broker']} {info['server']} · equidad {info.get('equity')} {info.get('currency', '')}"
+                                         + ("" if info["tradeAllowed"] else " · SIN permiso de trading"))
             await store.update(patch)
             _chart_backoff_reset()
-        out["hint"] = (None if out["info"] else "Cuenta vinculada pero aún no conectada: espera unos minutos y vuelve a probar" if out["account"]
-                       else "Token válido. La cuenta MT todavía no está vinculada en MetaApi: pulsa «Vincular cuenta»." if login else f"Token válido. Guarda el login/servidor de {engine.bk} para vincular la cuenta.")
-        if out["info"] and not out["info"].get("tradeAllowed", True):
-            out["hint"] = "La cuenta está conectada pero NO permite operar: usa la contraseña master (no investor) para el modo REAL."
-        if out["account"] and saved and (ph := _plan_hint(out["account"])):
-            out["plan_mismatch"] = True
-            out["hint"] = ph
-        if out["info"] and saved and out["info"].get("tradeAllowed", True):
+        out["hint"] = (None if out["info"] else "La cuenta existe en el puente pero el terminal aún no está conectado al bróker: pulsa «Reconectar» y vuelve a probar" if out["account"]
+                       else f"Token válido, pero el puente no conoce la cuenta «{account_id}»: revisa el ID de Cuenta.")
+        if out["info"] and not out["info"]["tradeAllowed"]:
+            out["hint"] = "La cuenta está conectada pero NO permite operar: activa el trading automático en el terminal del puente (o usa la contraseña master, no investor)."
+        if out["info"] and saved and out["info"]["tradeAllowed"]:
             out["suffix"], out["symbols"] = await _probe_symbols()
         return out
 
@@ -95,98 +82,30 @@ def register(router, engine, store):
             if det.get("applied"):
                 broker.suffix, broker.symbol_map = det["suffix"], {}
             return det, await _check_symbols(broker)
-        except MetaApiError as e:
+        except BridgeError as e:
             return {"suffix": None, "hint": f"No se pudo comprobar el sufijo de símbolos: {e.msg[:120]}"}, None
         finally:
             await broker.aclose()
 
-    @router.post("/hfm/link")
-    async def hfm_link():
-        c = store.cfg
-        if not (c.metaapi_token and c.mt_login and c.mt_password and c.mt_server):
-            raise HTTPException(400, f"Guarda primero el token de MetaApi, login, contraseña y servidor de {engine.bk}")
-        api = MetaApi(c.metaapi_token, c.metaapi_region, c.metaapi_base_url)
+    @router.post("/hfm/reconnect")
+    async def hfm_reconnect():
+        api, _, account_id = _bridge()
         try:
-            acc = await api.find_account(c.mt_login, c.mt_server)
-            if not acc:
-                created = await api.provision(c.mt_login, c.mt_password, c.mt_server, c.mt_platform, name=engine.profile.metaapi_name, plan=c.metaapi_plan, keywords=engine.profile.keywords)
-                acc = await api.account(created.get("id") or created.get("_id"))
-                await engine.log("INFO", f"Cuenta {engine.bk} {c.mt_login} vinculada en MetaApi ({c.metaapi_region} · {PLANS[c.metaapi_plan]['label']})")
-            if acc.get("state") in ("UNDEPLOYED", "CREATED"):
-                await api.deploy(acc["_id"])
-                acc = await api.account(acc["_id"])
-        except MetaApiError as e:
+            await api.reconnect(account_id)
+            acc = await api.account(account_id)
+        except BridgeError as e:
             raise HTTPException(424, e.msg)
-        except Exception as e:
-            raise HTTPException(424, f"No se pudo vincular la cuenta: {str(e)[:160]}")
         finally:
             await api.aclose()
-        await store.update({"metaapi_account_id": acc["_id"], "hfm_state": acc.get("state", ""), "hfm_connection": acc.get("connectionStatus", ""), **_plan_patch(acc)})
+        await store.update({"hfm_state": acc["state"], "hfm_connection": acc["connection"]})
         _chart_backoff_reset()
-        hint = _plan_hint(acc)
-        return {"ok": True, "account": _acc_view(acc), "plan_mismatch": bool(hint),
-                "hint": hint or "Despliegue solicitado: la conexión tarda 1-3 minutos. Pulsa «Probar conexión» para ver el estado."}
-
-    @router.post("/hfm/recreate")
-    async def hfm_recreate():
-        """Delete the MetaApi account and create it again with the selected plan (type/reliability can't be changed in place)."""
-        c = store.cfg
-        if not (c.metaapi_token and c.mt_login and c.mt_password and c.mt_server):
-            raise HTTPException(400, f"Guarda primero el token de MetaApi, login, contraseña y servidor de {engine.bk}")
-        if engine.running:
-            raise HTTPException(409, "Detén el bot antes de recrear la cuenta en MetaApi")
-        plan = PLANS[c.metaapi_plan]
-        api = MetaApi(c.metaapi_token, c.metaapi_region, c.metaapi_base_url)
-        removed = ""
-        try:
-            old = await api.find_account(c.mt_login, c.mt_server) or ({"_id": c.metaapi_account_id} if c.metaapi_account_id else None)
-            if old and old.get("_id"):
-                try:
-                    await api.undeploy(old["_id"])
-                except MetaApiError:
-                    pass
-                await api.delete_account(old["_id"])
-                removed = f"{PLANS[plan_key(old.get('type'), old.get('reliability'))]['short']} ({old['_id'][:8]}…)" if old.get("type") else old["_id"][:8] + "…"
-            created = await api.provision(c.mt_login, c.mt_password, c.mt_server, c.mt_platform, name=engine.profile.metaapi_name, plan=c.metaapi_plan, keywords=engine.profile.keywords)
-            acc = await api.account(created.get("id") or created.get("_id"))
-            if acc.get("state") in ("UNDEPLOYED", "CREATED"):
-                await api.deploy(acc["_id"])
-                acc = await api.account(acc["_id"])
-        except MetaApiError as e:
-            raise HTTPException(424, e.msg)
-        except Exception as e:
-            raise HTTPException(424, f"No se pudo recrear la cuenta: {str(e)[:160]}")
-        finally:
-            await api.aclose()
-        await store.update({"metaapi_account_id": acc["_id"], "hfm_state": acc.get("state", ""), "hfm_connection": acc.get("connectionStatus", ""),
-                               "hfm_verified_at": None, "hfm_verified_equity": None, "hfm_trade_allowed": None, **_plan_patch(acc)})
-        await engine.log("INFO", f"Cuenta {engine.bk} {c.mt_login} recreada en MetaApi como {plan['label']}" + (f" · eliminada la anterior {removed}" if removed else ""))
-        return {"ok": True, "account": _acc_view(acc), "removed": removed,
-                "hint": f"Cuenta recreada como {plan['label']}: la conexión tarda 1-3 minutos. Pulsa «Probar conexión» para verificarla de nuevo."}
-
-    @router.post("/hfm/redeploy")
-    async def hfm_redeploy():
-        c = store.cfg
-        if not (c.metaapi_token and c.metaapi_account_id):
-            raise HTTPException(400, "Vincula primero la cuenta en MetaApi")
-        api = MetaApi(c.metaapi_token, c.metaapi_region, c.metaapi_base_url)
-        try:
-            await api.redeploy(c.metaapi_account_id)
-            acc = await api.account(c.metaapi_account_id)
-        except MetaApiError as e:
-            raise HTTPException(424, e.msg)
-        finally:
-            await api.aclose()
-        await store.update({"hfm_state": acc.get("state", ""), "hfm_connection": acc.get("connectionStatus", ""), "hfm_verified_at": None})
-        _chart_backoff_reset()
-        await engine.log("INFO", f"Redespliegue de la cuenta {engine.bk} en MetaApi solicitado")
-        return {"ok": True, "account": _acc_view(acc), "hint": "Redespliegue en curso (1-3 minutos). Vuelve a «Probar conexión»."}
+        await engine.log("INFO", f"Reconexión de la cuenta {engine.bk} ({account_id}) solicitada al puente MT · {acc['state'] or '?'} · {acc['connection'] or '?'}")
+        return {"ok": True, "account": {**acc, "id": account_id}, "hint": "Reconexión solicitada. Vuelve a «Probar conexión» en unos segundos."}
 
     @router.post("/hfm/symbols")
     async def hfm_symbols():
-        c = store.cfg
-        if not (c.metaapi_token and c.metaapi_account_id):
-            raise HTTPException(400, "Vincula y verifica primero la cuenta en MetaApi")
+        if not store.conn[1]:
+            raise HTTPException(400, "Configura primero el Token del Puente")
         broker = engine.broker or engine.new_broker()
         try:
             return await _check_symbols(broker)
@@ -196,7 +115,7 @@ def register(router, engine, store):
 
     async def _check_symbols(broker) -> dict:
         """Quote + tradability of every active pair with the configured suffix; the result feeds the «Pasar a REAL» checklist.
-        Temporary MetaApi failures are reported but never persisted as 'not tradable' (that would block the pair in REAL)."""
+        Temporary bridge failures are reported but never persisted as 'not tradable' (that would block the pair in REAL)."""
         s = await engine.get_settings()
         rows = {sym: await broker.check_symbol(sym) for sym in s.symbols}
         errors = [sym for sym, r in rows.items() if r.get("transient")]
@@ -210,18 +129,17 @@ def register(router, engine, store):
         await engine.log("RISK" if bad or errors else "INFO", f"Símbolos {engine.bk} comprobados · {len(rows) - len(bad) - len(errors)}/{len(rows)} operables"
                          + (f" · nombres resueltos en la cuenta: {', '.join(f'{k} → {v}' for k, v in resolved.items())}" if resolved else "")
                          + (f" · sin cotización: {', '.join(missing)}" if missing else "") + (f" · NO operables con el sufijo «{broker.suffix}»: {', '.join(disabled)} ({engine.profile.suffix_hint})" if disabled else "")
-                         + (f" · sin respuesta de MetaApi (repite la comprobación): {', '.join(errors)}" if errors else ""))
+                         + (f" · sin respuesta del puente MT (repite la comprobación): {', '.join(errors)}" if errors else ""))
         return {"suffix": broker.suffix, "symbols": rows, "missing": missing, "disabled": disabled, "errors": errors, "resolved": resolved, "checked_at": store.cfg.hfm_symbols_checked_at}
 
     @router.post("/hfm/detect-suffix")
     async def hfm_detect_suffix(apply: bool = True):
-        c = store.cfg
-        if not (c.metaapi_token and c.metaapi_account_id):
-            raise HTTPException(400, "Vincula y verifica primero la cuenta en MetaApi")
+        if not store.conn[1]:
+            raise HTTPException(400, "Configura primero el Token del Puente")
         broker = engine.broker or engine.new_broker()
         try:
             det = await _detect_suffix(broker, apply)
-        except MetaApiError as e:
+        except BridgeError as e:
             raise HTTPException(424, e.msg)
         finally:
             if broker is not engine.broker:
@@ -253,19 +171,17 @@ def register(router, engine, store):
         acc = await engine.account_summary()
         active = (await engine.get_settings()).symbols
         unchecked = [sym for sym in active if sym not in (c.hfm_symbols_checked or [])] if c.hfm_symbols_bad is not None else []
-        current_plan = plan_key(c.hfm_account_type, c.hfm_reliability) if c.metaapi_account_id and c.hfm_account_type else ""
-        plan_mismatch = bool(current_plan and current_plan != c.metaapi_plan)
+        connected = c.hfm_state in ("DEPLOYED",) and c.hfm_connection in HFM_OK_CONN
         checks = [
-            {"key": "keys", "label": f"Token de MetaApi y cuenta {engine.bk} guardados", "ok": bool(c.metaapi_token and c.mt_login and c.mt_password and c.mt_server), "required": True},
-            {"key": "linked", "label": "Cuenta vinculada y desplegada en MetaApi", "ok": bool(c.metaapi_account_id and c.hfm_state == "DEPLOYED"), "required": True,
-             "warn": bool(c.hfm_connection and c.hfm_connection != "CONNECTED") or plan_mismatch,
-             "detail": f"{c.hfm_state or 'sin vincular'}{' · ' + c.hfm_connection if c.hfm_connection else ''}"
-                       + (f" · {PLANS[current_plan]['short']}" if current_plan else "")
-                       + (f" (elegido {PLANS[c.metaapi_plan]['short']}: recrear la cuenta)" if plan_mismatch else "")},
+            {"key": "keys", "label": "Puente MetaTrader configurado (URL, token e ID de cuenta)", "ok": bool(store.conn[1]), "required": True,
+             "detail": f"{store.conn[0]} · cuenta {store.conn[2]}"},
+            {"key": "linked", "label": "Cuenta conectada en el puente", "ok": connected, "required": True,
+             "warn": bool(c.hfm_connection and c.hfm_connection != "CONNECTED"),
+             "detail": f"{c.hfm_state or 'sin probar'}{' · ' + c.hfm_connection if c.hfm_connection else ''}"},
             {"key": "verified", "label": f"Conexión verificada con {engine.bk} {c.mt_server or ''}".strip(), "ok": bool(c.hfm_verified_at), "required": True,
              "detail": f"equidad {c.hfm_verified_equity:,.2f} {c.hfm_currency}" if c.hfm_verified_equity is not None else None},
-            {"key": "trade_allowed", "label": "La cuenta permite operar (contraseña master)", "ok": c.hfm_trade_allowed is not False, "required": True,
-             "detail": None if c.hfm_trade_allowed is not False else "trading deshabilitado o contraseña investor"},
+            {"key": "trade_allowed", "label": "La cuenta permite operar (trading automático habilitado)", "ok": c.hfm_trade_allowed is not False, "required": True,
+             "detail": None if c.hfm_trade_allowed is not False else "trading deshabilitado en el terminal o contraseña investor"},
             {"key": "symbols", "label": f"Pares operables en {engine.bk} con el sufijo de símbolos configurado", "ok": c.hfm_symbols_bad == [] and not unchecked, "required": True,
              "detail": ("sin comprobar · pulsa «Probar conexión» o «Comprobar símbolos»" if c.hfm_symbols_bad is None
                         else f"no operables: {', '.join(c.hfm_symbols_bad)} · revisa el sufijo" if c.hfm_symbols_bad
@@ -304,7 +220,7 @@ def register(router, engine, store):
             if body.reset_stats:
                 await engine.reset_account(store.cfg.hfm_verified_equity or None)
             demo = engine.account_kind() == "demo"
-            await engine.log("RISK", f"MODO REAL ACTIVADO · {engine.bk} {store.cfg.mt_server} vía MetaApi · " + ("cuenta DEMO: dinero ficticio, el bot opera igual que en real" if demo else "el bot operará con dinero real al iniciarse"))
+            await engine.log("RISK", f"MODO REAL ACTIVADO · {engine.bk} {store.cfg.mt_server} vía puente MT · " + ("cuenta DEMO: dinero ficticio, el bot opera igual que en real" if demo else "el bot operará con dinero real al iniciarse"))
             await engine.tg(f"🚨 <b>MODO REAL ACTIVADO</b> · {engine.bk} {store.cfg.mt_server}{' · <b>cuenta DEMO</b>' if demo else ''}\nEquidad {store.cfg.hfm_verified_equity or 0:,.2f} {store.cfg.hfm_currency}. "
                             + ("Dinero ficticio del servidor demo; el bot opera y aprende igual que en real." if demo else "El bot operará con dinero real cuando lo inicies."), "orders")
         else:

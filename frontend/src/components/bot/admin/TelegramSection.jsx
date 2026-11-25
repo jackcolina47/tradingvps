@@ -16,7 +16,7 @@ const ALERTS = [
   ["plan", "Avisos del plan de crecimiento"],
   ["review", "Revisión IA automática y poda de pares"],
   ["news", "Alertas de noticias graves y eventos macro"],
-  ["system", "Conexión con el bróker (HFM, Pepperstone / MetaApi) caída o restablecida"],
+  ["system", "Conexión con el bróker (HFM, Pepperstone / puente MetaTrader) caída o restablecida"],
 ];
 
 const BOTS = [["bybit", "Bybit"], ["hfm", "HotForex"], ["pepperstone", "Pepperstone"]];

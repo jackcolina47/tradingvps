@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { http, errMsg, fmtSignedUsd, fmtDateTime, pnlClass } from "@/lib/api";
 import { Field, INPUT, BTN_OUT } from "./SecuritySection";
 
-const SOURCE = { paper: "cuenta paper", bybit: "Bybit", hfm: "bróker (MetaApi)" };
+const SOURCE = { paper: "cuenta paper", bybit: "Bybit", hfm: "bróker (MetaTrader)" };
 
 // Deposits / withdrawals: manual in paper (simulate the plan's monthly contributions), auto-detected from the broker in REAL mode.
 export default function CashFlowsCard({ account, refresh, currency = "USDT" }) {

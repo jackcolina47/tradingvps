@@ -51,12 +51,12 @@ async def _bot(eng, cfg_keys: tuple, cfg, extra: dict) -> dict:
 async def snapshot(panel: str) -> dict:
     c_cfg = ("telegram_enabled", "telegram_alerts", "auto_review_enabled", "auto_review_frequency", "auto_review_day", "auto_review_apply", "auto_review_last_at",
              "trading_mode", "bybit_env", "bybit_verified_at", "bybit_alert_after_sec")
-    f_cfg = ("trading_mode", "account_type", "mt_server", "mt_platform", "hfm_state", "hfm_connection", "hfm_verified_at", "hfm_trade_allowed", "hfm_alert_after_sec", "mt_symbol_suffix",
+    f_cfg = ("trading_mode", "account_type", "mt_server", "bridge_account_id", "hfm_state", "hfm_connection", "hfm_verified_at", "hfm_trade_allowed", "hfm_alert_after_sec", "mt_symbol_suffix",
              "hfm_symbols_bad", "auto_review_enabled", "auto_review_frequency", "auto_review_apply", "auto_review_last_at")
     out = {"ahora_utc": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"), "panel_abierto_por_el_usuario": PANEL_LABEL.get(panel, PANEL_LABEL["crypto"]),
            "ia_activa": {k: v for k, v in ai_current().items() if k != "health"}, "ia_salud": ai_current()["health"].get("ok"),
            "llamadas_ia_hoy": ai_usage.snapshot(panel if panel in PANEL_LABEL else "crypto"),
-           "bots": {"crypto": "Bybit AI Trader (clave de bot: crypto)", **{e.profile.panel: f"{e.profile.bot_name} · bróker {e.profile.broker} vía MetaApi (clave de bot: {e.profile.panel})" for e, _ in FX_BOTS}}}
+           "bots": {"crypto": "Bybit AI Trader (clave de bot: crypto)", **{e.profile.panel: f"{e.profile.bot_name} · bróker {e.profile.broker} vía puente MetaTrader propio (clave de bot: {e.profile.panel})" for e, _ in FX_BOTS}}}
     try:
         out["cripto"] = await _bot(engine, c_cfg, store.cfg, {"fuente_datos": engine.market.provider, "exchange_error": engine.exchange_error})
     except Exception as e:

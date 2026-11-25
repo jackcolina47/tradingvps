@@ -15,6 +15,7 @@ from fx.market import FxMarket, market_open
 from fx import risk
 from fx import filters
 from fx.live import FxLiveBroker, is_our_link
+from fx.config import bridge_conn
 from fx.shadow import monitor_shadows
 import evolution
 import position_review
@@ -68,11 +69,11 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
         self.cfg = cfg
         self.live = cfg.trading_mode == "live"
         self.costs = self.profile.costs(cfg.account_type)
-        key = (cfg.metaapi_token, cfg.metaapi_account_id, cfg.metaapi_region, cfg.metaapi_base_url, cfg.mt_symbol_suffix)
+        key = (*bridge_conn(cfg, self.profile), cfg.mt_symbol_suffix)
         if key != self._broker_key:
             if self.broker:
                 await self.broker.aclose()
-            self.broker = FxLiveBroker(*key, symbol_map=cfg.mt_symbol_map, suffixes=self.profile.suffixes) if cfg.metaapi_token and cfg.metaapi_account_id else None
+            self.broker = FxLiveBroker(*key, symbol_map=cfg.mt_symbol_map, suffixes=self.profile.suffixes, aliases=self.profile.symbol_aliases) if key[1] else None
             self._broker_key = key
             self.broker_error = None
             self.hfm = _fresh_health()
@@ -106,7 +107,7 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
 
     def new_broker(self) -> FxLiveBroker:
         c = self.cfg
-        return FxLiveBroker(c.metaapi_token, c.metaapi_account_id, c.metaapi_region, c.metaapi_base_url, c.mt_symbol_suffix, c.mt_symbol_map, self.profile.suffixes)
+        return FxLiveBroker(*bridge_conn(c, self.profile), c.mt_symbol_suffix, c.mt_symbol_map, self.profile.suffixes, self.profile.symbol_aliases)
 
     async def tg(self, text: str, kind: str):
         await notify.notify(f"{self.profile.tg_icon} <b>{self.profile.tg_name}</b>\n{text}", kind, bot=self.profile.key)
@@ -229,13 +230,13 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
             await position_review.review_open_positions(self, settings, "USD", self.profile.bot_name)
 
     async def _hfm_health(self, synced: bool):
-        """Watches the MetaApi account (terminal state + client API) in REAL mode; alerts once per outage, reminds every 6 h, confirms recovery."""
+        """Watches the bridge account (terminal state + API) in REAL mode; alerts once per outage, reminds every 6 h, confirms recovery."""
         h, now = self.hfm, time.time()
         if now - h["checked_at"] >= (HFM_HEALTH_SEC if h["ok"] is not False else HFM_HEALTH_RETRY_SEC):
             h["checked_at"] = now
             try:
                 acc = await self.broker.api.account(self.broker.account_id)
-                h.update(state=acc.get("state") or "", connection=acc.get("connectionStatus") or "", api_error=None)
+                h.update(state=acc["state"], connection=acc["connection"], api_error=None)
                 if h["connection"] == "CONNECTED":
                     self.broker.chart_fail_ts = 0.0
             except Exception as e:
@@ -244,7 +245,7 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
             if self.store and h["state"] and (h["state"], h["connection"]) != (self.cfg.hfm_state, self.cfg.hfm_connection):
                 await self.store.update({"hfm_state": h["state"], "hfm_connection": h["connection"]})
         ok = synced and h["state"] in HFM_OK_STATES and h["connection"] in HFM_OK_CONN
-        error = (self.broker_error if not synced else None) or h["api_error"] or f"MetaApi: cuenta {h['state'] or '?'} · conexión {h['connection'] or '?'}"
+        error = (self.broker_error if not synced else None) or h["api_error"] or f"Puente MT: cuenta {h['state'] or '?'} · conexión {h['connection'] or '?'}"
         event, dur = broker_health.transition(h, ok, error, self.cfg.hfm_alert_after_sec, now)
         if event == "up":
             await self.log("INFO", f"Conexión con {self.bk} restablecida · estuvo sin conexión {fmt_duration(dur)}")
@@ -252,7 +253,7 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
         elif event:
             remind = event == "remind"
             n = await self.db.positions.count_documents({"live": True})
-            await self.log("ERROR", f"Cuenta {self.bk} sin conexión con MetaApi desde hace {fmt_duration(dur)} · {h['error']}")
-            hint = f"\nSi persiste, revisa la cuenta en Ajustes → {self.bl} (Probar conexión / Redesplegar)." if (h["state"] not in HFM_OK_STATES or "DISCONNECTED" in h["connection"]) else ""
-            await self.tg(f"🔌 <b>Cuenta {self.bk} {'sigue ' if remind else ''}sin conexión con MetaApi</b> · {fmt_duration(dur)}\n{h['error']}\n"
+            await self.log("ERROR", f"Cuenta {self.bk} sin conexión con el puente MT desde hace {fmt_duration(dur)} · {h['error']}")
+            hint = f"\nSi persiste, revisa la cuenta en Ajustes → {self.bl} (Probar conexión / Reconectar)." if (h["state"] not in HFM_OK_STATES or "DISCONNECTED" in h["connection"]) else ""
+            await self.tg(f"🔌 <b>Cuenta {self.bk} {'sigue ' if remind else ''}sin conexión con el puente MT</b> · {fmt_duration(dur)}\n{h['error']}\n"
                           f"{n} posición(es) real(es) abiertas: siguen protegidas por su SL/TP en el bróker. El bot no abrirá nuevas operaciones hasta reconectar.{hint}", "system")

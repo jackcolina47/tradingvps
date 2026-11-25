@@ -4,7 +4,7 @@ export function buildFeatures(bot) {
   const pep = bot === "pepper";
   const name = pep ? "Pepperstone AI trading" : fx ? "HotForex AI Trading" : "Bybit AI Trader";
   const market = fx ? "forex y metales (oro, plata y 10 pares mayores/cruces)" : "futuros perpetuos USDT de Bybit";
-  const broker = pep ? "tu cuenta MetaTrader de Pepperstone a través de MetaApi.cloud" : fx ? "tu cuenta HFM (HotForex) a través de MetaApi.cloud" : "tu cuenta de Bybit (API V5 firmada)";
+  const broker = pep ? "tu cuenta MetaTrader de Pepperstone a través de tu puente MetaTrader propio" : fx ? "tu cuenta HFM (HotForex) a través de tu puente MetaTrader propio" : "tu cuenta de Bybit (API V5 firmada)";
   const cur = fx ? "USD" : "USDT";
   const hours = fx ? "03:00–04:00, 08:00–12:00 y 19:00–00:00" : "las 24 horas (sin ventanas)";
   const hero = {

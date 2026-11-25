@@ -3,7 +3,7 @@
 ## Qué es
 Panel web (español) con tres bots de trading automático que comparten clave de acceso, IA, Telegram y copias de seguridad:
 - **Bybit AI Trader** (`/bybit`, API `/api/*`, clave de bot `crypto`): futuros perpetuos USDT. Datos Bybit v5; si la región está bloqueada usa Bitget como espejo.
-- **HotForex AI Trading** (`/hotforex`, API `/api/fx/*`, clave `fx`): forex y metales (12 pares) vía MetaApi/MetaTrader.
+- **HotForex AI Trading** (`/hotforex`, API `/api/fx/*`, clave `fx`): forex y metales (12 pares) vía nuestro puente MetaTrader propio (URL + token + ID de cuenta en Ajustes).
 - **Pepperstone AI trading** (`/pepperstone`, API `/api/pepper/*`, clave `pepper`): el mismo motor FX como instancia independiente.
 Cada bot tiene cuenta paper propia (capital inicial $500), ajustes, posiciones, historial, señales, logs, plan y evolución independientes.
 
@@ -26,7 +26,7 @@ Disparo en :00/:15/:30/:45 + 8 s (`funnel.next_trigger`), solo dentro del horari
 - SL/TP: `atr_levels_enabled` → `atr_sl_mult`×ATR / `atr_tp_mult`×ATR (2 / 4 por defecto); apagado → niveles de la IA si son válidos (stop 0,5–4 ATR, R:R ≥ 1).
 - Tamaño: (equidad actual × `risk_per_trade` %) ÷ (distancia al stop + comisiones/spread): cada stop cuesta `risk_per_trade` % (1 % por defecto) de la equidad. `atr_levels_enabled` viene encendido (SL 2×ATR, TP 4×ATR). FX: `min_lot_max_risk` 1 % por defecto (si el lote mínimo arriesga más, no se abre).
 - FX · regla del viernes (`close_before_weekend`): sin entradas desde las 12:00 NY y cierre de todo a las 15:30 NY (motivo FIN_SEMANA).
-- FX: con la cuenta MetaApi desplegada usa velas y volumen de ticks del bróker; con Yahoo usa el rango de la vela.
+- FX: con la cuenta del puente MetaTrader conectada usa velas y volumen de ticks del bróker; con Yahoo usa el rango de la vela.
 
 ## Horario y eventos rojos (`trade_guard.py`)
 Hora de Nueva York, todos los días. FX: 03:00–04:00, 08:00–12:00, 19:00–00:00 (y mercado forex abierto). Cripto (Bybit): 24 horas, todos los días, sin ventanas.

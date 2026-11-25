@@ -1,4 +1,4 @@
-"""Deposits and withdrawals ("cash flows"). In REAL mode they are detected from the broker (Bybit transaction log · MetaApi balance deals); in
+"""Deposits and withdrawals ("cash flows"). In REAL mode they are detected from the broker (Bybit transaction log · MetaTrader balance deals); in
 paper they are entered from the panel. Every flow is stored in db.cash_flows and neutralised in the statistics: it moves day_start_equity (daily
 PnL / daily loss limit), net_deposits (total PnL and return over contributed capital) and the deposit-adjusted peak used for the drawdown."""
 import time

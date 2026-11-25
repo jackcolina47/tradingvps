@@ -252,13 +252,9 @@ class FxSettingsUpdate(BaseModel):
 
 
 class HfmTestRequest(BaseModel):
-    metaapi_token: str = ""
-    mt_login: str = ""
-    mt_password: str = ""
-    mt_server: Optional[str] = None
-    mt_platform: Optional[str] = None
-    metaapi_region: Optional[str] = None
-    metaapi_base_url: Optional[str] = None
+    bridge_token: str = ""
+    bridge_url: Optional[str] = None
+    bridge_account_id: Optional[str] = None
 
 
 class FxBacktestRequest(BaseModel):

@@ -38,7 +38,7 @@ y copia de seguridad nocturna de MongoDB (03:00 UTC, los domingos también por T
 | `bash restore.sh backups/<archivo>` | restaurar una copia (.json.gz) · reemplaza la base de datos y deja los tres bots detenidos |
 
 Archivos sensibles (no se suben a git): `deploy/.env`, `deploy/backend.env`, `deploy/backups/`.
-**Haz copia de `backend.env`**: `CREDENTIAL_ENCRYPTION_KEY` cifra las claves de Bybit y MetaApi guardadas;
+**Haz copia de `backend.env`**: `CREDENTIAL_ENCRYPTION_KEY` cifra las claves de Bybit y el token del puente MetaTrader guardados;
 si se pierde habrá que volver a introducirlas.
 
 Copias de seguridad:

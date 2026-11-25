@@ -3,7 +3,7 @@ export function buildHowTo(bot) {
   const fx = bot === "fx" || bot === "pepper";
   const pep = bot === "pepper";
   const cur = fx ? "USD" : "USDT";
-  const brokerName = pep ? "Pepperstone (MetaApi)" : fx ? "HFM (MetaApi)" : "Bybit";
+  const brokerName = pep ? "Pepperstone (puente MetaTrader)" : fx ? "HFM (puente MetaTrader)" : "Bybit";
   const hours = fx ? "03:00–04:00, 08:00–12:00 y 19:00–00:00" : "las 24 horas (sin ventanas)";
   return [
     {
@@ -101,8 +101,8 @@ export function buildHowTo(bot) {
     {
       id: "real", icon: "Landmark", title: `10 · Pasar a modo REAL con ${brokerName}`,
       steps: fx ? [
-        "Crea una cuenta en MetaApi.cloud y copia su token. En Ajustes introduce el token y los datos de tu cuenta MetaTrader (login, contraseña de operación, servidor, plataforma).",
-        "Pulsa «Vincular y probar»: se despliega la cuenta en MetaApi y se comprueba conexión, permiso de trading y símbolos operables.",
+        "En Ajustes introduce la URL de tu puente MetaTrader, el Token del Puente y el ID de Cuenta (el puente ya guarda el login y la contraseña de MetaTrader).",
+        "Pulsa «Guardar» y «Probar conexión»: se comprueba la conexión con el puente, el permiso de trading, el sufijo y los símbolos operables (en HFM Zero el oro y la plata se resuelven solos como GOLDb y SILVERb).",
         "Con la cuenta conectada, el embudo usa las velas y el volumen de ticks de tu bróker.",
         "Detén el bot, cierra las posiciones paper y cambia a REAL escribiendo la palabra de confirmación.",
         "Empieza con riesgo bajo. El stop y el objetivo se envían al bróker con cada orden, así que la posición queda protegida aunque el servidor se apague.",

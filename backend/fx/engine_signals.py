@@ -65,7 +65,7 @@ class SignalsMixin:
     funnel_late_atr = 0.35      # a market entry is dropped when the price already ran this many ATR past the signal candle's close
 
     async def funnel_frame(self, symbol: str, tf: str, limit: int = 300):
-        """Candles with the broker's tick volume while the MetaApi account is deployed; Yahoo (no volume → candle range) otherwise."""
+        """Candles with the broker's tick volume while the bridge account is connected; Yahoo (no volume → candle range) otherwise."""
         b = self.broker
         if b and self.cfg and self.cfg.hfm_state == "DEPLOYED" and time.time() - b.chart_fail_ts > 60:
             try:
@@ -98,7 +98,7 @@ class SignalsMixin:
         docs = await self.db.positions.find({}, {"symbol": 1, "horizon": 1, "exit_mode": 1}).to_list(100)
         used = len([p for p in docs if (p.get("horizon") or "short") == "short" and p.get("exit_mode") != "cross"])
         block = ("límite de pérdida diaria alcanzado" if acc["daily_paused"] else filters.rollover_block(settings.rollover_guard)
-                 or (f"cuenta {self.bk} sin conexión con MetaApi" if self.live and self.hfm["down_since"] else None)
+                 or (f"cuenta {self.bk} sin conexión con el puente MT" if self.live and self.hfm["down_since"] else None)
                  or ("regla del viernes · sin entradas nuevas desde las 12:00 NY" if settings.close_before_weekend and trade_guard.friday()["block"] else None)
                  or (f"máximo de posiciones alcanzado ({settings.max_positions})" if used >= settings.max_positions else None))
         return {"acc": acc, "open": {p["symbol"] for p in docs}, "free": settings.max_positions - used, "block": block}
@@ -148,7 +148,7 @@ class SignalsMixin:
             if exp:
                 return exp, "EXPOSICION", open_syms
         if self.live and self.hfm["down_since"]:
-            return f"cuenta {self.bk} sin conexión con MetaApi", "BLOQUEADA", open_syms
+            return f"cuenta {self.bk} sin conexión con el puente MT", "BLOQUEADA", open_syms
         if self.live and self.cfg and symbol in (self.cfg.hfm_symbols_bad or []):
             return f"par no operable en {self.bk} con el sufijo de símbolos configurado (Ajustes → {self.bl} → Comprobar símbolos)", "BLOQUEADA", open_syms
         return None, None, open_syms

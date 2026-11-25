@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Landmark, Loader2, Plug, Trash2, Link2, RefreshCw, ListChecks, ChevronDown } from "lucide-react";
+import { Landmark, Loader2, Plug, Trash2, RefreshCw, ListChecks, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -7,20 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Panel } from "@/components/bot/Panel";
 import { http, errMsg, fmtDateTime } from "@/lib/api";
 import { Field, INPUT, BTN, BTN_OUT } from "@/components/bot/admin/SecuritySection";
-import { HfmPlanPicker, HfmRecreateNotice } from "./HfmPlanPicker";
 import { HfmSwitchAccount } from "./HfmSwitchAccount";
 import { useBrand } from "./brand";
 
 const STATE_TONE = { DEPLOYED: "border-emerald-500/40 text-emerald-400", TOKEN_OK: "border-sky-500/40 text-sky-300" };
-const REDEPLOY_STATES = ["DEPLOY_FAILED", "REDEPLOY_FAILED", "UNDEPLOYED", "DISCONNECTED", "DISCONNECTED_FROM_BROKER"];
-const Sel = ({ value, onChange, options, testId, render }) => (
-  <Select value={value} onValueChange={onChange}>
-    <SelectTrigger data-testid={testId} className={INPUT}><SelectValue /></SelectTrigger>
-    <SelectContent className="border-[#1E293B] bg-[#0D111A]">
-      {options.map((o) => <SelectItem key={o} value={o} className="font-mono text-xs">{render ? render(o) : o}</SelectItem>)}
-    </SelectContent>
-  </Select>
-);
+const RECONNECT_STATES = ["UNDEPLOYED", "DISCONNECTED", "DISCONNECTED_FROM_BROKER", "DEPLOY_FAILED"];
 
 function SymbolsCheck({ data, bk }) {
   const rows = Object.entries(data.symbols);
@@ -31,7 +22,7 @@ function SymbolsCheck({ data, bk }) {
   const head = bad
     ? [data.missing.length ? `${data.missing.length} par(es) sin cotización en ${bk}: ${data.missing.join(", ")}` : "",
        disabled.length ? `${disabled.length} par(es) cotizan pero NO son operables en esta cuenta: ${disabled.join(", ")}` : ""].filter(Boolean).join(" · ") + " · revisa el sufijo de símbolos y el tipo de cuenta"
-    : errors.length ? `MetaApi no respondió para ${errors.join(", ")} · repite la comprobación en unos segundos`
+    : errors.length ? `El puente MT no respondió para ${errors.join(", ")} · repite la comprobación en unos segundos`
     : `Los ${rows.length} pares activos cotizan y son operables en ${bk}${data.suffix ? ` con sufijo «${data.suffix}»` : " sin sufijo"}`;
   return (
     <div data-testid="hfm-symbols-result" className="rounded-sm border border-[#1E293B] bg-[#0B1220] p-3 font-mono text-[11px] text-slate-300">
@@ -97,12 +88,12 @@ export default function HfmSection({ config, onSave, onRefresh, account }) {
   const bk = brand.broker;
   const broker = config.broker || {};
   const accountTypes = broker.account_types || [];
-  const servers = (broker.servers || {})[config.mt_platform || "mt5"] || [];
-  const [form, setForm] = useState({ metaapi_token: "", mt_login: config.mt_login || "", mt_password: "", mt_server: config.mt_server || "",
-    mt_platform: config.mt_platform || "mt5", metaapi_region: config.metaapi_region || "new-york", mt_symbol_suffix: config.mt_symbol_suffix || "",
-    metaapi_base_url: config.metaapi_base_url || "", hfm_alert_after_sec: config.hfm_alert_after_sec ?? 180, metaapi_plan: config.metaapi_plan || "g2-high",
-    account_type: broker.account_type || "" });
-  const [advanced, setAdvanced] = useState(!!config.metaapi_base_url);
+  const defaults = config.bridge_defaults || {};
+  const effective = config.bridge_effective || {};
+  const blank = () => ({ bridge_url: config.bridge_url || "", bridge_token: "", bridge_account_id: config.bridge_account_id || "", mt_symbol_suffix: config.mt_symbol_suffix || "",
+    hfm_alert_after_sec: config.hfm_alert_after_sec ?? 180, account_type: broker.account_type || "" });
+  const [form, setForm] = useState(blank);
+  const [advanced, setAdvanced] = useState(false);
   const [busy, setBusy] = useState("");
   const [result, setResult] = useState(null);
   const [symbols, setSymbols] = useState(null);
@@ -114,41 +105,29 @@ export default function HfmSection({ config, onSave, onRefresh, account }) {
 
   const save = async () => {
     setBusy("save");
-    const body = Object.fromEntries(Object.entries(form).filter(([k, v]) => v !== "" || !["metaapi_token", "mt_password", "account_type"].includes(k)));
+    const body = Object.fromEntries(Object.entries(form).filter(([k, v]) => v !== "" || !["bridge_token", "account_type"].includes(k)));
     body.hfm_alert_after_sec = Math.min(3600, Math.max(10, Number(form.hfm_alert_after_sec) || 180));
-    const ok = await onSave(body, `Datos de ${bk} guardados · vincula y prueba la conexión`);
+    const ok = await onSave(body, `Puente de ${bk} guardado · prueba la conexión`);
     setBusy("");
     if (ok) {
-      setForm((f) => ({ ...f, metaapi_token: "", mt_password: "", hfm_alert_after_sec: body.hfm_alert_after_sec }));
+      setForm((f) => ({ ...f, bridge_token: "", hfm_alert_after_sec: body.hfm_alert_after_sec }));
       if (body.mt_symbol_suffix !== config.mt_symbol_suffix) setSymbols(null);
     }
   };
   const test = () => run("test", async () => {
     setResult(null);
-    const { data } = await http.post("/hfm/test", form.metaapi_token ? { ...form } : {});
+    const { data } = await http.post("/hfm/test", form.bridge_token ? { bridge_token: form.bridge_token, bridge_url: form.bridge_url, bridge_account_id: form.bridge_account_id } : {});
     setResult(data);
     if (data.suffix && data.suffix.suffix !== null && data.suffix.suffix !== undefined) setForm((f) => ({ ...f, mt_symbol_suffix: data.suffix.suffix }));
     if (data.symbols) setSymbols(data.symbols);
     const badSymbols = data.symbols ? data.symbols.missing.length + (data.symbols.disabled || []).length : 0;
-    toast[data.info && (data.info.tradeAllowed === false || badSymbols) ? "warning" : "success"](data.info ? (data.info.tradeAllowed === false ? "Conectada, pero sin permiso de trading" : badSymbols ? `Conectada · ${badSymbols} par(es) no operables: revisa el sufijo` : `Cuenta ${bk} conectada vía MetaApi`) : data.hint || "Token válido");
+    toast[data.info && data.info.tradeAllowed !== false && !badSymbols ? "success" : "warning"](data.info ? (data.info.tradeAllowed === false ? "Conectada, pero sin permiso de trading" : badSymbols ? `Conectada · ${badSymbols} par(es) no operables: revisa el sufijo` : `Cuenta ${bk} conectada vía puente MT`) : data.hint || "Token válido");
     onRefresh?.();
   });
-  const link = () => run("link", async () => {
-    const { data } = await http.post("/hfm/link");
+  const reconnect = () => run("reconnect", async () => {
+    const { data } = await http.post("/hfm/reconnect");
     setResult((r) => ({ ...(r || {}), account: data.account, hint: data.hint }));
-    toast.success("Cuenta vinculada en MetaApi · desplegando");
-    onRefresh?.();
-  });
-  const redeploy = () => run("redeploy", async () => {
-    const { data } = await http.post("/hfm/redeploy");
-    setResult((r) => ({ ...(r || {}), account: data.account, hint: data.hint }));
-    toast.success("Redespliegue solicitado");
-    onRefresh?.();
-  });
-  const recreate = () => run("recreate", async () => {
-    const { data } = await http.post("/hfm/recreate");
-    setResult({ account: data.account, hint: data.hint, plan_mismatch: false });
-    toast.success(`Cuenta recreada en MetaApi · ${plans.find((p) => p.key === form.metaapi_plan)?.short || form.metaapi_plan}`);
+    toast.success("Reconexión solicitada al puente");
     onRefresh?.();
   });
   const checkSymbols = () => run("symbols", async () => {
@@ -160,98 +139,66 @@ export default function HfmSection({ config, onSave, onRefresh, account }) {
   });
   const clear = async () => {
     setBusy("clear");
-    const ok = await onSave({ clear_hfm: true }, `Datos de ${bk} eliminados`);
+    const ok = await onSave({ clear_hfm: true }, `Datos del puente de ${bk} eliminados`);
     setBusy(""); setResult(null); setSymbols(null);
-    if (ok) setForm({ metaapi_token: "", mt_login: "", mt_password: "", mt_server: "", mt_platform: "mt5", metaapi_region: "new-york", mt_symbol_suffix: "", metaapi_base_url: "", hfm_alert_after_sec: config.hfm_alert_after_sec ?? 180, metaapi_plan: "g2-high", account_type: broker.account_type || "" });
+    if (ok) setForm({ bridge_url: "", bridge_token: "", bridge_account_id: "", mt_symbol_suffix: "", hfm_alert_after_sec: config.hfm_alert_after_sec ?? 180, account_type: broker.account_type || "" });
   };
   const acc = result?.account;
-  const linked = !!config.metaapi_account_id;
-  const canRedeploy = linked && (REDEPLOY_STATES.includes(config.hfm_state) || REDEPLOY_STATES.includes(config.hfm_connection) || acc?.state === "DEPLOY_FAILED");
-  const plans = config.metaapi_plans || [];
-  const planLabel = (key) => plans.find((p) => p.key === key)?.label || key;
-  const currentPlan = acc?.plan || config.hfm_current_plan || "";
-  const mismatch = linked && !!currentPlan && config.metaapi_plan === form.metaapi_plan && currentPlan !== config.metaapi_plan;
-  const unsavedPlan = form.metaapi_plan !== (config.metaapi_plan || "g2-high");
-  const serverHint = broker.server_hint || "HFMarketsGlobal-Live2";
+  const ready = !!config.hfm_configured;
+  const hasSaved = !!(config.bridge_token || config.bridge_url || config.bridge_account_id || config.hfm_verified_at);
+  const canReconnect = ready && (RECONNECT_STATES.includes(config.hfm_state) || RECONNECT_STATES.includes(config.hfm_connection) || (acc && !result?.info));
+  const tokenLabel = config.bridge_token ? ` · guardado ${config.bridge_token}` : effective.token_source === "env" ? " · definido en el servidor (MT_BRIDGE_TOKEN)" : "";
 
   return (
-    <Panel testId="hfm-section" title={`${brand.brokerLong} · cuenta real vía MetaApi`} icon={Landmark} bodyClass="p-4 space-y-3"
-      actions={config.hfm_configured && (
+    <Panel testId="hfm-section" title={`${brand.brokerLong} · cuenta real vía puente MetaTrader`} icon={Landmark} bodyClass="p-4 space-y-3"
+      actions={ready && (
         <span data-testid="hfm-state-badge" className={`rounded-sm border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${config.hfm_verified_at ? STATE_TONE.DEPLOYED : STATE_TONE[config.hfm_state] || "border-amber-500/40 text-amber-300"}`}>
           {config.hfm_verified_at ? (config.hfm_trade_allowed === false ? "Solo lectura" : "Verificada") : config.hfm_state || "Sin verificar"}
         </span>
       )}>
       <p className="text-[12px] leading-relaxed text-slate-400">
-        {bk} opera con MetaTrader 4/5{brand.ctrader ? " y cTrader" : ""} y no tiene API REST, así que el puente es <span className="text-slate-200">MetaApi.cloud</span> (servicio de pago por uso: elige abajo el tipo de cuenta según coste y estabilidad). Pasos: 1) crea una cuenta en metaapi.cloud y copia el token (app.metaapi.cloud/token);
-        2) introduce el login MT, la contraseña <span className="text-slate-200">master</span> (la investor solo permite leer) y el servidor exacto de {bk} (p.ej. <span className="num text-slate-200">{serverHint}</span>);
-        3) guarda, <span className="text-slate-200">Vincular cuenta</span>, <span className="text-slate-200">Probar conexión</span> y <span className="text-slate-200">Comprobar símbolos</span>. Después activa el modo REAL en la tarjeta «Modo de operación». Empieza con una cuenta demo de {bk}.
-        {config.secrets_encrypted ? " Token y contraseña se guardan cifrados." : ""}
+        {bk} opera con MetaTrader 4/5 y no tiene API REST: el bot se conecta a <span className="text-slate-200">tu propio puente MetaTrader</span> (servidor Windows con el terminal abierto), que ya guarda el login y la contraseña de la cuenta.
+        Pasos: 1) indica la URL del puente, el token y el ID de cuenta; 2) <span className="text-slate-200">Guardar</span>, <span className="text-slate-200">Probar conexión</span> y <span className="text-slate-200">Comprobar símbolos</span>;
+        3) activa el modo REAL en la tarjeta «Modo de operación». Mientras no haya token, el bot sigue en paper con datos de Yahoo Finance.
+        {config.secrets_encrypted ? " El token se guarda cifrado." : ""}
       </p>
-      {brand.ctrader && (
-        <p data-testid="hfm-ctrader-note" className="rounded-sm border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] leading-relaxed text-amber-200/90">
-          <span className="font-semibold text-amber-300">cTrader:</span> MetaApi solo conecta cuentas MetaTrader. Si abres tu cuenta Pepperstone, elige la plataforma <span className="text-slate-100">MetaTrader 5</span> (o MT4) para que el bot pueda operar en real. Las cuentas cTrader pueden seguirse en paper, pero no se vinculan.
-        </p>
-      )}
-      <Field label={`Token de MetaApi${config.metaapi_token ? ` · guardado ${config.metaapi_token}` : ""}`}>
-        <Input data-testid="hfm-token-input" type="password" autoComplete="off" value={form.metaapi_token} placeholder={config.metaapi_token || "eyJhbGciOi…"} onChange={set("metaapi_token")} className={INPUT} />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="URL del Puente" hint={`Vacío = ${defaults.url || "valor por defecto"} (variable MT_BRIDGE_URL del servidor)`}>
+          <Input data-testid="hfm-bridge-url-input" autoComplete="off" value={form.bridge_url} placeholder={defaults.url || "http://…:8000"} onChange={set("bridge_url")} className={INPUT} />
+        </Field>
+        <Field label="ID de Cuenta" hint={`Vacío = ${defaults.account_id || "cuenta por defecto"}`}>
+          <Input data-testid="hfm-bridge-account-input" autoComplete="off" value={form.bridge_account_id} placeholder={defaults.account_id || "hfm_v2"} onChange={set("bridge_account_id")} className={INPUT} />
+        </Field>
+      </div>
+      <Field label={`Token del Puente${tokenLabel}`}>
+        <Input data-testid="hfm-token-input" type="password" autoComplete="new-password" value={form.bridge_token} placeholder={config.bridge_token || (effective.token_source === "env" ? "Usando MT_BRIDGE_TOKEN del servidor" : "Token Bearer del puente")} onChange={set("bridge_token")} className={INPUT} />
       </Field>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label={`Login MetaTrader (número de cuenta ${bk})`}>
-          <Input data-testid="hfm-login-input" autoComplete="off" value={form.mt_login} placeholder="12345678" onChange={set("mt_login")} className={`${INPUT} num`} />
-        </Field>
-        <Field label={`Contraseña MT${config.mt_password ? " · guardada" : ""}`}>
-          <Input data-testid="hfm-password-input" type="password" autoComplete="new-password" value={form.mt_password} placeholder={config.mt_password ? "••••••••" : "Contraseña master"} onChange={set("mt_password")} className={INPUT} />
-        </Field>
-        <Field label={`Servidor ${bk}`} hint={servers.length ? `Exactamente como aparece en MetaTrader · habituales: ${servers.join(", ")}` : "Exactamente como aparece en MetaTrader (Live/Demo)"}>
-          <Input data-testid="hfm-server-input" autoComplete="off" list="hfm-server-options" value={form.mt_server} placeholder={serverHint} onChange={set("mt_server")} className={INPUT} />
-          {servers.length > 0 && <datalist id="hfm-server-options">{servers.map((s) => <option key={s} value={s} />)}</datalist>}
-        </Field>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Plataforma"><Sel value={form.mt_platform} onChange={(v) => setForm((f) => ({ ...f, mt_platform: v }))} options={config.mt_platforms || ["mt5", "mt4"]} testId="hfm-platform-select" render={(o) => o.toUpperCase()} /></Field>
-          <Field label="Región"><Sel value={form.metaapi_region} onChange={(v) => setForm((f) => ({ ...f, metaapi_region: v }))} options={config.metaapi_regions || ["new-york", "london"]} testId="hfm-region-select" /></Field>
-          <div className="col-span-2">
-            <SuffixField bk={bk} value={form.mt_symbol_suffix} onChange={(v) => { setForm((f) => ({ ...f, mt_symbol_suffix: v })); setResult((r) => (r?.suffix ? { ...r, suffix: null } : r)); }} suffixes={broker.suffixes || config.hfm_suffixes || [{ suffix: "", label: "Premium" }]} kind={config.hfm_suffix_kind} />
-          </div>
-        </div>
-        {accountTypes.length > 1 && (
-          <div className="sm:col-span-2">
-            <AccountTypeField bk={bk} value={form.account_type} onChange={(v) => setForm((f) => ({ ...f, account_type: v }))} types={accountTypes} />
-          </div>
-        )}
+        <SuffixField bk={bk} value={form.mt_symbol_suffix} onChange={(v) => { setForm((f) => ({ ...f, mt_symbol_suffix: v })); setResult((r) => (r?.suffix ? { ...r, suffix: null } : r)); }} suffixes={broker.suffixes || config.hfm_suffixes || [{ suffix: "", label: "Premium" }]} kind={config.hfm_suffix_kind} />
+        {accountTypes.length > 1 && <AccountTypeField bk={bk} value={form.account_type} onChange={(v) => setForm((f) => ({ ...f, account_type: v }))} types={accountTypes} />}
       </div>
-      <HfmPlanPicker plans={plans} common={config.metaapi_plan_common} value={form.metaapi_plan} onChange={(k) => setForm((f) => ({ ...f, metaapi_plan: k }))} currentPlan={currentPlan} />
-      {unsavedPlan && <p data-testid="hfm-plan-unsaved" className="font-mono text-[10.5px] text-amber-300">Tipo de cuenta cambiado a {planLabel(form.metaapi_plan)} · pulsa «Guardar» para aplicarlo{linked ? " y después «Recrear con el nuevo tipo»" : ""}.</p>}
-      {mismatch && <HfmRecreateNotice currentLabel={planLabel(currentPlan)} wantedLabel={planLabel(config.metaapi_plan)} busy={busy === "recreate"} onRecreate={recreate} />}
       <button data-testid="hfm-advanced-toggle" onClick={() => setAdvanced((v) => !v)} className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-slate-500 hover:text-slate-300">
-        <ChevronDown className={`h-3 w-3 transition-transform ${advanced ? "rotate-180" : ""}`} /> Avanzado · endpoint de MetaApi y aviso de desconexión
+        <ChevronDown className={`h-3 w-3 transition-transform ${advanced ? "rotate-180" : ""}`} /> Avanzado · aviso de desconexión
       </button>
       {advanced && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Endpoint personalizado (vacío = MetaApi.cloud)" hint="Solo para pruebas con un servidor MetaApi propio o un mock local">
-            <Input data-testid="hfm-base-url-input" autoComplete="off" value={form.metaapi_base_url} placeholder="https://…" onChange={set("metaapi_base_url")} className={INPUT} />
-          </Field>
-          <Field label="Aviso de desconexión (segundos)" hint={`En modo REAL, si la cuenta ${bk} pierde la conexión con MetaApi durante más de este tiempo, recibirás un aviso por Telegram (y otro al restablecerse). Los cortes breves (reinicios nocturnos del servidor demo, reconexiones del terminal) son normales: recomendado 180–300 s. 10–3600 s.`}>
-            <Input data-testid="hfm-alert-after-input" type="number" min={10} max={3600} step={5} value={form.hfm_alert_after_sec} onChange={set("hfm_alert_after_sec")} className={`${INPUT} num`} />
-          </Field>
-        </div>
+        <Field label="Aviso de desconexión (segundos)" hint={`En modo REAL, si la cuenta ${bk} pierde la conexión con el puente durante más de este tiempo, recibirás un aviso por Telegram (y otro al restablecerse). Recomendado 180–300 s. 10–3600 s.`}>
+          <Input data-testid="hfm-alert-after-input" type="number" min={10} max={3600} step={5} value={form.hfm_alert_after_sec} onChange={set("hfm_alert_after_sec")} className={`${INPUT} num sm:w-1/2`} />
+        </Field>
       )}
       <div className="flex flex-wrap gap-2">
         <Button data-testid="hfm-save-button" onClick={save} disabled={busy === "save"} className={BTN}>{busy === "save" && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />} Guardar</Button>
-        <Button data-testid="hfm-link-button" variant="outline" onClick={link} disabled={busy === "link" || !config.hfm_configured} className={BTN_OUT} title={config.hfm_configured ? "Crea y despliega la cuenta en MetaApi" : "Guarda primero token, login, contraseña y servidor"}>
-          {busy === "link" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Link2 className="mr-1.5 h-3.5 w-3.5" />} Vincular cuenta
-        </Button>
-        <Button data-testid="hfm-test-button" variant="outline" onClick={test} disabled={busy === "test" || !(form.metaapi_token || config.metaapi_token)} className={BTN_OUT}>
+        <Button data-testid="hfm-test-button" variant="outline" onClick={test} disabled={busy === "test" || !(form.bridge_token || ready)} className={BTN_OUT} title={form.bridge_token || ready ? undefined : "Introduce primero el Token del Puente"}>
           {busy === "test" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Plug className="mr-1.5 h-3.5 w-3.5" />} Probar conexión
         </Button>
-        <Button data-testid="hfm-symbols-button" variant="outline" onClick={checkSymbols} disabled={busy === "symbols" || !linked} className={BTN_OUT} title={linked ? `Comprueba que los pares activos cotizan en tu cuenta ${bk}` : "Vincula primero la cuenta"}>
+        <Button data-testid="hfm-symbols-button" variant="outline" onClick={checkSymbols} disabled={busy === "symbols" || !ready} className={BTN_OUT} title={ready ? `Comprueba que los pares activos cotizan en tu cuenta ${bk}` : "Guarda primero el Token del Puente"}>
           {busy === "symbols" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ListChecks className="mr-1.5 h-3.5 w-3.5" />} Comprobar símbolos
         </Button>
-        {canRedeploy && (
-          <Button data-testid="hfm-redeploy-button" variant="outline" onClick={redeploy} disabled={busy === "redeploy"} className={BTN_OUT}>
-            {busy === "redeploy" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />} Redesplegar
+        {canReconnect && (
+          <Button data-testid="hfm-reconnect-button" variant="outline" onClick={reconnect} disabled={busy === "reconnect"} className={BTN_OUT}>
+            {busy === "reconnect" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />} Reconectar
           </Button>
         )}
-        {config.hfm_configured && (
+        {hasSaved && (
           <Button data-testid="hfm-clear-button" variant="ghost" onClick={clear} disabled={busy === "clear" || config.trading_mode === "live"} title={config.trading_mode === "live" ? "Vuelve a modo paper antes de quitar la cuenta" : undefined}
             className="h-9 font-mono text-[11px] uppercase tracking-wider text-rose-300 hover:bg-rose-500/10 disabled:opacity-40">
             <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Quitar
@@ -260,14 +207,14 @@ export default function HfmSection({ config, onSave, onRefresh, account }) {
       </div>
       {(result || config.hfm_verified_at) && (
         <div data-testid="hfm-test-result" className="space-y-1.5 rounded-sm border border-[#1E293B] bg-[#0B1220] p-3 font-mono text-[11px] text-slate-300">
-          {result?.token_valid && <p>Token MetaApi: <span className="text-emerald-400">válido</span> · {result.accounts_total} cuenta(s) en MetaApi</p>}
-          {acc && <p>Cuenta {acc.login} · {acc.server} · {String(acc.platform || "").toUpperCase()} · estado <span className={acc.state === "DEPLOYED" ? "text-emerald-400" : "text-amber-300"}>{acc.state}</span> · conexión {acc.connection || "—"} · región {acc.region}{acc.plan && <> · tipo <span data-testid="hfm-account-plan" className="text-sky-300">{planLabel(acc.plan)}</span></>}</p>}
+          {result?.token_valid && <p>Puente <span className="text-slate-100">{result.url}</span> · token <span className="text-emerald-400">válido</span> · cuenta <span data-testid="hfm-bridge-account" className="text-sky-300">{result.account_id}</span></p>}
+          {acc && <p>Estado <span className={acc.state === "DEPLOYED" ? "text-emerald-400" : "text-amber-300"}>{acc.state || "—"}</span> · conexión {acc.connection || "—"}{acc.server ? ` · ${acc.server}` : ""}{acc.platform ? ` · ${String(acc.platform).toUpperCase()}` : ""}</p>}
           {result?.info && (
-            <p>Bróker {result.info.broker} · {result.info.currency} · balance <span className="num text-slate-100">{result.info.balance}</span> · equidad <span className="num text-slate-100">{result.info.equity}</span> · margen libre {result.info.freeMargin} · apalancamiento 1:{result.info.leverage} · {result.positions?.length || 0} posiciones abiertas · trading <span className={result.info.tradeAllowed === false ? "text-rose-300" : "text-emerald-400"}>{result.info.tradeAllowed === false ? "NO permitido" : "permitido"}</span></p>
+            <p>{result.info.broker} · {result.info.server} · {result.info.currency} · balance <span className="num text-slate-100">{result.info.balance}</span> · equidad <span className="num text-slate-100">{result.info.equity}</span> · margen libre {result.info.freeMargin} · apalancamiento 1:{result.info.leverage} · {result.positions?.length || 0} posiciones abiertas · trading <span className={result.info.tradeAllowed === false ? "text-rose-300" : "text-emerald-400"}>{result.info.tradeAllowed === false ? "NO permitido" : "permitido"}</span></p>
           )}
           {result?.hint && <p className="text-amber-300">{result.hint}</p>}
           {result?.suffix?.hint && <p data-testid="hfm-suffix-detected" className={result.suffix.suffix === null || result.suffix.suffix === undefined ? "text-amber-300" : "text-sky-300"}>{result.suffix.hint}</p>}
-          {!result && config.hfm_verified_at && <p>Última verificación {fmtDateTime(config.hfm_verified_at)} · {config.hfm_broker || bk} · equidad {config.hfm_verified_equity} {config.hfm_currency} · apalancamiento 1:{config.hfm_leverage}{config.hfm_trade_allowed === false ? " · SIN permiso de trading" : ""}{config.hfm_current_plan ? ` · tipo ${planLabel(config.hfm_current_plan)}` : ""}</p>}
+          {!result && config.hfm_verified_at && <p>Última verificación {fmtDateTime(config.hfm_verified_at)} · {config.hfm_broker || bk} {config.mt_server} · cuenta {effective.account_id} · equidad {config.hfm_verified_equity} {config.hfm_currency} · apalancamiento 1:{config.hfm_leverage}{config.hfm_trade_allowed === false ? " · SIN permiso de trading" : ""}</p>}
         </div>
       )}
       {symbols && <SymbolsCheck data={symbols} bk={bk} />}

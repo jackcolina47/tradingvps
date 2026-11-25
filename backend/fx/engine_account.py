@@ -1,5 +1,6 @@
 """FxEngine mixin · account & statistics: paper account, HFM account summary, re-base on account switch, plan check-in, daily metrics."""
 import time
+from fx.config import bridge_conn
 from datetime import datetime, timezone
 from models import now_iso
 from fx.models import FxSettings
@@ -19,8 +20,9 @@ class AccountMixin:
 
     @property
     def account_ref(self) -> str:
-        """Identity of the HFM account the statistics belong to (login@server); empty in paper."""
-        return f"{self.cfg.mt_login}@{self.cfg.mt_server}" if self.cfg and self.cfg.mt_login and self.cfg.mt_server else ""
+        """Identity of the broker account the statistics belong to (login@server, or the bridge account id when the login is unknown); empty until verified."""
+        c = self.cfg
+        return f"{c.mt_login or bridge_conn(c, self.profile)[2]}@{c.mt_server}" if c and c.mt_server else ""
 
     def account_kind(self) -> str | None:
         return None if not self.live else ("demo" if "demo" in self.env.lower() else "live")

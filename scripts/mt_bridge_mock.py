@@ -1,17 +1,18 @@
-"""Local MetaApi.cloud mock (provisioning + client API) for end-to-end testing of the HotForex REAL executor.
-Run: python3 scripts/metaapi_mock.py  (port 8012)  · token: mocktoken · accepts any MT login/server.
+"""Local simulator of our Windows MetaTrader bridge (same REST contract: Bearer token, routes under /users/current/accounts/{account_id})
+for end-to-end testing of the FX REAL executor. Accounts: hfm_v2 (HFM Zero, suffix «b», metals GOLDb / SILVERb) and pepperstone_v2.
+Run: python3 scripts/mt_bridge_mock.py  (port 8012)  · token: mocktoken
 Helpers: POST /mock/price/{symbol}?price=X · POST /mock/close/{position_id}?reason=sl|tp · POST /mock/connection?connected=false · GET /mock/state · POST /mock/reset
          POST /mock/fault?trade_hang=3&trade_code=ERR_TRADE_TIMED_OUT&trade_execute=true&times=1&positions_hang=3&positions_times=1&positions_status=503 (fault injection)
+         POST /mock/mt4-partial?enabled=true (the remainder of a partial close gets a new ticket, like MetaTrader 4)
 """
 import sys
 import time
-import uuid
 import asyncio
 from datetime import datetime, timezone
 import httpx
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 
 sys.path.insert(0, "/app/backend")
 from fx.symbols import SPECS  # noqa: E402
@@ -19,13 +20,18 @@ from fx.symbols import SPECS  # noqa: E402
 TOKEN = "mocktoken"
 BALANCE = 1000.0
 COMMISSION_PER_LOT = -3.0
+ACCOUNTS = {
+    "hfm_v2": {"_id": "hfm_v2", "login": "70012345", "server": "HFMarketsGlobal-Demo", "platform": "mt4", "name": "HFM Zero demo v2", "state": "DEPLOYED", "connectionStatus": "CONNECTED"},
+    "pepperstone_v2": {"_id": "pepperstone_v2", "login": "", "server": "", "platform": "mt5", "name": "Pepperstone (sin cuenta)", "state": "UNDEPLOYED", "connectionStatus": "DISCONNECTED"},
+}
 app = FastAPI()
 state = {}
 
 
 def reset():
     state.clear()
-    state.update({"accounts": {}, "balance": BALANCE, "positions": {}, "deals": {}, "prices": {}, "seq": 1000, "trade_allowed": True, "connected": True, "suffix": "",
+    state.update({"accounts": {k: dict(v) for k, v in ACCOUNTS.items()}, "balance": BALANCE, "positions": {}, "deals": {}, "prices": {}, "seq": 1000, "trade_allowed": True,
+                  "connected": True, "suffix": "b", "mt4_partial": False, "requests": [],
                   "balance_deals": [], "orders": [], "faults": {"trade_hang": 0.0, "trade_code": "", "trade_code_num": -10, "trade_times": 0, "trade_execute": False,
                                                                 "positions_hang": 0.0, "positions_times": 0, "positions_status": 0, "positions_after_trade": 0}})
 
@@ -65,8 +71,8 @@ async def price_of(symbol: str) -> float:
 GROUP_SUFFIXES = ("", "b", "r", "c", "x", ".r")
 
 
-# in the Zero group ("b") metals are NOT base+suffix (real HFM quirk reported by the user: XAUUSDb → 404): they are GOLDb and XAGUSD.b
-ODD_NAMES = {"b": {"XAUUSD": "GOLDb", "XAGUSD": "XAGUSD.b"}}
+# in the Zero group ("b") metals are NOT base+suffix (XAUUSDb / XAGUSDb → 404): they are GOLDb and SILVERb
+ODD_NAMES = {"b": {"XAUUSD": "GOLDb", "XAGUSD": "SILVERb"}}
 
 
 def _split(symbol: str):
@@ -106,56 +112,48 @@ def _retcode(code: str, num: int, msg: str, **extra):
 async def auth(request: Request, call_next):
     if request.url.path.startswith("/mock"):
         return await call_next(request)
-    if request.headers.get("auth-token") != TOKEN:
-        return JSONResponse({"id": 1, "error": "UnauthorizedError", "message": "Authorization failed"}, status_code=401)
+    if request.headers.get("authorization") != f"Bearer {TOKEN}":
+        return JSONResponse({"detail": "Token inválido"}, status_code=401)
+    state["requests"].append(f"{request.method} {request.url.path}")
     return await call_next(request)
 
 
-# ---------- provisioning ----------
-@app.get("/users/current/accounts")
-async def list_accounts():
-    return list(state["accounts"].values())
+# ---------- bridge / account state ----------
+def _acc_view(acc: dict) -> dict:
+    return {**acc, "tradeAllowed": state["trade_allowed"], "trade_allowed": state["trade_allowed"]}
 
 
-@app.post("/users/current/accounts", status_code=201)
-async def create_account(request: Request):
-    body = await request.json()
-    acc_id = uuid.uuid4().hex[:24]
-    state["accounts"][acc_id] = {"_id": acc_id, "login": str(body.get("login")), "server": body.get("server"), "platform": body.get("platform", "mt5"),
-                                 "state": "DEPLOYED", "connectionStatus": "CONNECTED", "region": body.get("region", "new-york"), "name": body.get("name"),
-                                 "magic": body.get("magic", 0), "type": body.get("type", "cloud-g2"), "reliability": body.get("reliability", "high")}
-    return {"id": acc_id, "state": "DEPLOYED"}
+@app.get("/health")
+async def health():
+    return {"status": "ok", "accounts": {k: _acc_view(a) for k, a in state["accounts"].items()}}
 
 
 @app.get("/users/current/accounts/{acc_id}")
 async def get_account(acc_id: str):
     acc = state["accounts"].get(acc_id)
-    return acc if acc else JSONResponse({"message": "Account not found"}, status_code=404)
+    return _acc_view(acc) if acc else JSONResponse({"detail": f"Cuenta {acc_id} no configurada en el puente"}, status_code=404)
 
 
-@app.post("/users/current/accounts/{acc_id}/undeploy", status_code=204)
-async def undeploy(acc_id: str):
+@app.post("/users/current/accounts/{acc_id}/reconnect")
+async def reconnect(acc_id: str):
     acc = state["accounts"].get(acc_id)
-    if acc:
-        acc.update(state="UNDEPLOYED", connectionStatus="DISCONNECTED")
-    return Response(status_code=204)
-
-
-@app.delete("/users/current/accounts/{acc_id}", status_code=204)
-async def delete_account(acc_id: str):
-    if acc_id not in state["accounts"]:
-        return JSONResponse({"message": "Account not found"}, status_code=404)
-    del state["accounts"][acc_id]
-    return Response(status_code=204)
-
-
-@app.post("/users/current/accounts/{acc_id}/deploy", status_code=204)
-@app.post("/users/current/accounts/{acc_id}/redeploy", status_code=204)
-async def deploy(acc_id: str):
-    acc = state["accounts"].get(acc_id)
-    if acc:
+    if not acc:
+        return JSONResponse({"detail": f"Cuenta {acc_id} no configurada en el puente"}, status_code=404)
+    if acc["login"]:
+        state["connected"] = True
         acc.update(state="DEPLOYED", connectionStatus="CONNECTED")
-    return Response(status_code=204)
+    return {"ok": True, **_acc_view(acc)}
+
+
+@app.post("/users/current/accounts/{acc_id}/lot-size")
+async def lot_size(acc_id: str, request: Request):
+    body = await request.json()
+    base, spec = _spec(body.get("symbol", ""))
+    if not spec:
+        return JSONResponse({"detail": "Symbol not found"}, status_code=404)
+    risk_usd = _equity() * float(body.get("riskPercent") or 1) / 100
+    dist = abs(float(body.get("entryPrice") or await price_of(base)) - float(body.get("stopLoss") or 0)) or spec["pip"] * 10
+    return {"symbol": body.get("symbol"), "volume": max(0.01, round(risk_usd / (dist * spec["contract"]), 2)), "riskAmount": round(risk_usd, 2)}
 
 
 # ---------- client API ----------
@@ -171,9 +169,8 @@ async def account_information(acc_id: str):
         return _not_connected()
     margin = round(sum(p["margin"] for p in state["positions"].values()), 2)
     eq = _equity()
-    return {"platform": "mt5", "broker": "HF Markets (SV) Ltd", "currency": "USD", "server": state["accounts"][acc_id]["server"], "balance": round(state["balance"], 2),
-            "equity": eq, "margin": margin, "freeMargin": round(eq - margin, 2), "leverage": 100, "marginLevel": None, "tradeAllowed": state["trade_allowed"],
-            "investorMode": not state["trade_allowed"], "marginMode": "ACCOUNT_MARGIN_MODE_RETAIL_HEDGING", "name": "Mock HFM", "login": int(state["accounts"][acc_id]["login"])}
+    return {"balance": round(state["balance"], 2), "equity": eq, "margin": margin, "freeMargin": round(eq - margin, 2), "leverage": 100, "currency": "USD",
+            "server": state["accounts"][acc_id]["server"], "name": state["accounts"][acc_id]["name"]}
 
 
 @app.get("/users/current/accounts/{acc_id}/positions")
@@ -225,8 +222,8 @@ MOCK_TF = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400
 
 @app.get("/users/current/accounts/{acc_id}/historical-market-data/symbols/{symbol}/timeframes/{tf}/candles")
 async def candles(acc_id: str, symbol: str, tf: str, startTime: str = None, limit: int = 1000):
-    """MetaApi historical market data (separate host in production): deterministic synthetic OHLCV (seeded per symbol/tf/candle) loaded
-    backwards from startTime (inclusive) so the chart's HFM source can be tested offline."""
+    """Historical market data: deterministic synthetic OHLCV (seeded per symbol/tf/candle) loaded
+    backwards from startTime (inclusive) so the chart's terminal source can be tested offline."""
     import math
     import random
     if not state["connected"]:
@@ -311,20 +308,20 @@ async def _trade(body: dict, action: str):
         state["positions"][pid] = {"id": pid, "platform": "mt5", "type": "POSITION_TYPE_BUY" if long else "POSITION_TYPE_SELL", "symbol": symbol, "magic": body.get("magic", 0),
                                    "time": now_iso(), "updateTime": now_iso(), "openPrice": entry, "currentPrice": price, "volume": vol, "swap": 0.0,
                                    "profit": _pnl({"type": "POSITION_TYPE_BUY" if long else "POSITION_TYPE_SELL", "openPrice": entry, "volume": vol, "symbol": symbol}, price),
-                                   "commission": round(COMMISSION_PER_LOT * vol, 2), "stopLoss": sl, "takeProfit": tp, "clientId": body.get("clientId"), "margin": margin}
+                                   "commission": round(COMMISSION_PER_LOT * vol, 2), "stopLoss": sl, "takeProfit": tp, "comment": body.get("comment"), "margin": margin}
         state["deals"][pid] = [{"id": nid(), "type": "DEAL_TYPE_BUY" if long else "DEAL_TYPE_SELL", "entryType": "DEAL_ENTRY_IN", "symbol": symbol, "positionId": pid,
                                 "orderId": oid, "volume": vol, "price": entry, "profit": 0.0, "swap": 0.0, "commission": round(COMMISSION_PER_LOT * vol, 2), "time": now_iso()}]
         state["orders"].append({"id": oid, "type": "ORDER_TYPE_BUY" if long else "ORDER_TYPE_SELL", "state": "ORDER_STATE_FILLED", "symbol": symbol, "positionId": pid,
-                                "volume": vol, "openPrice": entry, "time": now_iso(), "doneTime": now_iso(), "clientId": body.get("clientId"), "magic": body.get("magic", 0)})
+                                "volume": vol, "openPrice": entry, "time": now_iso(), "doneTime": now_iso(), "comment": body.get("comment"), "magic": body.get("magic", 0)})
         return _retcode("TRADE_RETCODE_DONE", 10009, "Request completed", orderId=oid, positionId=pid)
     pid = str(body.get("positionId") or "")
     p = state["positions"].get(pid)
-    if action == "POSITION_CLOSE_ID":
+    if action == "POSITION_CLOSE_ID" and not body.get("volume"):
         if not p:
             return _retcode("TRADE_RETCODE_POSITION_CLOSED", 10045, "Position already closed")
         deal = _close(p, await price_of(p["symbol"]), "")
         return _retcode("TRADE_RETCODE_DONE", 10009, "Request completed", orderId=deal["orderId"], positionId=pid)
-    if action == "POSITION_PARTIAL":
+    if action == "POSITION_CLOSE_ID":
         if not p:
             return _retcode("TRADE_RETCODE_POSITION_CLOSED", 10045, "Position already closed")
         vol = float(body.get("volume") or 0)
@@ -344,6 +341,10 @@ async def _trade(body: dict, action: str):
         p["volume"] = round(p["volume"] - vol, 2)
         p["profit"] = _pnl(p, price)
         p["updateTime"] = now_iso()
+        if state["mt4_partial"]:   # MetaTrader 4: the remainder is a new ticket whose comment is «from #old»
+            new = nid()
+            state["positions"][new] = {**state["positions"].pop(pid), "id": new, "comment": f"from #{pid}"}
+            state["deals"][new] = state["deals"][pid]
         return _retcode("TRADE_RETCODE_DONE", 10009, "Request completed", orderId=deal["orderId"], positionId=pid)
     if action == "POSITION_MODIFY":
         if not p:
@@ -391,7 +392,7 @@ async def set_fault(trade_hang: float = 0.0, trade_code: str = "", trade_code_nu
     """Fault injection for the next `times` trade requests: hang `trade_hang` seconds after executing (client timeout → result unknown),
     and/or answer with `trade_code` (executed first when trade_execute=true, otherwise without executing). `positions_hang` delays the next
     `positions_times` GET /positions calls (and answers with HTTP `positions_status`, e.g. 503, when set); `positions_after_trade` arms that
-    many failing GET /positions calls right after the faulted trade (MetaApi stops answering at the moment of the order)."""
+    many failing GET /positions calls right after the faulted trade (the bridge stops answering at the moment of the order)."""
     state["faults"].update(trade_hang=trade_hang, trade_code=trade_code, trade_code_num=trade_code_num, trade_execute=trade_execute, trade_times=times,
                            positions_hang=positions_hang, positions_times=positions_times, positions_status=positions_status, positions_after_trade=positions_after_trade)
     return {"ok": True, "faults": state["faults"]}
@@ -409,6 +410,12 @@ async def force_close(pid: str, reason: str = "sl"):
     price = p["stopLoss"] if reason == "sl" else p["takeProfit"]
     deal = _close(p, float(price), f"[{reason} {price}]")
     return {"ok": True, "deal": deal}
+
+
+@app.post("/mock/mt4-partial")
+async def mock_mt4_partial(enabled: bool = True):
+    state["mt4_partial"] = enabled
+    return {"ok": True, "mt4_partial": enabled}
 
 
 @app.post("/mock/account-group")
@@ -449,7 +456,7 @@ async def set_connection(connected: bool = True):
 async def mock_state():
     return {"balance": round(state["balance"], 2), "equity": _equity(), "positions": list(state["positions"].values()), "accounts": list(state["accounts"].values()),
             "deals": state["deals"], "prices": state["prices"], "trade_allowed": state["trade_allowed"], "connected": state["connected"], "faults": state["faults"],
-            "orders": state["orders"], "suffix": state["suffix"]}
+            "orders": state["orders"], "suffix": state["suffix"], "requests": state["requests"][-200:]}
 
 
 @app.post("/mock/reset")

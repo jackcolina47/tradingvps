@@ -1,6 +1,6 @@
 # AI Trading · Embudo IA
 
-Panel web (React + FastAPI + MongoDB) con tres bots de trading: **Bybit** (futuros perpetuos USDT), **HotForex** y **Pepperstone** (forex y metales vía MetaApi).
+Panel web (React + FastAPI + MongoDB) con tres bots de trading: **Bybit** (futuros perpetuos USDT), **HotForex** y **Pepperstone** (forex y metales vía puente MetaTrader propio).
 
 ## Cómo decide una entrada
 
@@ -38,7 +38,7 @@ backend/
   ai_rules.py · trade_learning.py   reglas aprendidas
   review.py · plan.py · weekly.py   revisión IA, plan de crecimiento, resumen semanal
   maker.py             órdenes límite maker (Bybit)
-  fx/                  motor FX (HotForex, Pepperstone), MetaApi
+  fx/                  motor FX (HotForex, Pepperstone), cliente del puente MetaTrader (bridge.py)
   routers/             rutas por área (IA, cron, copias, chat…)
   chat/                asistente «IA expert»
 frontend/src/

@@ -1,8 +1,8 @@
-"""/api/fx/* and /api/pepper/* — FX bots (HotForex, Pepperstone): forex & metals, paper trading, MetaApi/MetaTrader account link. One router per engine (build_router).
+"""/api/fx/* and /api/pepper/* — FX bots (HotForex, Pepperstone): forex & metals, paper trading, MetaTrader account through our own bridge. One router per engine (build_router).
 
 This module keeps the bot/dashboard/account/positions/config endpoints; the rest is split by concern:
   routes_analysis.py  AI advisor, growth plan, weekly summary
-  routes_hfm.py       MetaApi/HFM account link & checks, paper ↔ REAL mode
+  routes_hfm.py       MetaTrader bridge account checks, paper ↔ REAL mode
 """
 import time
 import logging
@@ -74,7 +74,7 @@ def register(router, engine, store):
     CHART_TIMEFRAMES = FX_TIMEFRAMES + ["1d"]
 
     async def _chart_rows(symbol: str, tf: str, n: int, before: int | None):
-        """Chart candles: the HFM terminal's own (what MetaTrader shows) while the MetaApi account is deployed; Yahoo otherwise or on failure
+        """Chart candles: the HFM terminal's own (what MetaTrader shows) while the bridge account is connected; Yahoo otherwise or on failure
         (60 s back-off kept on the broker instance → cleared on relink/test/reconnect)."""
         b = engine.broker
         if b and store.cfg.hfm_state == "DEPLOYED" and time.time() - b.chart_fail_ts > 60:
@@ -101,8 +101,8 @@ def register(router, engine, store):
     async def bot_start():
         if engine.live:
             c = store.cfg
-            if not (c.metaapi_token and c.metaapi_account_id and c.hfm_verified_at):
-                raise HTTPException(409, f"Modo REAL: vincula y verifica la cuenta {engine.bk} (Ajustes → {engine.bl}) antes de iniciar el bot")
+            if not (engine.broker and c.hfm_verified_at):
+                raise HTTPException(409, f"Modo REAL: configura el puente y verifica la cuenta {engine.bk} (Ajustes → {engine.bl}) antes de iniciar el bot")
             if c.hfm_trade_allowed is False:
                 raise HTTPException(409, f"Modo REAL: la cuenta {engine.bk} no permite operar (trading deshabilitado o contraseña investor)")
         await engine.start()
@@ -185,8 +185,8 @@ def register(router, engine, store):
         c = store.cfg
         if not engine.live:
             raise HTTPException(409, "Cambiar de cuenta solo aplica en modo REAL; en paper usa «Reiniciar»")
-        if not (c.metaapi_account_id and c.hfm_verified_at):
-            raise HTTPException(409, "Vincula y prueba la conexión de la cuenta nueva antes de cambiar de cuenta")
+        if not (engine.broker and c.hfm_verified_at):
+            raise HTTPException(409, "Configura y prueba la conexión de la cuenta nueva antes de cambiar de cuenta")
         if engine.running:
             raise HTTPException(409, "Detén el bot antes de cambiar de cuenta")
         if await engine.db.positions.count_documents({}):

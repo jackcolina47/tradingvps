@@ -1,5 +1,5 @@
 """FxEngine mixin · positions: paper tick (SL/TP, time stop, partial, trailing), REAL sync with HFM, adoption of orphan broker positions,
-open/close with sizing and all the MetaApi failure paths."""
+open/close with sizing and all the bridge failure paths."""
 import time
 import asyncio
 import trade_learning
@@ -11,7 +11,7 @@ from fx.models import FxSettings
 from fx.symbols import SPECS, fmt_price, pips
 from fx import risk
 from risk import be_allowed, ema_partial_due, EMA_PARTIAL_PCT
-from fx.metaapi import MetaApiError, TRADE_DISABLED_CODES
+from fx.bridge import BridgeError, TRADE_DISABLED_CODES
 from legacy import EMA_TEST_TAG
 from fx.engine_core import logger, LIVE_GRACE_SEC, TRANSIENT_TG_SEC, PENDING_TTL_SEC, HORIZON_LABEL, FX_STRATEGY_INFO
 
@@ -132,6 +132,8 @@ class PositionsMixin:
             if part > 0:
                 try:
                     r = await self.broker.close_partial(p.order_id, part, p.link_id)
+                    if r.get("position_id"):   # MetaTrader 4 re-tickets the remainder of a partial close
+                        p.order_id = updates["order_id"] = r["position_id"]
                     gross = risk.pnl(p.symbol, p.side, p.entry_price, price, part, self.market.tickers)
                     updates.update(qty=round(p.qty - part, 8), margin=round(p.margin * (p.qty - part) / p.qty, 6), partial_done=True,
                                    partial_gross=round(p.partial_gross + gross, 6), partial_fees=round(p.partial_fees + abs(r.get("commission") or 0), 6),
@@ -235,6 +237,8 @@ class PositionsMixin:
             if part > 0:
                 try:
                     r = await self.broker.close_partial(p.order_id, part, p.link_id)
+                    if r.get("position_id"):   # MetaTrader 4 re-tickets the remainder of a partial close
+                        p.order_id = updates["order_id"] = r["position_id"]
                     gross = risk.pnl(p.symbol, p.side, p.entry_price, price, part, self.market.tickers)
                     updates.update(qty=round(p.qty - part, 8), margin=round(p.margin * (p.qty - part) / p.qty, 6), partial_done=True,
                                    partial_gross=round(p.partial_gross + gross, 6), partial_fees=round(p.partial_fees + abs(r.get("commission") or 0), 6),
@@ -260,13 +264,13 @@ class PositionsMixin:
                     await self.log("ERROR", f"{p.symbol}: no se pudo mover el stop en {self.bk} · {str(e)[:120]}")
         await self.db.positions.update_one({"_id": ObjectId(p.id)}, {"$set": updates})
 
-    async def _tg_transient(self, symbol: str, e: MetaApiError):
-        """One Telegram notice per 30 min for orders skipped because HFM/MetaApi did not answer in time (not a broker rejection)."""
+    async def _tg_transient(self, symbol: str, e: BridgeError):
+        """One Telegram notice per 30 min for orders skipped because HFM/puente MT did not answer in time (not a broker rejection)."""
         now = time.time()
         if now - self._transient_tg_ts < TRANSIENT_TG_SEC:
             return
         self._transient_tg_ts = now
-        await self.tg(f"⏳ <b>Orden REAL no enviada · {symbol}</b>\n{self.bk}/MetaApi no respondió a tiempo ({e.attempts} intento(s)): {e.msg[:200]}\n"
+        await self.tg(f"⏳ <b>Orden REAL no enviada · {symbol}</b>\n{self.bk}/puente MT no respondió a tiempo ({e.attempts} intento(s)): {e.msg[:200]}\n"
                       f"Se verificó que no quedó ninguna orden abierta. El bot sigue operando; si se repite, revisa la conexión en Ajustes → {self.bl}.", "orders")
 
     async def _close_live_from_broker(self, p: Position):
@@ -358,8 +362,8 @@ class PositionsMixin:
                     await self.log("ERROR", f"{symbol}: modo REAL sin cuenta {self.bk} vinculada · orden no enviada")
                     return None, f"modo REAL sin cuenta {self.bk} vinculada"
                 if self.hfm["down_since"]:
-                    await self.log("RISK", f"{symbol}: orden no enviada · cuenta {self.bk} sin conexión con MetaApi ({self.hfm['error']})")
-                    return None, f"cuenta {self.bk} sin conexión con MetaApi"
+                    await self.log("RISK", f"{symbol}: orden no enviada · cuenta {self.bk} sin conexión con el puente MT ({self.hfm['error']})")
+                    return None, f"cuenta {self.bk} sin conexión con el puente MT"
                 try:
                     info = await self.broker.info(max_age=0)
                     if not info.get("trade_allowed", True):
@@ -377,7 +381,7 @@ class PositionsMixin:
                         return None, reason
                     await self._log_sizing(symbol, sig, lots, info["equity"], real_risk, entry, sl, tp)
                     r = await self.broker.open(symbol, sig["side"], lots, sl, None if cross else tp)
-                except MetaApiError as e:
+                except BridgeError as e:
                     if e.kind == "unknown":
                         link = getattr(e, "link_id", "") or ""
                         if link:
@@ -387,14 +391,14 @@ class PositionsMixin:
                         reason = f"resultado desconocido: {e.msg[:120]}"
                         await self.log("ERROR", f"{symbol}: orden REAL con resultado desconocido · {e.msg[:160]} · si {self.bk} la ejecutó, el bot la adoptará por su identificador {link}")
                         await self.tg(f"❓ <b>Orden REAL con resultado desconocido · {symbol}</b>\n{e.msg[:250]}\nSi {self.bk} llegó a ejecutarla, el bot la detectará por su identificador "
-                                      f"({link}) en cuanto MetaApi responda y la gestionará con normalidad (el SL/TP ya viaja en la orden).", "orders")
+                                      f"({link}) en cuanto el puente MT responda y la gestionará con normalidad (el SL/TP ya viaja en la orden).", "orders")
                         return None, reason
                     if e.kind == "transient":
-                        reason = f"{self.bk}/MetaApi no disponible tras {e.attempts} intento(s): {e.msg[:120]}"
+                        reason = f"{self.bk}/puente MT no disponible tras {e.attempts} intento(s): {e.msg[:120]}"
                         await self.log("RISK", f"{symbol}: orden REAL no enviada · {reason} · verificado: no quedó ninguna orden abierta")
                         await self._tg_transient(symbol, e)
                         return None, reason
-                    await self.log("ERROR", f"{symbol}: orden REAL rechazada por {self.bk}/MetaApi · {e.msg[:260]}")
+                    await self.log("ERROR", f"{symbol}: orden REAL rechazada por {self.bk}/puente MT · {e.msg[:260]}")
                     await self.tg(f"⚠️ <b>Orden REAL rechazada · {symbol}</b>\n{e.msg[:400]}", "orders")
                     if e.code in TRADE_DISABLED_CODES and self.store:
                         bad = sorted(set(self.cfg.hfm_symbols_bad or []) | {symbol})
@@ -408,7 +412,7 @@ class PositionsMixin:
                 if r.get("note"):
                     await self.log("RISK", f"{symbol}: orden REAL {r['note']} · posición {r['position_id']} localizada por clientId")
                 elif r.get("attempts", 1) > 1:
-                    await self.log("RISK", f"{symbol}: orden REAL ejecutada en el intento {r['attempts']} tras fallos temporales de {self.bk}/MetaApi")
+                    await self.log("RISK", f"{symbol}: orden REAL ejecutada en el intento {r['attempts']} tras fallos temporales de {self.bk}/puente MT")
                 entry, lots, fee = (r["entry"] or entry), r["lots"], abs(r["commission"])
                 sl, tp = r["sl"], (tp if cross else r["tp"])  # cross: TP stays virtual (R metrics only), nothing at the broker
                 margin = lots * SPECS[symbol]["contract"] * risk.base_usd(symbol, tickers, entry) / leverage
@@ -468,14 +472,14 @@ class PositionsMixin:
                     if cr_close.get("note"):
                         await self.log("RISK", f"{p.symbol}: cierre REAL {cr_close['note']}")
                     elif cr_close.get("attempts", 1) > 1:
-                        await self.log("RISK", f"{p.symbol}: cierre REAL ejecutado en el intento {cr_close['attempts']} tras fallos temporales de {self.bk}/MetaApi")
+                        await self.log("RISK", f"{p.symbol}: cierre REAL ejecutado en el intento {cr_close['attempts']} tras fallos temporales de {self.bk}/puente MT")
                 except Exception as e:
                     if getattr(e, "code", "") != "TRADE_RETCODE_POSITION_CLOSED":
                         k = getattr(e, "kind", "")
                         if k == "unknown":
                             await self.log("ERROR", f"{p.symbol}: cierre REAL con resultado desconocido · {str(e)[:160]} · se comprobará en {self.bk} en la siguiente sincronización")
                             return None
-                        kind = f"{self.bk}/MetaApi no disponible tras varios intentos" if k == "transient" else "cierre REAL fallido"
+                        kind = f"{self.bk}/puente MT no disponible tras varios intentos" if k == "transient" else "cierre REAL fallido"
                         await self.log("ERROR", f"{p.symbol}: {kind} · {str(e)[:160]} · la posición sigue abierta en {self.bk} con su SL/TP; se reintentará")
                         return None
                 cr = None
