@@ -1,9 +1,10 @@
-"""Puente MetaTrader multi-cuenta para Windows (FastAPI + Uvicorn, puerto 8000).
+"""Puente MetaTrader 5 multi-cuenta para Windows (FastAPI + Uvicorn, puerto 8000).
 
-Cada petición se enruta por `account_id` (hfm_v1, hfm_v2, pepperstone_v1…) definido en config_bridge.json:
-  · platform "mt5": librería nativa MetaTrader5 apuntando a su terminal64.exe (un proceso hijo por cuenta, porque la librería
-    solo puede estar conectada a un terminal por proceso).
-  · platform "mt4": archivos JSON atómicos en <MQL4/Files>/aitb/ que atiende el Expert Advisor HFM_Bridge_EA.mq4 cada 100 ms.
+Cada petición se enruta por `account_id` (hfm_v1, hfm_v2, pepperstone_v1…) definido en config_bridge.json. Todas las cuentas usan la
+librería oficial MetaTrader5 de Python. Esa librería solo puede estar conectada a UN terminal por proceso, así que el puente levanta un
+proceso hijo (worker) por cuenta: cada worker llama una sola vez a mt5.initialize(path=<su terminal64.exe>) y nunca cambia de terminal.
+Las cuentas no se bloquean entre sí (un candado por cuenta serializa solo las peticiones de ESE terminal) y un worker colgado se reinicia
+sin afectar a los demás. Si en la config se indica «login», el worker comprueba que el terminal está en esa cuenta antes de operar.
 Seguridad: cabecera `Authorization: Bearer <BRIDGE_TOKEN>` + lista de IPs permitidas (`allowed_ips`).
 Arranque:  python mt_bridge.py   (lee config_bridge.json de esta carpeta, o la ruta de la variable BRIDGE_CONFIG)."""
 import os
@@ -13,10 +14,10 @@ import hmac
 import json
 import math
 import time
-import uuid
 import logging
 import threading
 import multiprocessing as mp
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -26,32 +27,15 @@ from fastapi.responses import JSONResponse
 log = logging.getLogger("mt_bridge")
 HERE = Path(__file__).resolve().parent
 TF_MIN = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "4h": 240, "1d": 1440, "1w": 10080}
-FROM_RE = re.compile(r"from #(\d+)")
-HEARTBEAT_MAX_AGE = 6.0
-EA_MAX_AGE = 10.0       # no request file is written when status.json is older than this
-STALE_FILE_AGE = 60.0   # req_/res_ leftovers older than this are deleted
 MODE_FULL = "SYMBOL_TRADE_MODE_FULL"
 TRADE_MODES = {0: "SYMBOL_TRADE_MODE_DISABLED", 1: "SYMBOL_TRADE_MODE_LONGONLY", 2: "SYMBOL_TRADE_MODE_SHORTONLY", 3: "SYMBOL_TRADE_MODE_CLOSEONLY", 4: MODE_FULL}  # MT5 numbering
-MT4_TRADE_MODES = {0: "SYMBOL_TRADE_MODE_DISABLED", 1: "SYMBOL_TRADE_MODE_CLOSEONLY", 2: MODE_FULL, 3: "SYMBOL_TRADE_MODE_LONGONLY", 4: "SYMBOL_TRADE_MODE_SHORTONLY"}
-SYMBOL_ALIASES = {"XAUUSD": "GOLD", "XAGUSD": "SILVER"}  # HFM Zero: XAUUSD → GOLDb, XAGUSD → SILVERb
-
-
-def mt4_trade_mode(raw, trade_allowed=None) -> str:
-    """MT4 symbol trade mode → standard name. The EA sends the name; an older EA sent MT4's own number (FULL = 2, not MT5's 4)."""
-    if isinstance(raw, str) and not raw.strip().lstrip("-").isdigit():
-        mode = "SYMBOL_TRADE_MODE_" + raw.strip().upper().replace("SYMBOL_TRADE_MODE_", "")
-        mode = mode if mode in TRADE_MODES.values() else MODE_FULL
-    else:
-        mode = MT4_TRADE_MODES.get(int(raw), MODE_FULL)
-    if mode == "SYMBOL_TRADE_MODE_DISABLED" and trade_allowed and int(trade_allowed) == 1:
-        return MODE_FULL  # MODE_TRADEALLOWED = 1: the symbol can be traded right now
-    return mode
-MT4_ERR = {0: "ERR_NO_ERROR", 1: "ERR_NO_RESULT", 2: "ERR_COMMON_ERROR", 3: "ERR_INVALID_TRADE_PARAMETERS", 4: "ERR_SERVER_BUSY", 6: "ERR_NO_CONNECTION",
-           8: "ERR_TOO_FREQUENT_REQUESTS", 64: "ERR_ACCOUNT_DISABLED", 65: "ERR_INVALID_ACCOUNT", 128: "ERR_TRADE_TIMEOUT", 129: "ERR_INVALID_PRICE",
-           130: "ERR_INVALID_STOPS", 131: "ERR_INVALID_TRADE_VOLUME", 132: "ERR_MARKET_CLOSED", 133: "ERR_TRADE_DISABLED", 134: "ERR_NOT_ENOUGH_MONEY",
-           135: "ERR_PRICE_CHANGED", 136: "ERR_OFF_QUOTES", 137: "ERR_BROKER_BUSY", 138: "ERR_REQUOTE", 141: "ERR_TOO_MANY_REQUESTS", 145: "ERR_TRADE_MODIFY_DENIED",
-           146: "ERR_TRADE_CONTEXT_BUSY", 148: "ERR_TRADE_TOO_MANY_ORDERS", 4106: "ERR_MARKET_UNKNOWN_SYMBOL", 4108: "TRADE_RETCODE_POSITION_CLOSED",
-           4109: "TRADE_RETCODE_CLIENT_DISABLES_AT", 4110: "ERR_LONGS_NOT_ALLOWED", 4111: "ERR_SHORTS_NOT_ALLOWED"}
+SYMBOL_ALIASES = {"XAUUSD": "GOLD", "XAGUSD": "SILVER", "GOLD": "XAUUSD", "SILVER": "XAGUSD"}  # same instrument under either name (HFM Zero: GOLDb / SILVERb)
+MAX_SUFFIX = 4  # longest broker suffix accepted when matching by prefix (EURUSDb, EURUSD.a, EURUSDm, EURUSD.pro)
+DEFAULT_ACCOUNTS = {  # used when config_bridge.json has no «accounts»; every account is MT5
+    "hfm_v1": {"platform": "mt5", "terminal_path": r"C:\MT5_HFM_1\terminal64.exe"},
+    "hfm_v2": {"platform": "mt5", "terminal_path": r"C:\MT5_HFM_2\terminal64.exe"},
+    "pepperstone_v1": {"platform": "mt5", "terminal_path": r"C:\Program Files\Pepperstone MetaTrader 5\terminal64.exe"},
+}
 MT5_RET = {10004: "REQUOTE", 10006: "REJECT", 10007: "CANCEL", 10008: "PLACED", 10009: "DONE", 10010: "DONE_PARTIAL", 10011: "ERROR", 10012: "TIMEOUT", 10013: "INVALID",
            10014: "INVALID_VOLUME", 10015: "INVALID_PRICE", 10016: "INVALID_STOPS", 10017: "TRADE_DISABLED", 10018: "MARKET_CLOSED", 10019: "NO_MONEY",
            10020: "PRICE_CHANGED", 10021: "PRICE_OFF", 10022: "INVALID_EXPIRATION", 10023: "ORDER_CHANGED", 10024: "TOO_MANY_REQUESTS", 10025: "NO_CHANGES",
@@ -107,7 +91,7 @@ def lots_for_risk(risk_money: float, sl_distance: float, spec: dict) -> dict:
 
 
 class Driver:
-    """Shared by both platforms: symbol-name resolution (suffixes), per-account state file and server-time offset."""
+    """One account: symbol-name resolution (suffixes and aliases), per-account state file and server-time offset."""
     platform = ""
 
     def __init__(self, account_id: str, cfg: dict, state_dir: Path):
@@ -164,38 +148,50 @@ class Driver:
         return self._names[1]
 
     def resolve(self, symbol: str) -> str:
-        """Broker name of `symbol`: exact, configured map/suffix, case-insensitive, XAUUSD/XAGUSD → GOLD/SILVER, USDT → USD for crypto CFDs, or the tradable variant with a suffix (EURUSD → EURUSD.a / EURUSDm)."""
+        """Broker name of `symbol`, with or without suffix on either side, so the same request works on every account type:
+        exact → configured map / suffix → case-insensitive → the other name of gold / silver (XAUUSD ↔ GOLD) → USDT → USD for crypto CFDs →
+        the request without its own suffix (EURUSDb on an account that lists EURUSD) → the tradable variant with a broker suffix (EURUSD → EURUSDb)."""
         if symbol in self._resolved:
             return self._resolved[symbol]
         names = self.names()
+        up = {n.upper(): n for n in names}
         mapped = (self.cfg.get("symbol_map") or {}).get(symbol)
         suffix = self.cfg.get("symbol_suffix") or ""
-        found = next((c for c in (mapped, symbol, f"{symbol}{suffix}") if c and c in names), None)
-        if not found:
-            found = next((n for n in names if n.upper() == symbol.upper()), None)
-        if not found:  # gold / silver under their other name, keeping whatever suffix came with the symbol (XAUUSDb → GOLDb)
-            up = {n.upper(): n for n in names}
+        found = mapped if mapped in names else None
+        plain = None if found else next((c for c in (symbol, f"{symbol}{suffix}") if c in names), None) or up.get(symbol.upper())
+        if plain and self._tradable(plain):
+            found = plain
+        roots = [symbol]
+        if not found:  # the instrument under every name it may have, most specific first
             for root, alt in SYMBOL_ALIASES.items():
                 if symbol.upper().startswith(root):
-                    rest = symbol[len(root):]
-                    found = next((up[c.upper()] for c in (f"{alt}{rest}", f"{alt}{rest}{suffix}") if c.upper() in up), None)
-        roots = [symbol] + ([symbol[:-1]] if symbol.upper().endswith("USDT") else [])  # crypto CFDs are quoted in USD at most brokers (SOLUSDT → SOLUSD)
+                    roots.append(f"{alt}{symbol[len(root):]}")
+            if symbol.upper().endswith("USDT"):
+                roots.append(symbol[:-1])  # crypto CFDs are quoted in USD at most brokers (SOLUSDT → SOLUSD)
+            bare = [m.group(1) for m in (re.match(r"^([A-Z0-9]{3,})[a-z.#_\-+][A-Za-z0-9.#_\-+]{0,%d}$" % (MAX_SUFFIX - 1), r) for r in roots) if m]  # EURUSDb → EURUSD, GOLD.a → GOLD
+            for b in list(bare):
+                bare += [alt for root, alt in SYMBOL_ALIASES.items() if b.upper() == root]
+            roots += [b for b in bare if b not in roots]
+            exact = [up[c.upper()] for r in roots for c in (r, f"{r}{suffix}") if c.upper() in up and up[c.upper()] != plain]
+            found = next((n for n in exact if self._tradable(n)), None)
+            plain = plain or (exact[0] if exact else None)
         if not found:
-            found = next((n for r in roots[1:] for n in names if n.upper() == r.upper()), None)
-        if not found:
-            cands = sorted((n for r in roots for n in names if norm(n).startswith(norm(r)) and len(norm(n)) - len(norm(r)) <= 4), key=lambda n: (len(n), n))
-            for n in cands[:6]:
-                try:
-                    if self._spec(n)["tradeMode"] == MODE_FULL:
-                        found = n
-                        break
-                except Fault:
-                    continue
-            found = found or (cands[0] if cands else None)
+            cands = sorted((n for r in roots for n in names if norm(n).startswith(norm(r)) and 0 < len(norm(n)) - len(norm(r)) <= MAX_SUFFIX), key=lambda n: (len(n), n))
+            cands = [n for n in dict.fromkeys(cands) if n != plain]
+            found = next((n for n in cands[:8] if self._tradable(n)), None) or plain or (cands[0] if cands else None)  # listed but not tradable anywhere: keep the plain name
         if not found:
             raise Fault(404, f"Símbolo «{symbol}» desconocido en la cuenta {self.id}")
         self._resolved[symbol] = found
         return found
+
+    def _tradable(self, name: str) -> bool:
+        """Full trading allowed on this exact broker name (an account can list EURUSD disabled next to the tradable EURUSDb)."""
+        try:
+            return self._spec(name)["tradeMode"] == MODE_FULL
+        except Fault as e:
+            if e.status in (503, 504):
+                raise  # terminal down: not a property of the symbol
+            return False
 
     def spec(self, symbol: str) -> dict:
         return self._spec(self.resolve(symbol))
@@ -205,292 +201,7 @@ class Driver:
 
 
 # =====================================================================================================================
-# MT4 · atomic JSON files answered by HFM_Bridge_EA.mq4
-# =====================================================================================================================
-class Mt4Driver(Driver):
-    platform = "mt4"
-
-    def __init__(self, account_id: str, cfg: dict, state_dir: Path):
-        super().__init__(account_id, cfg, state_dir)
-        self.dir = Path(cfg["files_dir"]) / "aitb"
-        self.dir.mkdir(parents=True, exist_ok=True)
-        self._swept = 0.0
-        self.sweep(force=True)
-        self.magic = int(cfg.get("magic") or 777001)
-        self.slippage = int(cfg.get("slippage_points") or 30)
-
-    def heartbeat(self) -> dict | None:
-        """status.json written by the EA every second; None when the EA / terminal is not running."""
-        p = self.dir / "status.json"
-        try:
-            if time.time() - p.stat().st_mtime > HEARTBEAT_MAX_AGE:
-                return None
-            hb = json.loads(p.read_text("utf-8", errors="replace"))
-        except (OSError, ValueError):
-            return None
-        self.learn_offset(hb.get("server_time", 0), hb.get("gmt_time", 0), hb.get("tick_age", 99) <= 3)
-        return hb
-
-    def _learn_clock(self):
-        self.heartbeat()
-
-    def last_beat(self):
-        """UTC epoch of the EA's last status.json write (None if it never wrote one)."""
-        try:
-            return int((self.dir / "status.json").stat().st_mtime)
-        except OSError:
-            return None
-
-    def ea_alive(self) -> bool:
-        """status.json exists and the EA refreshed it less than EA_MAX_AGE seconds ago."""
-        try:
-            return time.time() - (self.dir / "status.json").stat().st_mtime < EA_MAX_AGE
-        except OSError:
-            return False
-
-    def sweep(self, force: bool = False) -> int:
-        """Deletes req_/res_ leftovers older than STALE_FILE_AGE (startup, then at most every 30 s): the folder can never pile up."""
-        now = time.time()
-        if not force and now - self._swept < 30:
-            return 0
-        self._swept, n = now, 0
-        try:
-            names = [f for f in os.listdir(self.dir) if f.startswith(("req_", "res_"))]
-        except OSError:
-            return 0
-        for f in names:
-            try:
-                if now - os.path.getmtime(self.dir / f) > STALE_FILE_AGE:
-                    os.unlink(self.dir / f)
-                    n += 1
-            except OSError:
-                pass
-        if n:
-            log.warning("%s: %d archivos residuales eliminados de %s", self.id, n, self.dir)
-        return n
-
-    def request(self, cmd: str, timeout: float = 10.0, **params) -> dict:
-        """Writes req_<id>.json atomically and waits for res_<id>.json. Nothing is written when the EA is not alive, and no file of this request
-        survives the call. Fault.picked tells whether the EA took the request before the timeout."""
-        self.sweep()
-        if not self.ea_alive():
-            raise Fault(503, f"El Expert Advisor de {self.id} no está activo (sin latido en los últimos {EA_MAX_AGE:.0f} s): no se envió «{cmd}». "
-                             "Abre el terminal MT4, activa Algo Trading y arrastra HFM_Bridge_EA a un gráfico.")
-        rid = uuid.uuid4().hex[:16]
-        req, res, tmp = self.dir / f"req_{rid}.json", self.dir / f"res_{rid}.json", self.dir / f"req_{rid}.tmp"
-        picked = True
-        try:
-            tmp.write_text(json.dumps({"id": rid, "cmd": cmd, "ts": int(time.time()), **params}, separators=(",", ":")), "ascii")
-            os.replace(tmp, req)
-            end = time.time() + timeout
-            while time.time() < end:
-                if res.exists():
-                    try:
-                        return json.loads(res.read_text("utf-8", errors="replace"))
-                    except (OSError, ValueError):
-                        pass  # the EA is still renaming the file
-                time.sleep(0.02)
-        finally:
-            for f in (tmp, req, res, self.dir / f"res_{rid}.tmp"):
-                try:
-                    f.unlink()
-                    if f is req:
-                        picked = False  # still there: the EA never read it, so it was never executed
-                except OSError:
-                    pass
-        raise Fault(504, f"El Expert Advisor de {self.id} no respondió a «{cmd}» en {timeout:.0f} s" + ("" if picked else " (no llegó a leer la petición: ¿EA activo en un gráfico?)"), picked)
-
-    def _ok(self, r: dict, what: str) -> dict:
-        if not r.get("ok"):
-            err = int(r.get("err") or 0)
-            raise Fault(404 if err == 4106 else 502, f"{what}: {MT4_ERR.get(err, f'error MT4 {err}')}")
-        return r
-
-    def status(self) -> dict:
-        hb = self.heartbeat()
-        base = {"_id": self.id, "platform": "mt4", "type": "bridge", "reliability": "own", "region": "vps-windows", "heartbeatAt": self.last_beat()}
-        if not hb:
-            return {**base, "state": "UNDEPLOYED", "connectionStatus": "DISCONNECTED", "detail": "El Expert Advisor no escribe su latido: abre el terminal MT4, activa Algo Trading y arrastra HFM_Bridge_EA a un gráfico"}
-        return {**base, "state": "DEPLOYED", "connectionStatus": "CONNECTED" if hb.get("connected") else "DISCONNECTED", "login": str(hb.get("login", "")), "server": hb.get("server", ""),
-                "broker": hb.get("company", ""), "tradeAllowed": bool(hb.get("trade_allowed")), "detail": "" if hb.get("connected") else "Terminal MT4 sin conexión con el servidor del bróker"}
-
-    def account_info(self) -> dict:
-        hb = self.heartbeat()
-        if not hb:
-            raise Fault(503, self.status()["detail"])
-        return {"login": str(hb.get("login", "")), "server": hb.get("server", ""), "broker": hb.get("company", ""), "name": hb.get("name", ""), "currency": hb.get("currency", ""),
-                "balance": hb.get("balance", 0), "equity": hb.get("equity", 0), "margin": hb.get("margin", 0), "freeMargin": hb.get("free_margin", 0),
-                "leverage": hb.get("leverage", 0), "tradeAllowed": bool(hb.get("trade_allowed")), "platform": "mt4"}
-
-    def _symbols(self) -> list:
-        return self._ok(self.request("symbols", 15), "symbols")["symbols"]
-
-    def _spec(self, name: str) -> dict:
-        r = self._ok(self.request("spec", 8, symbol=name), f"spec {name}")
-        return {"symbol": name, "digits": int(r["digits"]), "point": r["point"], "minVolume": r["min_lot"], "volumeStep": r["lot_step"], "maxVolume": r["max_lot"],
-                "contractSize": r["contract"], "tickSize": r["tick_size"], "tickValue": r["tick_value"], "tradeMode": mt4_trade_mode(r["trade_mode"], r.get("trade_allowed")),
-                "stopsLevel": r.get("stops_level", 0), "bid": r["bid"], "ask": r["ask"], "time": r.get("time", 0)}
-
-    def tick(self, symbol: str) -> dict:
-        s = self.spec(symbol)
-        if not s["bid"] or not s["ask"]:
-            raise Fault(503, f"Sin cotización de {s['symbol']} en {self.id}")
-        return {"symbol": s["symbol"], "bid": s["bid"], "ask": s["ask"], "spread": round(s["ask"] - s["bid"], s["digits"]), "time": iso(self.to_utc(s["time"]) if s["time"] else time.time())}
-
-    def candles(self, symbol: str, tf: str, start_utc: float | None, limit: int) -> list:
-        name = self.resolve(symbol)
-        for attempt in range(4):  # MT4 downloads missing history in the background: first answers may be empty (4066)
-            r = self.request("candles", 30, symbol=name, tf=TF_MIN[tf], start=int(self.to_server(start_utc)) if start_utc else 0, limit=limit)
-            if r.get("ok") and r.get("rows"):
-                return [{"time": iso(self.to_utc(t)), "open": o, "high": h, "low": lo, "close": c, "tickVolume": v} for t, o, h, lo, c, v in r["rows"]]
-            if attempt < 3:
-                time.sleep(0.8)
-        self._ok(r, f"candles {name}")
-        return []
-
-    # ---- positions with stable ids across partial closes (MT4 gives the remainder a new ticket and the comment «from #old») ----
-    def _root(self, ticket: int, comment: str) -> str:
-        t = str(ticket)
-        root = self.state["alias"].get(t)
-        if root is None:
-            m = FROM_RE.search(comment or "")
-            if not m:
-                return t
-            root = self.state["alias"].get(m.group(1), m.group(1))
-            self._link(root, ticket)
-        return root
-
-    def _link(self, root: str, ticket: int, client_id: str = None):
-        self.state["alias"][str(ticket)] = root
-        chain = self.state["chain"].setdefault(root, [int(root)])
-        if int(ticket) not in chain:
-            chain.append(int(ticket))
-        if client_id:
-            self.state["client"][root] = client_id
-        self.save_state()
-
-    def _raw_positions(self) -> list:
-        return [p for p in self._ok(self.request("positions", 10), "positions")["positions"] if int(p["type"]) in (0, 1)]
-
-    def positions(self) -> list:
-        out = []
-        for p in self._raw_positions():
-            root = self._root(p["ticket"], p.get("comment", ""))
-            out.append({"id": root, "ticket": p["ticket"], "symbol": p["symbol"], "type": "POSITION_TYPE_BUY" if int(p["type"]) == 0 else "POSITION_TYPE_SELL", "volume": p["lots"],
-                        "openPrice": p["open_price"], "currentPrice": p["price"], "stopLoss": p["sl"] or None, "takeProfit": p["tp"] or None, "profit": p["profit"], "swap": p["swap"],
-                        "commission": p["commission"], "clientId": self.state["client"].get(root) or p.get("comment", ""), "comment": p.get("comment", ""), "magic": p.get("magic"),
-                        "time": iso(self.to_utc(p["open_time"]))})
-        return out
-
-    def _history(self, start_utc: float, end_utc: float) -> list:
-        return self._ok(self.request("history", 30, **{"from": int(self.to_server(start_utc)), "to": int(self.to_server(end_utc)) + 3600}), "history")["orders"]
-
-    def _deal(self, o: dict, root: str, out: bool) -> dict:
-        buy = int(o["type"]) == 0
-        return {"id": f"{o['ticket']}{'o' if out else 'i'}", "positionId": root, "symbol": o["symbol"], "type": "DEAL_TYPE_SELL" if buy == out else "DEAL_TYPE_BUY",
-                "entryType": "DEAL_ENTRY_OUT" if out else "DEAL_ENTRY_IN", "volume": o["lots"], "price": o["close_price"] if out else o["open_price"],
-                "profit": o["profit"] if out else 0.0, "swap": o["swap"] if out else 0.0, "commission": o["commission"] if out else 0.0,
-                "time": iso(self.to_utc(o["close_time"] if out else o["open_time"])), "comment": o.get("comment", ""), "clientId": self.state["client"].get(root) or o.get("comment", "")}
-
-    def deals_by_position(self, position_id: str) -> list:
-        """Synthetic MT5-style deals of one position: one IN (total volume) and one OUT per closed part."""
-        root = str(position_id)
-        tickets = set(self.state["chain"].get(root, [int(root)]))
-        closed = [o for o in self._history(time.time() - 120 * 86400, time.time()) if int(o["type"]) in (0, 1) and (o["ticket"] in tickets or self._root(o["ticket"], o.get("comment", "")) == root)]
-        if not closed:
-            return []
-        still_open = sum(p["volume"] for p in self.positions() if p["id"] == root)
-        first = min(closed, key=lambda o: o["open_time"])
-        entry = {**self._deal(first, root, False), "volume": round(sum(o["lots"] for o in closed) + still_open, 8)}
-        return [entry] + [self._deal(o, root, True) for o in sorted(closed, key=lambda o: o["close_time"])]
-
-    def deals_by_time(self, start_utc: float, end_utc: float) -> list:
-        deals = []
-        for o in self._history(start_utc, end_utc):
-            t = int(o["type"])
-            if not start_utc <= self.to_utc(o["close_time"]) <= end_utc:
-                continue
-            if t in (6, 7):
-                deals.append({"id": str(o["ticket"]), "type": "DEAL_TYPE_BALANCE" if t == 6 else "DEAL_TYPE_CREDIT", "profit": o["profit"], "time": iso(self.to_utc(o["close_time"])), "comment": o.get("comment", "")})
-            elif t in (0, 1):
-                deals.append(self._deal(o, self._root(o["ticket"], o.get("comment", "")), True))
-        return deals
-
-    def orders_by_time(self, start_utc: float, end_utc: float) -> list:
-        rows = [{"id": str(p["ticket"]), "positionId": p["id"], "clientId": p["clientId"], "state": "ORDER_STATE_FILLED", "symbol": p["symbol"], "time": p["time"]}
-                for p in self.positions() if start_utc <= parse_iso(p["time"]) <= end_utc]
-        for o in self._history(start_utc, end_utc):
-            if int(o["type"]) in (0, 1) and start_utc <= self.to_utc(o["open_time"]) <= end_utc:
-                root = self._root(o["ticket"], o.get("comment", ""))
-                rows.append({"id": str(o["ticket"]), "positionId": root, "clientId": self.state["client"].get(root) or o.get("comment", ""), "state": "ORDER_STATE_FILLED",
-                             "symbol": o["symbol"], "time": iso(self.to_utc(o["open_time"]))})
-        return rows
-
-    def _trade_request(self, cmd: str, **params) -> dict:
-        """Trade command → MetaApi-style result. No answer: ERR_NO_CONNECTION when the EA never took the file (not executed), ERR_TRADE_TIMEOUT when it did (unknown)."""
-        if not self.heartbeat():
-            return result("ERR_NO_CONNECTION", 6, "El Expert Advisor de MT4 no está activo")
-        try:
-            r = self.request(cmd, 45, **params)
-        except Fault as e:
-            return result("ERR_TRADE_TIMEOUT" if e.picked else "ERR_NO_CONNECTION", 128 if e.picked else 6, e.detail)
-        err = int(r.get("err") or 0)
-        if r.get("ok") or (cmd == "modify" and err == 1):
-            return {**result("ERR_NO_ERROR"), **r}
-        return result(MT4_ERR.get(err, f"ERR_MT4_{err}"), err, r.get("msg") or f"error MT4 {err}")
-
-    def trade(self, body: dict) -> dict:
-        try:
-            return self._trade(body)
-        except Fault as e:  # only the reads done BEFORE sending the order can raise: nothing was executed
-            if e.status in (503, 504):
-                return result("ERR_NO_CONNECTION", 6, e.detail)
-            raise
-
-    def _trade(self, body: dict) -> dict:
-        action = body.get("actionType", "")
-        if action in ("ORDER_TYPE_BUY", "ORDER_TYPE_SELL"):
-            s = self.spec(body["symbol"])
-            vol = quantize_volume(body["volume"], s)
-            if not vol:
-                return result("ERR_INVALID_TRADE_VOLUME", 131, f"{body['volume']} lotes por debajo del mínimo {s['minVolume']} de {s['symbol']}")
-            d = s["digits"]
-            r = self._trade_request("open", symbol=s["symbol"], side=0 if action.endswith("BUY") else 1, lots=vol, sl=round(float(body.get("stopLoss") or 0), d),
-                                    tp=round(float(body.get("takeProfit") or 0), d), comment=str(body.get("clientId") or "")[:31], magic=int(body.get("magic") or self.magic), slippage=self.slippage)
-            if r["stringCode"] == "ERR_NO_ERROR":
-                r.update(orderId=str(r["ticket"]), positionId=str(r["ticket"]), volume=vol, symbol=s["symbol"])
-            return r
-        pid = str(body.get("positionId") or "")
-        pos = next((p for p in self.positions() if p["id"] == pid), None)
-        if not pos:
-            return result("TRADE_RETCODE_POSITION_CLOSED", 4108, f"La posición {pid} no está abierta en {self.id}")
-        if action == "POSITION_MODIFY":
-            d = self._spec(pos["symbol"])["digits"]
-            tp = body.get("takeProfit")
-            r = self._trade_request("modify", ticket=pos["ticket"], sl=round(float(body.get("stopLoss") or 0), d), tp=round(float(tp), d) if tp is not None else -1)
-            return {**r, "positionId": pid}
-        if action in ("POSITION_CLOSE_ID", "POSITION_PARTIAL"):
-            lots = 0.0
-            if action == "POSITION_PARTIAL":
-                lots = floor_step(float(body["volume"]), self._spec(pos["symbol"])["volumeStep"])
-                if lots <= 0:
-                    return result("ERR_INVALID_TRADE_VOLUME", 131, "Volumen de cierre parcial inválido")
-                lots = 0.0 if lots >= pos["volume"] - 1e-9 else lots
-            r = self._trade_request("close", ticket=pos["ticket"], lots=lots, slippage=self.slippage)
-            if r["stringCode"] == "ERR_NO_ERROR":
-                if r.get("new_ticket"):
-                    self._link(pid, int(r["new_ticket"]), pos["clientId"])
-                r.update(orderId=str(pos["ticket"]), positionId=pid)
-            return r
-        raise Fault(400, f"actionType no soportado: {action}")
-
-    def reconnect(self) -> dict:
-        self._names, self._resolved = (0.0, []), {}
-        return self.status()
-
-
-# =====================================================================================================================
-# MT5 · native MetaTrader5 library, one child process per account
+# MT5 · native MetaTrader5 library, one worker process per account (the library holds ONE terminal connection per process)
 # =====================================================================================================================
 class Mt5Core:
     """Runs inside the child process (or with a fake `mt5` module in tests)."""
@@ -502,8 +213,16 @@ class Mt5Core:
         kw = {k: self.cfg[c] for k, c in (("login", "login"), ("password", "password"), ("server", "server")) if self.cfg.get(c)}
         if "login" in kw:
             kw["login"] = int(kw["login"])
+        if self.cfg.get("portable"):
+            kw["portable"] = True
         self.ready = bool(self.mt5.initialize(path=self.cfg["terminal_path"], timeout=int(self.cfg.get("init_timeout_ms") or 60000), **kw))
         return self.ready
+
+    def _check_login(self, ai):
+        """This worker must be attached to ITS account: another login in the terminal means a wrong `terminal_path` (never trade on it)."""
+        want = self.cfg.get("login")
+        if want and ai is not None and int(ai.login) != int(want):
+            raise Fault(503, f"El terminal {self.cfg['terminal_path']} está en la cuenta {ai.login}, pero esta cuenta del puente espera el login {want}: revisa «terminal_path» y «login»")
 
     def _need(self):
         if not self.ready and not self.connect():
@@ -512,6 +231,7 @@ class Mt5Core:
         if ti is None:
             self.ready = False
             raise Fault(503, f"El terminal MT5 no responde: {self.mt5.last_error()}")
+        self._check_login(self.mt5.account_info())
         return ti
 
     def status(self) -> dict:
@@ -776,9 +496,9 @@ class Mt5Driver(Driver):
         return [o for o in (self._t(o) for o in self.call("orders_by_time", self.to_server(start_utc), self.to_server(end_utc))) if start_utc <= parse_iso(o["time"]) <= end_utc]
 
     def trade(self, body: dict) -> dict:
-        if body.get("symbol"):
-            body = {**body, "symbol": self.resolve(body["symbol"])}
         try:
+            if body.get("symbol"):
+                body = {**body, "symbol": self.resolve(body["symbol"])}
             return self.call("trade", body, timeout=60)
         except Fault as e:
             if e.status == 504:
@@ -801,23 +521,34 @@ class Mt5Driver(Driver):
 # =====================================================================================================================
 def load_config(path: str = None) -> dict:
     p = Path(path or os.environ.get("BRIDGE_CONFIG") or HERE / "config_bridge.json")
-    cfg = json.loads(p.read_text("utf-8"))
+    cfg = json.loads(p.read_text("utf-8-sig"))
     cfg["token"] = os.environ.get("BRIDGE_TOKEN") or cfg.get("token") or ""
     if len(cfg["token"]) < 24:
         raise SystemExit("BRIDGE_TOKEN ausente o demasiado corto (mínimo 24 caracteres): ponlo en config_bridge.json («token») o en la variable de entorno BRIDGE_TOKEN")
     if not cfg.get("allowed_ips") and not cfg.get("allow_any_ip"):
         raise SystemExit("Falta «allowed_ips» en config_bridge.json: añade la IP pública de tu VPS Linux (o «allow_any_ip»: true bajo tu responsabilidad)")
-    for acc_id, a in (cfg.get("accounts") or {}).items():
-        need = "files_dir" if a.get("platform") == "mt4" else "terminal_path" if a.get("platform") == "mt5" else None
-        if not need or not a.get(need):
-            raise SystemExit(f"Cuenta «{acc_id}»: «platform» debe ser mt4 (con «files_dir») o mt5 (con «terminal_path»)")
+    cfg["accounts"] = cfg.get("accounts") or {k: dict(v) for k, v in DEFAULT_ACCOUNTS.items()}
+    paths = {}
+    for acc_id, a in cfg["accounts"].items():
+        a.setdefault("platform", "mt5")
+        if a["platform"] != "mt5":
+            raise SystemExit(f"Cuenta «{acc_id}»: «platform» {a['platform']!r} ya no está soportada. Este puente solo usa MetaTrader 5: pon \"platform\": \"mt5\" y «terminal_path».")
+        if not a.get("terminal_path"):
+            a["terminal_path"] = (DEFAULT_ACCOUNTS.get(acc_id) or {}).get("terminal_path")
+        if not a.get("terminal_path"):
+            raise SystemExit(f"Cuenta «{acc_id}»: falta «terminal_path» (ruta completa al terminal64.exe de ESA cuenta)")
+        key = os.path.normcase(os.path.normpath(a["terminal_path"]))
+        if key in paths:
+            raise SystemExit(f"Las cuentas «{paths[key]}» y «{acc_id}» apuntan al mismo terminal ({a['terminal_path']}): cada cuenta necesita su propia instalación de MetaTrader 5")
+        paths[key] = acc_id
     return cfg
 
 
-def build_drivers(cfg: dict) -> dict:
+def build_drivers(cfg: dict, core_factory=None) -> dict:
+    """One Mt5Driver (own lock + own worker process) per account. `core_factory(account_id, cfg)` → in-process Mt5Core (tests)."""
     state_dir = Path(cfg.get("state_dir") or HERE / "state")
     state_dir.mkdir(parents=True, exist_ok=True)
-    return {acc_id: (Mt4Driver if a["platform"] == "mt4" else Mt5Driver)(acc_id, a, state_dir) for acc_id, a in cfg["accounts"].items()}
+    return {acc_id: Mt5Driver(acc_id, a, state_dir, core=core_factory(acc_id, a) if core_factory else None) for acc_id, a in cfg["accounts"].items()}
 
 
 def create_app(cfg: dict, drivers: dict) -> FastAPI:
@@ -846,13 +577,18 @@ def create_app(cfg: dict, drivers: dict) -> FastAPI:
     base = "/users/current/accounts"
     dep = [Depends(guard)]
 
+    def all_status() -> list:
+        """Every terminal asked at the same time: one that is closed or slow does not delay the others."""
+        with ThreadPoolExecutor(max_workers=max(1, len(drivers))) as pool:
+            return list(pool.map(lambda d: d.status(), drivers.values()))
+
     @app.get("/health", dependencies=dep)
     def health():
-        return {"ok": True, "time": iso(time.time()), "accounts": [d.status() for d in drivers.values()]}
+        return {"ok": True, "time": iso(time.time()), "accounts": all_status()}
 
     @app.get(base, dependencies=dep)
     def accounts():
-        return [d.status() for d in drivers.values()]
+        return all_status()
 
     @app.get(base + "/{account_id}", dependencies=dep)
     def account(account_id: str):

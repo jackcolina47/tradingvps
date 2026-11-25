@@ -208,8 +208,9 @@ class FxLiveBroker:
         for suf in cands[:8]:
             try:
                 spec = await self.api.spec(self.account_id, probe + suf, max_age=0)
-                rows.append({"suffix": suf, "symbol": probe + suf, "trade_mode": trade_mode_txt(spec.get("tradeMode") or TRADE_MODE_FULL),
-                             "tradable": (spec.get("tradeMode") or TRADE_MODE_FULL) == TRADE_MODE_FULL})
+                same = (spec.get("symbol") or probe + suf) == probe + suf  # the bridge may answer with the tradable variant of another name (EURUSD → EURUSDb)
+                mode = (spec.get("tradeMode") or TRADE_MODE_FULL) if same else "SYMBOL_TRADE_MODE_DISABLED"
+                rows.append({"suffix": suf, "symbol": probe + suf, "trade_mode": trade_mode_txt(mode), "tradable": mode == TRADE_MODE_FULL})
             except BridgeError as e:
                 if e.status not in (404, 400):
                     raise

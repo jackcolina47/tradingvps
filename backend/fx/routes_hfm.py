@@ -9,10 +9,6 @@ from fx.bridge import MtBridge, BridgeError
 
 logger = logging.getLogger(__name__)
 STEPS = {
-    "mt4": ["En el VPS Windows abre el terminal MetaTrader 4 de esta cuenta y comprueba abajo a la derecha que tiene conexión con el bróker.",
-            "Activa el botón «AutoTrading» (Algo Trading) y arrastra HFM_Bridge_EA a un gráfico cualquiera: debe verse la cara sonriente arriba a la derecha.",
-            "En las propiedades del EA marca «Permitir trading en vivo». En la pestaña «Historial de cuenta» elige clic derecho → «Todo el historial».",
-            "Comprueba que «files_dir» de esta cuenta en config_bridge.json apunta a la carpeta MQL4\\Files de ESTE terminal (Archivo → Abrir carpeta de datos)."],
     "mt5": ["En el VPS Windows abre el terminal MetaTrader 5 de esta cuenta, inicia sesión y comprueba que tiene conexión con el bróker.",
             "Activa el botón «Algo Trading» de la barra superior y, en Herramientas → Opciones → Asesores Expertos, «Permitir trading algorítmico».",
             "Comprueba que «terminal_path» en config_bridge.json apunta al terminal64.exe de ESTE terminal y reinicia mt_bridge.py."],
