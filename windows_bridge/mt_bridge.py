@@ -28,6 +28,8 @@ HERE = Path(__file__).resolve().parent
 TF_MIN = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "4h": 240, "1d": 1440, "1w": 10080}
 FROM_RE = re.compile(r"from #(\d+)")
 HEARTBEAT_MAX_AGE = 6.0
+EA_MAX_AGE = 10.0       # no request file is written when status.json is older than this
+STALE_FILE_AGE = 60.0   # req_/res_ leftovers older than this are deleted
 MODE_FULL = "SYMBOL_TRADE_MODE_FULL"
 TRADE_MODES = {0: "SYMBOL_TRADE_MODE_DISABLED", 1: "SYMBOL_TRADE_MODE_LONGONLY", 2: "SYMBOL_TRADE_MODE_SHORTONLY", 3: "SYMBOL_TRADE_MODE_CLOSEONLY", 4: MODE_FULL}  # MT5 numbering
 MT4_TRADE_MODES = {0: "SYMBOL_TRADE_MODE_DISABLED", 1: "SYMBOL_TRADE_MODE_CLOSEONLY", 2: MODE_FULL, 3: "SYMBOL_TRADE_MODE_LONGONLY", 4: "SYMBOL_TRADE_MODE_SHORTONLY"}
@@ -212,6 +214,8 @@ class Mt4Driver(Driver):
         super().__init__(account_id, cfg, state_dir)
         self.dir = Path(cfg["files_dir"]) / "aitb"
         self.dir.mkdir(parents=True, exist_ok=True)
+        self._swept = 0.0
+        self.sweep(force=True)
         self.magic = int(cfg.get("magic") or 777001)
         self.slippage = int(cfg.get("slippage_points") or 30)
 
@@ -230,32 +234,63 @@ class Mt4Driver(Driver):
     def _learn_clock(self):
         self.heartbeat()
 
+    def ea_alive(self) -> bool:
+        """status.json exists and the EA refreshed it less than EA_MAX_AGE seconds ago."""
+        try:
+            return time.time() - (self.dir / "status.json").stat().st_mtime < EA_MAX_AGE
+        except OSError:
+            return False
+
+    def sweep(self, force: bool = False) -> int:
+        """Deletes req_/res_ leftovers older than STALE_FILE_AGE (startup, then at most every 30 s): the folder can never pile up."""
+        now = time.time()
+        if not force and now - self._swept < 30:
+            return 0
+        self._swept, n = now, 0
+        try:
+            names = [f for f in os.listdir(self.dir) if f.startswith(("req_", "res_"))]
+        except OSError:
+            return 0
+        for f in names:
+            try:
+                if now - os.path.getmtime(self.dir / f) > STALE_FILE_AGE:
+                    os.unlink(self.dir / f)
+                    n += 1
+            except OSError:
+                pass
+        if n:
+            log.warning("%s: %d archivos residuales eliminados de %s", self.id, n, self.dir)
+        return n
+
     def request(self, cmd: str, timeout: float = 10.0, **params) -> dict:
-        """Writes req_<id>.json atomically and waits for res_<id>.json. Fault.picked tells whether the EA took the request before the timeout."""
+        """Writes req_<id>.json atomically and waits for res_<id>.json. Nothing is written when the EA is not alive, and no file of this request
+        survives the call. Fault.picked tells whether the EA took the request before the timeout."""
+        self.sweep()
+        if not self.ea_alive():
+            raise Fault(503, f"El Expert Advisor de {self.id} no está activo (sin latido en los últimos {EA_MAX_AGE:.0f} s): no se envió «{cmd}». "
+                             "Abre el terminal MT4, activa Algo Trading y arrastra HFM_Bridge_EA a un gráfico.")
         rid = uuid.uuid4().hex[:16]
         req, res, tmp = self.dir / f"req_{rid}.json", self.dir / f"res_{rid}.json", self.dir / f"req_{rid}.tmp"
-        tmp.write_text(json.dumps({"id": rid, "cmd": cmd, "ts": int(time.time()), **params}, separators=(",", ":")), "ascii")
-        os.replace(tmp, req)
-        end = time.time() + timeout
-        while time.time() < end:
-            if res.exists():
-                try:
-                    data = json.loads(res.read_text("utf-8", errors="replace"))
-                except (OSError, ValueError):
-                    time.sleep(0.02)  # the EA is still renaming the file
-                    continue
-                try:
-                    res.unlink()
-                except OSError:
-                    pass
-                return data
-            time.sleep(0.02)
         picked = True
         try:
-            req.unlink()
-            picked = False
-        except OSError:
-            pass
+            tmp.write_text(json.dumps({"id": rid, "cmd": cmd, "ts": int(time.time()), **params}, separators=(",", ":")), "ascii")
+            os.replace(tmp, req)
+            end = time.time() + timeout
+            while time.time() < end:
+                if res.exists():
+                    try:
+                        return json.loads(res.read_text("utf-8", errors="replace"))
+                    except (OSError, ValueError):
+                        pass  # the EA is still renaming the file
+                time.sleep(0.02)
+        finally:
+            for f in (tmp, req, res, self.dir / f"res_{rid}.tmp"):
+                try:
+                    f.unlink()
+                    if f is req:
+                        picked = False  # still there: the EA never read it, so it was never executed
+                except OSError:
+                    pass
         raise Fault(504, f"El Expert Advisor de {self.id} no respondió a «{cmd}» en {timeout:.0f} s" + ("" if picked else " (no llegó a leer la petición: ¿EA activo en un gráfico?)"), picked)
 
     def _ok(self, r: dict, what: str) -> dict:

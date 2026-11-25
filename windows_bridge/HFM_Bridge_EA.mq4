@@ -105,17 +105,30 @@ void WaitContext()
   }
 
 //------------------------------ lifecycle ------------------------------
+// Borra por lotes (nombres primero, búsqueda cerrada, luego borrado) para no recorrer la carpeta mientras se modifica
+void PurgeOld(string mask)
+  {
+   string batch[200];
+   for(int round = 0; round < 100; round++)
+     {
+      int n = 0;
+      string name;
+      long h = FileFindFirst(Folder + "\\" + mask, name);
+      if(h == INVALID_HANDLE) return;
+      do { batch[n] = name; n++; } while(n < 200 && FileFindNext(h, name));
+      FileFindClose(h);
+      int deleted = 0;
+      for(int i = 0; i < n; i++) if(FileDelete(Folder + "\\" + batch[i])) deleted++;
+      if(n < 200 || deleted == 0) return;
+     }
+  }
+
 int OnInit()
   {
    FolderCreate(Folder);
    // peticiones que quedaron de una sesión anterior: se borran, jamás se ejecutan tarde
-   string name;
-   long h = FileFindFirst(Folder + "\\req_*", name);
-   if(h != INVALID_HANDLE)
-     {
-      do { FileDelete(Folder + "\\" + name); } while(FileFindNext(h, name));
-      FileFindClose(h);
-     }
+   PurgeOld("req_*");
+   PurgeOld("res_*");
    EventSetMillisecondTimer(MathMax(50, TimerMs));
    Heartbeat();
    Print("HFM_Bridge_EA activo · carpeta MQL4\\Files\\", Folder, " · cuenta ", AccountNumber(), " ", AccountServer());
@@ -130,22 +143,39 @@ void OnDeinit(const int reason)
 
 void OnTick() {}
 
+#define MAX_BATCH 25
+
 void OnTimer()
   {
    if(TimeCurrent() != g_lastServer) { g_lastServer = TimeCurrent(); g_lastChange = TimeLocal(); }
    if(GetTickCount() - g_lastBeat >= 1000) Heartbeat();
+   // 1) recoger hasta MAX_BATCH nombres y cerrar la búsqueda ANTES de tocar ningún archivo
+   string names[MAX_BATCH];
+   int n = 0;
    string name;
    long h = FileFindFirst(Folder + "\\req_*.json", name);
    if(h == INVALID_HANDLE) return;
    do
      {
-      string path = Folder + "\\" + name, json = "";
-      if(!ReadAll(path, json)) continue;
+      names[n] = name;
+      n++;
+     }
+   while(n < MAX_BATCH && FileFindNext(h, name));
+   FileFindClose(h);
+   // 2) procesar: cada petición se borra al leerla (así nunca se ejecuta dos veces) y luego se atiende
+   for(int i = 0; i < n; i++)
+     {
+      string path = Folder + "\\" + names[i], json = "";
+      if(!ReadAll(path, json))
+        {
+         // ilegible: si lleva más de MaxRequestAge segundos, se elimina para que no se acumule
+         if(TimeLocal() - (datetime)FileGetInteger(path, FILE_MODIFY_DATE) > MaxRequestAge) FileDelete(path);
+         continue;
+        }
       FileDelete(path);
       Handle(json);
+      if(GetTickCount() - g_lastBeat >= 1000) Heartbeat();   // el latido sigue vivo durante un lote largo
      }
-   while(FileFindNext(h, name));
-   FileFindClose(h);
   }
 
 void Heartbeat()
@@ -166,8 +196,8 @@ void Handle(const string &json)
    string id = J(json, "id"), cmd = J(json, "cmd"), body;
    if(id == "") return;
    long ts = JL(json, "ts");
-   if(ts > 0 && (long)TimeGMT() - ts > MaxRequestAge) body = Fail(128, "peticion caducada");
-   else if(cmd == "symbols")   body = CmdSymbols();
+   if(ts > 0 && (long)TimeGMT() - ts > MaxRequestAge) return;   // caducada: el puente ya dejó de esperar, no se ejecuta ni se escribe respuesta
+   if(cmd == "symbols")   body = CmdSymbols();
    else if(cmd == "spec")      body = CmdSpec(J(json, "symbol"));
    else if(cmd == "candles")   body = CmdCandles(J(json, "symbol"), (int)JL(json, "tf"), (datetime)JL(json, "start"), (int)JL(json, "limit"));
    else if(cmd == "positions") body = CmdPositions();

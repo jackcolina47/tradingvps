@@ -458,3 +458,33 @@ def test_mt4_trade_mode_and_gold_silver_aliases(stack):
         assert prem.broker_symbol("XAUUSD") == "XAUUSD"
         await api.aclose(); await b.aclose(); await prem.aclose()
     run(go())
+
+
+def test_no_request_files_pile_up(tmp_path):
+    """Iter126: EA down → immediate error and nothing written; timeouts leave no file; startup sweeps leftovers older than 60 s."""
+    import os
+    import time as _t
+    d = tmp_path / "aitb"
+    d.mkdir()
+    old, fresh = d / "req_old.json", d / "res_fresh.json"
+    old.write_text("{}"); fresh.write_text("{}"); (d / "res_old.json").write_text("{}"); (d / "status.json").write_text("{}")
+    for f in (old, d / "res_old.json", d / "status.json"):
+        os.utime(f, (_t.time() - 120, _t.time() - 120))
+    drv = mt_bridge.Mt4Driver("hfm_v1", {"platform": "mt4", "files_dir": str(tmp_path)}, tmp_path / "state")
+    assert sorted(os.listdir(d)) == ["res_fresh.json", "status.json"]  # stale req_/res_ swept at startup, status.json untouched
+    t0 = _t.time()
+    for _ in range(50):
+        with pytest.raises(mt_bridge.Fault) as e:
+            drv.request("positions", timeout=5)
+        assert e.value.status == 503 and "no está activo" in e.value.detail
+    assert _t.time() - t0 < 2 and sorted(os.listdir(d)) == ["res_fresh.json", "status.json"]  # heartbeat 120 s old: nothing written
+    (d / "status.json").unlink()
+    with pytest.raises(mt_bridge.Fault) as e:
+        drv.request("positions", timeout=5)
+    assert e.value.status == 503
+    (d / "status.json").write_text("{}")  # EA «alive» but never answering
+    for _ in range(3):
+        with pytest.raises(mt_bridge.Fault) as e:
+            drv.request("positions", timeout=0.2)
+        assert e.value.status == 504 and e.value.picked is False
+    assert sorted(os.listdir(d)) == ["res_fresh.json", "status.json"]
