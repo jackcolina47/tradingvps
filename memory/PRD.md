@@ -774,6 +774,12 @@ Decisión del usuario: contratendencia = 2:1 como tendencia (sustituye al TP cor
 - «Ver gráfico»: primera columna de posiciones → `PositionChartDialog` (portal) con `PriceChart` completo (`tid="position-"`), líneas ENTRADA/SL/TP de `/klines`.
 - Tests: `test_iter115_manual_order_rules.py`, `test_iter115_manual_order_api.py`. Suite 547+9. testing_agent `iteration_115.json` OK. No probado en vivo: flujo manual en FX (Yahoo limitado en preview) ni la revisión IA real a los N minutos.
 
+## Iteración 129 (2026-11) — Arrastrar SL/TP y editar la gestión de una posición abierta (3 bots)
+- `PUT /positions/{id}/levels` (`LevelsUpdate`): valida contra el precio actual; en REAL modifica primero el bróker (`set_stop(symbol, sl, tp)` en Bybit ahora admite TP; FX `set_stop(symbol, order_id, sl, tp)`); recalcula `breakeven`. `chart/LevelHandles.jsx`: líneas SL/TP arrastrables en `PositionChartDialog`, con barra Aplicar / Cancelar.
+- `PUT /positions/{id}/rules` (`TradeRules`): reemplaza `Position.rules` y `ai_review_minutes`. `PositionRulesDialog.jsx` + botón «Gestión» por fila/tarjeta.
+- `chart/TradeRulesFields.jsx`: campos compartidos (orden manual y edición) con casilla activado/desactivado según los ajustes del bot.
+- Tests `test_iter116_levels_and_rules.py`. Suite 569 passed, 17 skipped. testing_agent `iteration_116.json` OK. Sin probar: modificación de SL/TP en REAL (Bybit y puente MT) y flujo en FX (Yahoo limitado en preview).
+
 ### Pendiente
 - P1 Verificar en el VPS el puente real: formato exacto de `/users/current/accounts/{id}`, códigos de `/trade`, deals de cierre (entryType IN/OUT) y comportamiento del ticket tras parcial en MT4.
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
