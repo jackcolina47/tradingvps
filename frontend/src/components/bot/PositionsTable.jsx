@@ -5,6 +5,7 @@ import { SideBadge, Empty } from "./Panel";
 import { PositionCard } from "./OperationCards";
 import PositionChartDialog from "./PositionChartDialog";
 import PositionRulesDialog from "./PositionRulesDialog";
+import PositionAiReviewButton from "./PositionAiReviewButton";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
@@ -76,11 +77,11 @@ export default function PositionsTable({ positions, onClose, onCloseAll, aiRevie
         )}
       </div>
       {mobile ? (
-        <div data-testid="positions-cards">{positions.map((p) => <PositionCard key={p.id} p={p} onClose={onClose} onChart={(x) => setChartId(x.id)} onRules={(x) => setRulesId(x.id)} />)}</div>
+        <div data-testid="positions-cards">{positions.map((p) => <PositionCard key={p.id} p={p} onClose={onClose} onChart={(x) => setChartId(x.id)} onRules={(x) => setRulesId(x.id)} onChanged={onChanged} />)}</div>
       ) : (
       <table data-testid="positions-table" className="w-full text-sm">
         <thead className="border-b border-[#1E293B]">
-          <tr><TH>Gráfico</TH><TH>Símbolo</TH><TH>Lado</TH><TH right>Entrada</TH><TH right>Marca</TH><TH right>SL</TH><TH right>TP</TH><TH right>Tamaño</TH><TH right>Margen</TH><TH right>PnL</TH><TH right>Acción</TH></tr>
+          <tr><TH>Gráfico · IA</TH><TH>Símbolo</TH><TH>Lado</TH><TH right>Entrada</TH><TH right>Marca</TH><TH right>SL</TH><TH right>TP</TH><TH right>Tamaño</TH><TH right>Margen</TH><TH right>PnL</TH><TH right>Acción</TH></tr>
         </thead>
         <tbody className="num text-[12px]">
           {positions.map((p) => {
@@ -92,6 +93,7 @@ export default function PositionsTable({ positions, onClose, onCloseAll, aiRevie
                     className="inline-flex items-center gap-1 rounded-sm border border-amber-500/40 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-amber-300 transition-colors hover:bg-amber-500/10">
                     <LineChart className="h-3.5 w-3.5" /> <span className="hidden xl:inline">Ver gráfico</span>
                   </button>
+                  {p.exit_mode !== "cross" && <PositionAiReviewButton p={p} onDone={onChanged} className="ml-1.5" label={<span className="hidden xl:inline">Analizar IA</span>} />}
                 </TD>
                 <TD>
                   <p className="font-display text-[13px] font-semibold text-slate-100">{p.symbol}</p>

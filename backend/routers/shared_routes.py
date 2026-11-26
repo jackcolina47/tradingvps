@@ -237,6 +237,24 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
             raise HTTPException(424, f"Error IA: {friendly_error(e)}")
         return {"ok": True, "reviews": reviews, "count": len(reviews)}
 
+    @router.post("/positions/{pos_id}/ai-review")
+    async def position_ai_review(pos_id: str):
+        """AI review of ONE open position on demand (same analysis, mode and minimum confidence as the periodic review)."""
+        p = await _position(pos_id)
+        settings = await engine.get_settings()
+        if not settings.ai_enabled:
+            raise HTTPException(400, "El filtro IA está desactivado en Ajustes")
+        if p.exit_mode == "cross":
+            raise HTTPException(400, "Las posiciones del test de cruce EMA no se revisan con IA")
+        bot_name = engine.profile.bot_name if hasattr(engine, "profile") else "Bybit"
+        try:
+            reviews = await position_review.review_open_positions(engine, settings, currency, bot_name, only=[ObjectId(p.id)])
+        except Exception as e:
+            raise HTTPException(424, f"Error IA: {friendly_error(e)}")
+        if not reviews:
+            raise HTTPException(424, f"La IA no pudo analizar {p.symbol} (sin velas suficientes o error del modelo): revisa el registro del bot")
+        return {"ok": True, "review": reviews[0]}
+
     @router.get("/trades/{trade_id}/detail")
     async def trade_detail(trade_id: str):
         trade = (await _trade(trade_id)).model_dump()

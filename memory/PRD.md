@@ -780,6 +780,11 @@ Decisión del usuario: contratendencia = 2:1 como tendencia (sustituye al TP cor
 - `chart/TradeRulesFields.jsx`: campos compartidos (orden manual y edición) con casilla activado/desactivado según los ajustes del bot.
 - Tests `test_iter116_levels_and_rules.py`. Suite 569 passed, 17 skipped. testing_agent `iteration_116.json` OK. Sin probar: modificación de SL/TP en REAL (Bybit y puente MT) y flujo en FX (Yahoo limitado en preview).
 
+## Iteración 130 (2026-11) — Analizar con IA una sola posición (3 bots)
+- `POST /positions/{id}/ai-review` → `position_review.review_open_positions(only=[id])` (mismo modo y confianza mínima de Ajustes; 400 si IA desactivada o posición «cruce EMA»; 424 si la IA no responde).
+- `PositionAiReviewButton.jsx`: botón «Analizar IA» en la columna izquierda (junto a «Ver gráfico») y en la tarjeta móvil, con pop-up de confirmación. El botón global «Revisar con IA» se mantiene.
+- Tests `test_iter117_single_ai_review.py`. Suite 577 passed, 17 skipped. Probado a mano en Bybit paper (API con 2 posiciones: solo se revisó la pedida; pop-up en pantalla). No pasó por testing_agent.
+
 ### Pendiente
 - P1 Verificar en el VPS el puente real: formato exacto de `/users/current/accounts/{id}`, códigos de `/trade`, deals de cierre (entryType IN/OUT) y comportamiento del ticket tras parcial en MT4.
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.

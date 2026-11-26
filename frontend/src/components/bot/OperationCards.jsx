@@ -1,5 +1,6 @@
 import { X, LineChart, Search, Sparkles, SlidersHorizontal } from "lucide-react";
 import { SideBadge } from "./Panel";
+import PositionAiReviewButton from "./PositionAiReviewButton";
 import { fmtPrice, fmtSignedUsd, fmtUsd, fmtQty, fmtDateTime, pnlClass, STRATEGY_LABELS, REASON_LABELS, fmtPips } from "@/lib/api";
 
 const Cell = ({ label, children, cls = "text-slate-200" }) => (
@@ -10,7 +11,7 @@ const Cell = ({ label, children, cls = "text-slate-200" }) => (
 );
 const BTN = "inline-flex flex-1 items-center justify-center gap-1 rounded-sm border px-2 py-2 font-mono text-[10px] uppercase tracking-wider transition-colors";
 
-export function PositionCard({ p, onClose, onChart, onRules }) {
+export function PositionCard({ p, onClose, onChart, onRules, onChanged }) {
   const pct = p.margin ? (p.unrealized_pnl / p.margin) * 100 : 0;
   return (
     <article data-testid={`position-row-${p.id}`} className={`border-b border-[#1E293B]/60 p-3 ${p.live ? "bg-rose-500/[0.03]" : ""}`}>
@@ -32,8 +33,9 @@ export function PositionCard({ p, onClose, onChart, onRules }) {
         <Cell label="TP" cls="text-emerald-400">{p.exit_mode === "cross" ? "— cruce" : fmtPrice(p.tp)}</Cell>
         <Cell label="Margen">{fmtUsd(p.margin)}</Cell>
       </div>
-      <div className="mt-3 flex gap-2">
+      <div className="mt-3 flex flex-wrap gap-2">
         <button data-testid={`position-chart-${p.id}`} onClick={() => onChart(p)} className={`${BTN} border-amber-500/40 text-amber-300 hover:bg-amber-500/10`}><LineChart className="h-3.5 w-3.5" /> Gráfico</button>
+        {p.exit_mode !== "cross" && <PositionAiReviewButton p={p} onDone={onChanged} className="flex-1 !py-2" label="IA" />}
         <button data-testid={`position-rules-${p.id}`} onClick={() => onRules(p)} className={`${BTN} ${p.rules || p.ai_review_minutes ? "border-sky-400/60 text-sky-300" : "border-[#1E293B] text-slate-300"}`}><SlidersHorizontal className="h-3.5 w-3.5" /> Gestión</button>
         <button data-testid={`close-position-${p.id}`} onClick={() => onClose(p.id)} className={`${BTN} border-rose-500/40 text-rose-300 hover:bg-rose-500/15`}><X className="h-3.5 w-3.5" /> Cerrar</button>
       </div>
