@@ -20,6 +20,7 @@ def auth():
 def test_route_reviews_only_that_position():
     src = inspect.getsource(shared_routes)
     assert '@router.post("/positions/{pos_id}/ai-review")' in src and "only=[ObjectId(p.id)]" in src
+    assert "opinion_only: bool = False" in src and 'settings.model_copy(update={"ai_position_review_mode": "notify"})' in src
     assert src.index('"/positions/ai-review"') < src.index('"/positions/{pos_id}/ai-review"')
 
 

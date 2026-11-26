@@ -783,6 +783,7 @@ Decisión del usuario: contratendencia = 2:1 como tendencia (sustituye al TP cor
 ## Iteración 130 (2026-11) — Analizar con IA una sola posición (3 bots)
 - `POST /positions/{id}/ai-review` → `position_review.review_open_positions(only=[id])` (mismo modo y confianza mínima de Ajustes; 400 si IA desactivada o posición «cruce EMA»; 424 si la IA no responde).
 - `PositionAiReviewButton.jsx`: botón «Analizar IA» en la columna izquierda (junto a «Ver gráfico») y en la tarjeta móvil, con pop-up de confirmación. El botón global «Revisar con IA» se mantiene.
+- «Solo opinión» (marcada por defecto): `?opinion_only=true` fuerza el modo `notify` para esa llamada; la IA no cierra ni mueve el stop. Probado a mano en Bybit paper.
 - Tests `test_iter117_single_ai_review.py`. Suite 577 passed, 17 skipped. Probado a mano en Bybit paper (API con 2 posiciones: solo se revisó la pedida; pop-up en pantalla). No pasó por testing_agent.
 
 ### Pendiente

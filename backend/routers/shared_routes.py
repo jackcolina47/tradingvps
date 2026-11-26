@@ -238,8 +238,9 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
         return {"ok": True, "reviews": reviews, "count": len(reviews)}
 
     @router.post("/positions/{pos_id}/ai-review")
-    async def position_ai_review(pos_id: str):
-        """AI review of ONE open position on demand (same analysis, mode and minimum confidence as the periodic review)."""
+    async def position_ai_review(pos_id: str, opinion_only: bool = False):
+        """AI review of ONE open position on demand (same analysis, mode and minimum confidence as the periodic review).
+        `opinion_only`: the AI only answers; it never closes the position nor moves its stop, whatever the review mode in Settings."""
         p = await _position(pos_id)
         settings = await engine.get_settings()
         if not settings.ai_enabled:
@@ -247,6 +248,8 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
         if p.exit_mode == "cross":
             raise HTTPException(400, "Las posiciones del test de cruce EMA no se revisan con IA")
         bot_name = engine.profile.bot_name if hasattr(engine, "profile") else "Bybit"
+        if opinion_only:
+            settings = settings.model_copy(update={"ai_position_review_mode": "notify"})
         try:
             reviews = await position_review.review_open_positions(engine, settings, currency, bot_name, only=[ObjectId(p.id)])
         except Exception as e:
