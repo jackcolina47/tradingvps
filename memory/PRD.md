@@ -767,6 +767,13 @@ Decisión del usuario: contratendencia = 2:1 como tendencia (sustituye al TP cor
 - 30m: soportado por el cálculo, pero NO es temporalidad seleccionable (`TIMEFRAMES`). Guardar ajustes y el botón de escaneo siguen lanzando un escaneo inmediato extra.
 - Tests `tests/test_iter114_candle_scheduler.py` (49). Suite 519 passed, 16 skipped (un fallo intermitente no reproducido en 1 de 4 ejecuciones). testing_agent `iteration_114.json` OK.
 
+## Iteración 128 (2026-11) — Panel de operaciones a ancho completo, orden manual con gestión propia y gráfico por posición (3 bots)
+- Layout: panel de operaciones `lg:col-span-12`; «Decisiones del embudo IA» debajo a ancho completo (`AiSignals wide`). `useIsMobile` (<768 px): posiciones e historial como tarjetas (`OperationCards.jsx`), tabla en pantallas mayores. `Panel` header con wrap; historial `max-h-[70dvh]`.
+- Orden manual: `ManualOrder` acepta breakeven/trailing/parcial (rangos de Settings) y `ai_review_minutes` (5–30, múltiplo de 5). Se guardan en `Position.rules` / `Position.ai_review_minutes`; `risk.rules_for(rules, p)` en `_monitor_once` de ambos motores. Los ajustes globales no cambian.
+- Revisión IA por operación: `position_review.due_own()` + `review_open_positions(only=ids)`; independiente del interruptor global, requiere IA activada; usa el modo y la confianza mínima de Ajustes.
+- «Ver gráfico»: primera columna de posiciones → `PositionChartDialog` (portal) con `PriceChart` completo (`tid="position-"`), líneas ENTRADA/SL/TP de `/klines`.
+- Tests: `test_iter115_manual_order_rules.py`, `test_iter115_manual_order_api.py`. Suite 547+9. testing_agent `iteration_115.json` OK. No probado en vivo: flujo manual en FX (Yahoo limitado en preview) ni la revisión IA real a los N minutos.
+
 ### Pendiente
 - P1 Verificar en el VPS el puente real: formato exacto de `/users/current/accounts/{id}`, códigos de `/trade`, deals de cierre (entryType IN/OUT) y comportamiento del ticket tras parcial en MT4.
 - P3 Campos heredados sin efecto en Settings/FxSettings (strategy, disabled_strategies, signal_mode, risk_profile, symbol_params, htf_filter, btc_regime_*, rotation_*, vol_*, seasonality_*, usd_regime_*, fomc_rule, max_long_positions) y sus claves en review.py: retirar con migración.
