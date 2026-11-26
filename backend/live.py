@@ -88,9 +88,9 @@ class LiveBroker:
         self.invalidate()
         return {"order_id": res.get("orderId"), "exit": fill.get("avg_price") or 0.0, "fee": fill.get("fee") or 0.0}
 
-    async def set_stop(self, symbol: str, sl: float):
+    async def set_stop(self, symbol: str, sl: float, tp: float = None):
         inst = await self.client.instrument(symbol)
-        await self.client.set_stop(symbol, round_step(sl, inst["tick_size"]))
+        await self.client.set_stop(symbol, round_step(sl, inst["tick_size"]), round_step(tp, inst["tick_size"]) if tp else None)
 
     async def closed_result(self, symbol: str, since_iso: str, side: str = None, qty: float = None):
         from datetime import datetime

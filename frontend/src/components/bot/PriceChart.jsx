@@ -9,6 +9,7 @@ import ChartLegend from "./chart/ChartLegend";
 import ChartStyle from "./chart/ChartStyle";
 import ManualOrderDialog from "./chart/ManualOrderDialog";
 import { useHistory } from "./chart/useHistory";
+import LevelHandles from "./chart/LevelHandles";
 
 const TFS = ["1m", "5m", "15m", "1h", "4h", "1d"];
 const SOURCE = { bybit: "Velas Bybit", bitget: "Velas Bitget", hfm: "Velas del bróker · MetaTrader", yahoo: "Velas Yahoo Finance" };
@@ -24,7 +25,7 @@ const loadInd = () => {
   try { return { ...DEFAULT_IND, ...JSON.parse(localStorage.getItem("chart.indicators") || "{}") }; } catch (e) { return DEFAULT_IND; }
 };
 
-export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs = TFS, trade, tid = "", className = "lg:col-span-6", heightClass = "h-[420px] sm:h-[560px]" }) {
+export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs = TFS, trade, tid = "", levels, className = "lg:col-span-6", heightClass = "h-[420px] sm:h-[560px]" }) {
   const [order, setOrder] = useState(null);
   const [tf, setTf] = useState(defaultTf);
   const [fs, setFs] = useState(false);
@@ -150,6 +151,7 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
         <canvas ref={canvas} data-testid={`${tid}chart-drawings-canvas`} onPointerDown={dr.onDown} onPointerMove={dr.onMove}
           className="absolute inset-0 z-10 h-full w-full" style={{ pointerEvents: dr.tool ? "auto" : "none", cursor: "crosshair", touchAction: "none" }} />
         <ChartLegend api={api} ready={ready} data={data} ind={ind} style={style} offset={tools ? 44 : 8} />
+        {levels && ready && data && <LevelHandles api={api} wrap={wrap} digits={data.digits} levels={levels} />}
         {tools && <DrawToolbar dr={dr} />}
         <DrawingBar dr={dr} />
         {trade && <ManualOrderDialog side={order} symbol={symbol} price={last?.close} atr={[...(data?.atr || [])].reverse().find((x) => x.value > 0)?.value} digits={data?.digits} tf={tf} trade={trade} onClose={() => setOrder(null)} />}

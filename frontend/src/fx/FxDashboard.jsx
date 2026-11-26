@@ -160,7 +160,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
               </div>
               <TabsContent value="evolution" className="mt-0"><EvolutionPanel /></TabsContent>
               <TabsContent value="positions" className="mt-0">
-                <PositionsTable chart={{ tfs: FX_TFS, tf: data.settings.timeframe }} positions={data.positions} onClose={(id) => act(() => http.post(`/positions/${id}/close`), "Posición cerrada")}
+                <PositionsTable chart={{ tfs: FX_TFS, tf: data.settings.timeframe }} settings={data.settings} onChanged={refresh} positions={data.positions} onClose={(id) => act(() => http.post(`/positions/${id}/close`), "Posición cerrada")}
                   onCloseAll={() => act(() => http.post("/positions/close-all"), "Cierre de emergencia ejecutado")} />
               </TabsContent>
               <TabsContent value="history" className="mt-0"><TradeHistory trades={data.trades} /></TabsContent>

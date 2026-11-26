@@ -143,10 +143,10 @@ class BybitClient:
     async def cancel_order(self, symbol: str, order_id: str) -> dict:
         return await self.call("POST", "/v5/order/cancel", body={"category": "linear", "symbol": symbol, "orderId": order_id})
 
-    async def set_stop(self, symbol: str, sl: str):
+    async def set_stop(self, symbol: str, sl: str, tp: str = None):
         return await self.call("POST", "/v5/position/trading-stop",
                                body={"category": "linear", "symbol": symbol, "tpslMode": "Full", "positionIdx": 0,
-                                     "stopLoss": sl, "slOrderType": "Market"})
+                                     "stopLoss": sl, "slOrderType": "Market", **({"takeProfit": tp, "tpOrderType": "Market"} if tp else {})})
 
     async def order(self, symbol: str, order_id: str) -> dict:
         res = await self.call("GET", "/v5/order/realtime", {"category": "linear", "symbol": symbol, "orderId": order_id})

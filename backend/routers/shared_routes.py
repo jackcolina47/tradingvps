@@ -18,7 +18,7 @@ import ai_rules
 import trade_learning
 import trade_guard
 from fx.market import market_open as fx_market_open
-from models import ManualOrder
+from models import ManualOrder, TradeRules, LevelsUpdate, Position
 import performance
 from auth import hash_password, verify_password, create_token
 from ai_advisor import ping as ai_ping, current as ai_current, friendly_error, key_hint, ORIGIN_LABELS
@@ -114,6 +114,48 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
     @router.get("/ai-rules")
     async def ai_rules_list():
         return {"rules": await ai_rules.list_rules(engine.db), "max": None, "events": await ai_rules.events(engine.db)}
+
+    async def _position(pos_id: str) -> Position:
+        doc = await engine.db.positions.find_one({"_id": ObjectId(pos_id)}) if ObjectId.is_valid(pos_id) else None
+        if not doc:
+            raise HTTPException(404, "Posición no encontrada")
+        return Position.from_mongo(doc)
+
+    @router.put("/positions/{pos_id}/levels")
+    async def position_levels(pos_id: str, body: LevelsUpdate):
+        """Moves the SL and/or TP of an open position (dragged on its chart). In REAL the broker is modified first."""
+        p = await _position(pos_id)
+        if p.exit_mode == "cross":
+            raise HTTPException(400, "Las posiciones del test de cruce EMA no tienen SL/TP editables")
+        price = (engine.market.tickers.get(p.symbol) or {}).get("price") or p.mark_price
+        d = 1 if p.side == "long" else -1
+        sl, tp = body.sl or p.sl, body.tp or p.tp
+        if (price - sl) * d <= 0 or (tp - price) * d <= 0:
+            raise HTTPException(400, f"Niveles inválidos para el precio actual ({price:.6g}): el SL debe quedar {'por debajo' if d > 0 else 'por encima'} y el TP al otro lado")
+        if p.live:
+            try:
+                if getattr(engine, "profile", None):
+                    await engine.broker.set_stop(p.symbol, p.order_id, sl, tp)
+                else:
+                    await engine.broker.set_stop(p.symbol, sl, tp)
+            except Exception as e:
+                raise HTTPException(424, f"El bróker rechazó el cambio: {str(e)[:160]}")
+        be = (sl - p.entry_price) * d >= 0
+        await engine.db.positions.update_one({"_id": ObjectId(p.id)}, {"$set": {"sl": sl, "tp": tp, "breakeven": be}})
+        await engine.log("ORDER", f"{p.symbol}: niveles movidos a mano{' (REAL)' if p.live else ''} · SL {p.sl:.6g} → {sl:.6g} · TP {p.tp:.6g} → {tp:.6g}")
+        return {**p.model_dump(), "sl": sl, "tp": tp, "breakeven": be}
+
+    @router.put("/positions/{pos_id}/rules")
+    async def position_rules(pos_id: str, body: TradeRules):
+        """Replaces the own exit management of an open position (fields left empty follow the bot settings; no ai_review_minutes = no own AI review)."""
+        p = await _position(pos_id)
+        own = {"rules": body.rules() or None, "ai_review_minutes": body.ai_review_minutes}
+        await engine.db.positions.update_one({"_id": ObjectId(p.id)}, {"$set": own})
+        r = own["rules"] or {}
+        on = [n for k, n in (("breakeven_enabled", "breakeven"), ("trailing_enabled", "trailing"), ("partial_tp_enabled", "parcial")) if r.get(k)]
+        await engine.log("ORDER", f"{p.symbol}: gestión de la posición editada · activo: {', '.join(on) or 'nada'}"
+                                  + (f" · revisión IA cada {body.ai_review_minutes} min" if body.ai_review_minutes else " · sin revisión IA propia"))
+        return {**p.model_dump(), **own}
 
     @router.post("/manual-order")
     async def manual_order(body: ManualOrder):

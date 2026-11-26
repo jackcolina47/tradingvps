@@ -1,9 +1,10 @@
-import { X, Sparkles, Loader2, LineChart } from "lucide-react";
+import { X, Sparkles, Loader2, LineChart, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { SideBadge, Empty } from "./Panel";
 import { PositionCard } from "./OperationCards";
 import PositionChartDialog from "./PositionChartDialog";
+import PositionRulesDialog from "./PositionRulesDialog";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
@@ -42,10 +43,12 @@ const TD = ({ children, right, className = "" }) => (
   <td className={`whitespace-nowrap px-3 py-2.5 ${right ? "text-right" : ""} ${className}`}>{children}</td>
 );
 
-export default function PositionsTable({ positions, onClose, onCloseAll, aiReview = true, chart }) {
+export default function PositionsTable({ positions, onClose, onCloseAll, aiReview = true, chart, settings, onChanged }) {
   const mobile = useIsMobile();
   const [chartId, setChartId] = useState(null);
   const charted = positions.find((p) => p.id === chartId);
+  const [rulesId, setRulesId] = useState(null);
+  const ruled = positions.find((p) => p.id === rulesId);
   if (!positions.length) return <Empty testId="positions-empty" text="Sin posiciones abiertas. El bot abrirá operaciones cuando una señal pase los filtros de riesgo y la IA." />;
   const anyLive = positions.some((p) => p.live);
   return (
@@ -73,7 +76,7 @@ export default function PositionsTable({ positions, onClose, onCloseAll, aiRevie
         )}
       </div>
       {mobile ? (
-        <div data-testid="positions-cards">{positions.map((p) => <PositionCard key={p.id} p={p} onClose={onClose} onChart={(x) => setChartId(x.id)} />)}</div>
+        <div data-testid="positions-cards">{positions.map((p) => <PositionCard key={p.id} p={p} onClose={onClose} onChart={(x) => setChartId(x.id)} onRules={(x) => setRulesId(x.id)} />)}</div>
       ) : (
       <table data-testid="positions-table" className="w-full text-sm">
         <thead className="border-b border-[#1E293B]">
@@ -118,6 +121,10 @@ export default function PositionsTable({ positions, onClose, onCloseAll, aiRevie
                   <span className="block text-[10px]">{pct.toFixed(2)}%{p.pips != null && <span data-testid={`position-pips-${p.id}`} className="ml-1" title={PIPS_HINT}>· {fmtPips(p.pips)}</span>}{p.mfe_r > 0 && <span data-testid={`position-mfe-${p.id}`} className="ml-1 text-slate-500" title="Máximo recorrido a favor (en R)">· máx +{p.mfe_r.toFixed(1)}R</span>}</span>
                 </TD>
                 <TD right>
+                  <button data-testid={`position-rules-${p.id}`} onClick={() => setRulesId(p.id)} title="Editar breakeven, trailing, cierre parcial y revisión IA de esta posición"
+                    className={`mr-1.5 inline-flex items-center gap-1 rounded-sm border px-2 py-1 font-mono text-[10px] uppercase transition-colors hover:bg-sky-500/10 ${p.rules || p.ai_review_minutes ? "border-sky-400/60 text-sky-300" : "border-[#1E293B] text-slate-300"}`}>
+                    <SlidersHorizontal className="h-3 w-3" /> Gestión{p.rules || p.ai_review_minutes ? " ●" : ""}
+                  </button>
                   <button data-testid={`close-position-${p.id}`} onClick={() => onClose(p.id)}
                     className="inline-flex items-center gap-1 rounded-sm border border-rose-500/40 px-2 py-1 font-mono text-[10px] uppercase text-rose-300 transition-colors hover:bg-rose-500/15">
                     <X className="h-3 w-3" /> Cerrar
@@ -129,7 +136,8 @@ export default function PositionsTable({ positions, onClose, onCloseAll, aiRevie
         </tbody>
       </table>
       )}
-      <PositionChartDialog position={charted} chart={chart} onClose={() => setChartId(null)} />
+      <PositionChartDialog position={charted} chart={chart} onClose={() => setChartId(null)} onChanged={onChanged} />
+      <PositionRulesDialog position={ruled} settings={settings} onClose={() => setRulesId(null)} onSaved={onChanged} />
     </div>
   );
 }

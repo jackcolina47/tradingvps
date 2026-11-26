@@ -398,13 +398,8 @@ class ResetRequest(BaseModel):
     initial_balance: Optional[float] = Field(default=None, ge=10, le=10_000_000)
 
 
-class ManualOrder(BaseModel):
-    symbol: str
-    side: str = Field(pattern="^(long|short)$")
-    sl: float = Field(gt=0)
-    tp: float = Field(gt=0)
-    atr: float = Field(gt=0)
-    risk_pct: float = Field(ge=0.1, le=5)
+class TradeRules(BaseModel):
+    """Exit management of ONE trade (manual order or edit of an open position); empty fields follow the bot settings."""
     breakeven_enabled: Optional[bool] = None
     be_start_r: Optional[float] = Field(default=None, ge=0.5, le=3.0)
     trailing_enabled: Optional[bool] = None
@@ -419,6 +414,20 @@ class ManualOrder(BaseModel):
         """Exit rules chosen for this order only (fields left empty follow the bot settings)."""
         keys = ("breakeven_enabled", "be_start_r", "trailing_enabled", "trail_start_r", "trail_atr_mult", "partial_tp_enabled", "partial_tp_r", "partial_tp_pct")
         return {k: getattr(self, k) for k in keys if getattr(self, k) is not None}
+
+
+class ManualOrder(TradeRules):
+    symbol: str
+    side: str = Field(pattern="^(long|short)$")
+    sl: float = Field(gt=0)
+    tp: float = Field(gt=0)
+    atr: float = Field(gt=0)
+    risk_pct: float = Field(ge=0.1, le=5)
+
+
+class LevelsUpdate(BaseModel):
+    sl: Optional[float] = Field(default=None, gt=0)
+    tp: Optional[float] = Field(default=None, gt=0)
 
 
 class PlanRequest(BaseModel):
