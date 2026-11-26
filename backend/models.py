@@ -300,6 +300,8 @@ class Position(BaseDocument):
     partial_gross: float = 0.0
     partial_fees: float = 0.0
     ai_review: Optional[Dict[str, Any]] = None
+    rules: Optional[Dict[str, Any]] = None  # exit rules of this trade only (manual order): override the bot settings
+    ai_review_minutes: Optional[int] = None  # AI review of this trade only, every N minutes (manual order)
     opened_at: str = Field(default_factory=now_iso)
 
 
@@ -403,6 +405,20 @@ class ManualOrder(BaseModel):
     tp: float = Field(gt=0)
     atr: float = Field(gt=0)
     risk_pct: float = Field(ge=0.1, le=5)
+    breakeven_enabled: Optional[bool] = None
+    be_start_r: Optional[float] = Field(default=None, ge=0.5, le=3.0)
+    trailing_enabled: Optional[bool] = None
+    trail_start_r: Optional[float] = Field(default=None, ge=0.5, le=3.0)
+    trail_atr_mult: Optional[float] = Field(default=None, ge=0.5, le=3.0)
+    partial_tp_enabled: Optional[bool] = None
+    partial_tp_r: Optional[float] = Field(default=None, ge=0.5, le=3.0)
+    partial_tp_pct: Optional[int] = Field(default=None, ge=25, le=75)
+    ai_review_minutes: Optional[int] = Field(default=None, ge=5, le=30, multiple_of=5)
+
+    def rules(self) -> dict:
+        """Exit rules chosen for this order only (fields left empty follow the bot settings)."""
+        keys = ("breakeven_enabled", "be_start_r", "trailing_enabled", "trail_start_r", "trail_atr_mult", "partial_tp_enabled", "partial_tp_r", "partial_tp_pct")
+        return {k: getattr(self, k) for k in keys if getattr(self, k) is not None}
 
 
 class PlanRequest(BaseModel):

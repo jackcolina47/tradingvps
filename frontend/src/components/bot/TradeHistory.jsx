@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Search, StickyNote, Sparkles } from "lucide-react";
 import { SideBadge, Empty } from "./Panel";
 import { TH, TD } from "./PositionsTable";
+import { TradeCard } from "./OperationCards";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import TradeDetailDialog from "./TradeDetailDialog";
 import TradeFilters, { EMPTY_FILTERS, applyFilters } from "./TradeFilters";
 import { downloadCsv } from "./tradesCsv";
@@ -67,6 +69,7 @@ function TradeRow({ t, onOpen }) {
 }
 
 export default function TradeHistory({ trades }) {
+  const mobile = useIsMobile();
   const [all, setAll] = useState(null);
   const [edits, setEdits] = useState({});
   const [filters, setFilters] = useState(EMPTY_FILTERS);
@@ -89,8 +92,10 @@ export default function TradeHistory({ trades }) {
   return (
     <div>
       <TradeFilters trades={source} filters={filters} onChange={setFilters} shown={shown.length} onExport={() => downloadCsv(shown, botLabel())} />
-      <div className="max-h-[420px] overflow-auto thin-scroll">
-        {!shown.length ? <Empty testId="trades-filter-empty" text="Ninguna operación coincide con los filtros." /> : (
+      <div className="max-h-[70dvh] overflow-auto thin-scroll">
+        {!shown.length ? <Empty testId="trades-filter-empty" text="Ninguna operación coincide con los filtros." /> : mobile ? (
+          <div data-testid="trades-cards">{shown.map((t) => <TradeCard key={t.id} t={t} onOpen={open} />)}</div>
+        ) : (
           <table data-testid="trades-table" className="w-full text-sm">
             <thead className="sticky top-0 border-b border-[#1E293B] bg-[#0D111A]">
               <tr><TH>Cierre</TH><TH>Símbolo</TH><TH>Lado</TH><TH right>Entrada</TH><TH right>Salida</TH><TH>Motivo</TH><TH right>Comisiones</TH><TH right>PnL</TH><TH right>Detalle</TH></tr>

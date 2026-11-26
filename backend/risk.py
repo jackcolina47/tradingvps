@@ -107,6 +107,11 @@ def trade_rules(settings) -> dict:
     return {k: getattr(settings, k, v) for k, v in DEFAULT_RULES.items()}
 
 
+def rules_for(rules: dict, p) -> dict:
+    """Exit rules of one position: its own overrides (manual order) on top of the bot rules."""
+    return {**rules, **p.rules} if getattr(p, "rules", None) else rules
+
+
 def move_in_r(side: str, entry: float, initial_sl: float, price: float) -> float:
     r = abs(entry - initial_sl)
     if r <= 0:

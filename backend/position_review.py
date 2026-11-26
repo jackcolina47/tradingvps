@@ -26,6 +26,20 @@ def due(engine, settings) -> bool:
     return time.time() - last >= max(5, int(settings.ai_position_review_minutes)) * 60
 
 
+async def due_own(engine, settings) -> list:
+    """Ids of the positions with their own review interval (manual orders) whose turn has come. Independent of the global review switch."""
+    if not settings.ai_enabled:
+        return []
+    last, now, out = engine.__dict__.setdefault("_own_review_last", {}), time.time(), []
+    async for d in engine.db.positions.find({"ai_review_minutes": {"$gt": 0}}):
+        pid = str(d["_id"])
+        base = max(last.get(pid, 0.0), datetime.fromisoformat((d.get("ai_review") or {}).get("at") or d["opened_at"]).timestamp())
+        if now - base >= d["ai_review_minutes"] * 60:
+            last[pid] = now
+            out.append(d["_id"])
+    return out
+
+
 async def _breakeven(engine, p: Position, price: float) -> bool:
     long = p.side == "long"
     better = (price > p.entry_price > p.sl) if long else (price < p.entry_price < p.sl)
@@ -69,10 +83,11 @@ async def btc_shock(engine, settings) -> str:
     return f"ALERTA BTC: Bitcoin {verb} un {c1h:+.2f} % en la última hora ({c30:+.2f} % en 30 min), por encima del umbral de {pct:g} %."
 
 
-async def review_open_positions(engine, settings, currency: str, bot_name: str, trigger: str = "") -> list:
+async def review_open_positions(engine, settings, currency: str, bot_name: str, trigger: str = "", only: list = None) -> list:
     """Runs one review cycle. Returns the list of reviews (also stored on each position as `ai_review`). `trigger` = extraordinary reason (BTC shock)."""
-    engine._ai_review_last = time.time()
-    docs = await engine.db.positions.find().to_list(200)
+    if only is None:
+        engine._ai_review_last = time.time()
+    docs = await engine.db.positions.find({"_id": {"$in": only}} if only else {}).to_list(200)
     if not docs:
         return []
     tf = getattr(settings, "timeframe", "1h")
@@ -126,5 +141,6 @@ async def review_open_positions(engine, settings, currency: str, bot_name: str, 
         if review["action"] != "MANTENER" or acted:
             await tg(f"{icon} <b>{bot_name}</b> · revisión IA de {p.symbol} {p.side.upper()}\n<b>{review['action']}</b> ({review['confidence']} %) · {review['r_now']:+.2f} R\n{review['reasoning']}"
                      + (f"\n→ Acción: <b>{acted}</b>" if acted else "\n→ Solo aviso (modo manual)" if mode != "auto" else f"\n→ Sin acción: confianza por debajo del mínimo ({min_conf} %)"), "ai")
-    await engine.db.ai_reviews.update_one({"_id": "last"}, {"$set": {"at": datetime.now(timezone.utc).isoformat(), "reviews": out, "trigger": trigger or None}}, upsert=True)
+    if only is None:
+        await engine.db.ai_reviews.update_one({"_id": "last"}, {"$set": {"at": datetime.now(timezone.utc).isoformat(), "reviews": out, "trigger": trigger or None}}, upsert=True)
     return out

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, CandlestickChart, Loader2, Maximize2, Minimize2, PencilRuler } from "lucide-react";
+import { Camera, CandlestickChart, Loader2, Maximize2, Minimize2, PencilRuler, TrendingUp, TrendingDown } from "lucide-react";
 import { Panel } from "./Panel";
 import { fmtPrice } from "@/lib/api";
 import { useChart, render, applyIndicators, applyStyle, resetScales, OVERLAYS, SUBS, DEFAULT_STYLE } from "./chart/useChart";
@@ -24,7 +24,7 @@ const loadInd = () => {
   try { return { ...DEFAULT_IND, ...JSON.parse(localStorage.getItem("chart.indicators") || "{}") }; } catch (e) { return DEFAULT_IND; }
 };
 
-export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs = TFS, trade }) {
+export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs = TFS, trade, tid = "", className = "lg:col-span-6", heightClass = "h-[420px] sm:h-[560px]" }) {
   const [order, setOrder] = useState(null);
   const [tf, setTf] = useState(defaultTf);
   const [fs, setFs] = useState(false);
@@ -102,24 +102,24 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
 
   const last = data?.candles?.[data.candles.length - 1];
   return (
-    <Panel testId="price-chart-panel" title={`${symbol} · ${kind}`} icon={CandlestickChart} bodyClass="flex flex-col" delay={120}
-      className={fs ? "fixed inset-0 z-[70] rounded-none !bg-[#07090E] !backdrop-blur-0" : "lg:col-span-6"}
+    <Panel testId={`${tid}price-chart-panel`} title={`${symbol} · ${kind}`} icon={CandlestickChart} bodyClass="flex flex-col" delay={120}
+      className={fs ? "fixed inset-0 z-[70] rounded-none !bg-[#07090E] !backdrop-blur-0" : className}
       actions={
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 rounded-sm border border-[#1E293B] p-0.5">
+        <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-0.5 rounded-sm border border-[#1E293B] p-0.5 sm:gap-1">
             {tfs.map((t) => (
-              <button key={t} data-testid={`chart-tf-${t}`} onClick={() => setTf(t)}
-                className={`rounded-sm px-2 py-0.5 font-mono text-[11px] transition-colors ${t === tf ? "bg-amber-500 text-[#07090E]" : "text-slate-400 hover:text-slate-100"}`}>
+              <button key={t} data-testid={`${tid}chart-tf-${t}`} onClick={() => setTf(t)}
+                className={`rounded-sm px-1.5 py-0.5 font-mono text-[11px] transition-colors sm:px-2 ${t === tf ? "bg-amber-500 text-[#07090E]" : "text-slate-400 hover:text-slate-100"}`}>
                 {t}
               </button>
             ))}
           </div>
-          <button data-testid="chart-tools-btn" onClick={() => setTools((v) => !v)} title={tools ? "Ocultar herramientas de dibujo" : "Herramientas de dibujo"} aria-pressed={tools}
+          <button data-testid={`${tid}chart-tools-btn`} onClick={() => setTools((v) => !v)} title={tools ? "Ocultar herramientas de dibujo" : "Herramientas de dibujo"} aria-pressed={tools}
             className={`rounded-sm border p-1 transition-colors ${tools ? "border-amber-500/60 text-amber-400" : "border-[#1E293B] text-slate-400 hover:text-slate-100"}`}><PencilRuler className="h-3.5 w-3.5" /></button>
           <ChartStyle style={style} setStyle={setStyle} />
-          <button data-testid="chart-screenshot-btn" onClick={screenshot} title="Descargar captura del gráfico (PNG)"
+          <button data-testid={`${tid}chart-screenshot-btn`} onClick={screenshot} title="Descargar captura del gráfico (PNG)"
             className="rounded-sm border border-[#1E293B] p-1 text-slate-400 transition-colors hover:text-slate-100"><Camera className="h-3.5 w-3.5" /></button>
-          <button data-testid="chart-fullscreen-btn" onClick={() => setFs((v) => !v)} title={fs ? "Salir de pantalla completa (Esc)" : "Pantalla completa"}
+          <button data-testid={`${tid}chart-fullscreen-btn`} onClick={() => setFs((v) => !v)} title={fs ? "Salir de pantalla completa (Esc)" : "Pantalla completa"}
             className="rounded-sm border border-[#1E293B] p-1 text-slate-400 transition-colors hover:text-slate-100">
             {fs ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
           </button>
@@ -127,27 +127,27 @@ export default function PriceChart({ symbol, defaultTf, kind = "Perpetuo", tfs =
       }>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-3 font-mono text-[11px]">
         {trade && (
-          <span className="flex items-center gap-1">
-            <button data-testid="chart-buy-btn" onClick={() => setOrder("long")} disabled={!last} className="rounded-sm bg-emerald-500 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-[#07090E] transition-colors hover:bg-emerald-400 disabled:opacity-50">Buy</button>
-            <button data-testid="chart-sell-btn" onClick={() => setOrder("short")} disabled={!last} className="rounded-sm bg-rose-500 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-[#07090E] transition-colors hover:bg-rose-400 disabled:opacity-50">Sell</button>
+          <span className="flex items-center gap-1.5">
+            <button data-testid={`${tid}chart-buy-btn`} onClick={() => setOrder("long")} disabled={!last} title="Abrir una compra manual con tu propio SL, TP, riesgo y gestión" className="inline-flex items-center gap-1.5 rounded-sm bg-emerald-500 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-[#07090E] shadow-[0_0_0_1px_rgba(16,185,129,0.35)] transition-[background-color,transform] hover:bg-emerald-400 active:scale-95 disabled:opacity-50"><TrendingUp className="h-3.5 w-3.5" strokeWidth={2.6} /> Comprar</button>
+            <button data-testid={`${tid}chart-sell-btn`} onClick={() => setOrder("short")} disabled={!last} title="Abrir una venta manual con tu propio SL, TP, riesgo y gestión" className="inline-flex items-center gap-1.5 rounded-sm bg-rose-500 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-[#07090E] shadow-[0_0_0_1px_rgba(244,63,94,0.35)] transition-[background-color,transform] hover:bg-rose-400 active:scale-95 disabled:opacity-50"><TrendingDown className="h-3.5 w-3.5" strokeWidth={2.6} /> Vender</button>
           </span>
         )}
-        <span data-testid="chart-last-price" className="text-base font-semibold text-slate-50">{fmtPrice(last?.close, data?.digits)}</span>
+        <span data-testid={`${tid}chart-last-price`} className="text-base font-semibold text-slate-50">{fmtPrice(last?.close, data?.digits)}</span>
         {IND.map(([k, label]) => (
-          <button key={k} data-testid={`chart-ind-${k}`} onClick={() => setInd((v) => ({ ...v, [k]: !v[k] }))} aria-pressed={!!ind[k]} style={ind[k] ? { color: style.lines[k]?.color || "#94A3B8" } : undefined}
+          <button key={k} data-testid={`${tid}chart-ind-${k}`} onClick={() => setInd((v) => ({ ...v, [k]: !v[k] }))} aria-pressed={!!ind[k]} style={ind[k] ? { color: style.lines[k]?.color || "#94A3B8" } : undefined}
             className={`rounded-sm border px-1.5 py-px transition-colors ${ind[k] ? "border-[#1E293B]" : "border-transparent text-slate-600 line-through hover:text-slate-400"}`}>
             {label}
           </button>
         ))}
         <span className="ml-auto flex items-center gap-2 text-[10px] text-slate-500">
-          {meta.loading && <span data-testid="chart-loading-older" className="flex items-center gap-1 text-amber-400"><Loader2 className="h-3 w-3 animate-spin" /> cargando historial…</span>}
-          {!meta.loading && !meta.hasMore && data && <span data-testid="chart-history-end">inicio del historial disponible</span>}
-          {meta.source && <span data-testid="chart-source">{SOURCE[meta.source] || meta.source} · {data?.candles?.length || 0} velas · hora local</span>}
+          {meta.loading && <span data-testid={`${tid}chart-loading-older`} className="flex items-center gap-1 text-amber-400"><Loader2 className="h-3 w-3 animate-spin" /> cargando historial…</span>}
+          {!meta.loading && !meta.hasMore && data && <span data-testid={`${tid}chart-history-end`}>inicio del historial disponible</span>}
+          {meta.source && <span data-testid={`${tid}chart-source`}>{SOURCE[meta.source] || meta.source} · {data?.candles?.length || 0} velas · hora local</span>}
         </span>
       </div>
-      <div ref={wrap} data-testid="price-chart-wrap" className={`relative mt-1 w-full ${fs ? "h-[calc(100vh-120px)]" : "h-[560px]"}`}>
+      <div ref={wrap} data-testid={`${tid}price-chart-wrap`} className={`relative mt-1 w-full ${fs ? "h-[calc(100dvh-150px)]" : heightClass}`}>
         <div ref={ref} data-testid="price-chart" className="absolute inset-0" />
-        <canvas ref={canvas} data-testid="chart-drawings-canvas" onPointerDown={dr.onDown} onPointerMove={dr.onMove}
+        <canvas ref={canvas} data-testid={`${tid}chart-drawings-canvas`} onPointerDown={dr.onDown} onPointerMove={dr.onMove}
           className="absolute inset-0 z-10 h-full w-full" style={{ pointerEvents: dr.tool ? "auto" : "none", cursor: "crosshair", touchAction: "none" }} />
         <ChartLegend api={api} ready={ready} data={data} ind={ind} style={style} offset={tools ? 44 : 8} />
         {tools && <DrawToolbar dr={dr} />}

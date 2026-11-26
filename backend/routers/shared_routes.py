@@ -137,7 +137,16 @@ def add_shared_routes(router, engine, label: str, currency: str = "USDT", before
         pos, reason = res if isinstance(res, tuple) else (res, getattr(engine, "_open_fail", None))
         if not pos:
             raise HTTPException(400, f"No se abrió: {reason or 'apertura cancelada'}")
-        return pos.model_dump()
+        own = {"rules": body.rules() or None, "ai_review_minutes": body.ai_review_minutes}
+        if any(own.values()):
+            await engine.db.positions.update_one({"_id": ObjectId(pos.id)}, {"$set": own})
+            r = own["rules"] or {}
+            txt = [f"breakeven {'a +' + format(r['be_start_r'], 'g') + 'R' if r.get('breakeven_enabled') else 'OFF'}" if "breakeven_enabled" in r else "",
+                   f"trailing {'desde +' + format(r.get('trail_start_r', 0), 'g') + 'R a ' + format(r.get('trail_atr_mult', 0), 'g') + ' ATR' if r.get('trailing_enabled') else 'OFF'}" if "trailing_enabled" in r else "",
+                   f"parcial {str(r.get('partial_tp_pct')) + '% a +' + format(r.get('partial_tp_r', 0), 'g') + 'R' if r.get('partial_tp_enabled') else 'OFF'}" if "partial_tp_enabled" in r else "",
+                   f"revisión IA cada {body.ai_review_minutes} min" if body.ai_review_minutes else ""]
+            await engine.log("ORDER", f"{body.symbol}: gestión propia de la orden manual · {' · '.join(t for t in txt if t)}")
+        return {**pos.model_dump(), **own}
 
     @router.post("/ai-rules/cleanup")
     async def ai_rules_cleanup():

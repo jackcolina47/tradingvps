@@ -7,7 +7,7 @@ from models import Settings, Position, Trade, LogEntry, now_iso
 from market import MarketData, HTF
 from indicators import build_df
 from legacy import exit_signal, EXIT_ON_CROSS, EXIT_REASON, EMA_TEST, EMA_TEST_TAG, INFO as LEGACY_INFO
-from risk import FEE_RATE, MAKER_FEE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules, move_in_r, tp_in_r, partial_qty, be_allowed, ema_partial_due, EMA_PARTIAL_PCT, stop_cost
+from risk import FEE_RATE, MAKER_FEE, SLIPPAGE, position_size, pnl, check_exit, update_trailing, trade_rules, rules_for, move_in_r, tp_in_r, partial_qty, be_allowed, ema_partial_due, EMA_PARTIAL_PCT, stop_cost
 import housekeeping
 import position_review
 import trade_learning
@@ -262,12 +262,12 @@ class TradingEngine:
             local_syms.add(p.symbol)
             if p.live:
                 if ex is not None:
-                    await self._sync_live_position(p, ex.get(p.symbol), tickers.get(p.symbol), settings, rules)
+                    await self._sync_live_position(p, ex.get(p.symbol), tickers.get(p.symbol), settings, rules_for(rules, p))
                 continue
             t = tickers.get(p.symbol)
             if not t:
                 continue
-            await self._manage_paper_position(p, t["price"], rules)
+            await self._manage_paper_position(p, t["price"], rules_for(rules, p))
         if ex:
             for sym in set(ex) - local_syms - self._external_warned:
                 self._external_warned.add(sym)
@@ -281,6 +281,8 @@ class TradingEngine:
         await self._update_account_metrics(settings)
         if position_review.due(self, settings):
             await position_review.review_open_positions(self, settings, "USDT", "Bybit")
+        elif own := await position_review.due_own(self, settings):
+            await position_review.review_open_positions(self, settings, "USDT", "Bybit", only=own)
         elif shock := await position_review.btc_shock(self, settings):
             await position_review.review_open_positions(self, settings, "USDT", "Bybit", trigger=shock)
         await housekeeping.tick(self, settings)

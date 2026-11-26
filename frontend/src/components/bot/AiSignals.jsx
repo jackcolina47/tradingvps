@@ -106,9 +106,9 @@ const UsageChip = ({ usage, ai }) => {
   );
 };
 
-export default function AiSignals({ signals, ai, usage, minConfidence, rulesOnly = false, title = "Evaluación IA", emptyText = "Cuando el bot detecte una señal, la IA la evaluará aquí con su razonamiento.", className = "lg:col-span-4" }) {
+export default function AiSignals({ signals, ai, usage, minConfidence, rulesOnly = false, title = "Evaluación IA", emptyText = "Cuando el bot detecte una señal, la IA la evaluará aquí con su razonamiento.", className = "lg:col-span-4", wide = false }) {
   return (
-    <Panel testId="ai-signals-panel" title={title} icon={Sparkles} className={className} bodyClass="max-h-[480px] overflow-y-auto thin-scroll" delay={260}
+    <Panel testId="ai-signals-panel" title={title} icon={Sparkles} className={className} bodyClass={`max-h-[480px] overflow-y-auto thin-scroll ${wide && signals.length ? "md:grid md:grid-cols-2 md:items-start 2xl:grid-cols-3" : ""}`} delay={260}
       actions={<UsageChip usage={usage} ai={ai} />}>
       {signals.length ? signals.map((s) => <SignalCard key={s.id} s={s} minConfidence={minConfidence} rulesOnly={rulesOnly} />) : (
         <Empty testId="ai-signals-empty" text={emptyText} />

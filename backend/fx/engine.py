@@ -13,6 +13,7 @@ import notify
 from fx.models import FxSettings
 from fx.market import FxMarket, market_open
 from fx import risk
+from risk import rules_for
 from fx import filters
 from fx.live import FxLiveBroker, is_our_link
 from fx.config import bridge_conn
@@ -205,12 +206,12 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
             if p.live:
                 local_ids.add(p.order_id)
                 if ex is not None:
-                    await self._sync_live_position(p, ex.get(p.order_id), tickers.get(p.symbol), settings, now, rules)
+                    await self._sync_live_position(p, ex.get(p.order_id), tickers.get(p.symbol), settings, now, rules_for(rules, p))
                 continue
             t = tickers.get(p.symbol)
             if not t:
                 continue
-            await self._manage_paper_position(p, t["price"], rules, now, rollover)
+            await self._manage_paper_position(p, t["price"], rules_for(rules, p), now, rollover)
         if ex:
             for pid, xp in ex.items():
                 if pid in local_ids:
@@ -228,6 +229,8 @@ class FxEngine(AccountMixin, PositionsMixin, SignalsMixin):
         await self._update_account_metrics(settings)
         if market_open(now) and position_review.due(self, settings):
             await position_review.review_open_positions(self, settings, "USD", self.profile.bot_name)
+        elif market_open(now) and (own := await position_review.due_own(self, settings)):
+            await position_review.review_open_positions(self, settings, "USD", self.profile.bot_name, only=own)
 
     async def _hfm_health(self, synced: bool):
         """Watches the bridge account (terminal state + API) in REAL mode; alerts once per outage, reminds every 6 h, confirms recovery."""

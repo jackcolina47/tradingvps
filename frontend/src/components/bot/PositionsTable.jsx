@@ -1,7 +1,10 @@
-import { X, Sparkles, Loader2 } from "lucide-react";
+import { X, Sparkles, Loader2, LineChart } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { SideBadge, Empty } from "./Panel";
+import { PositionCard } from "./OperationCards";
+import PositionChartDialog from "./PositionChartDialog";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -39,12 +42,15 @@ const TD = ({ children, right, className = "" }) => (
   <td className={`whitespace-nowrap px-3 py-2.5 ${right ? "text-right" : ""} ${className}`}>{children}</td>
 );
 
-export default function PositionsTable({ positions, onClose, onCloseAll, aiReview = true }) {
+export default function PositionsTable({ positions, onClose, onCloseAll, aiReview = true, chart }) {
+  const mobile = useIsMobile();
+  const [chartId, setChartId] = useState(null);
+  const charted = positions.find((p) => p.id === chartId);
   if (!positions.length) return <Empty testId="positions-empty" text="Sin posiciones abiertas. El bot abrirá operaciones cuando una señal pase los filtros de riesgo y la IA." />;
   const anyLive = positions.some((p) => p.live);
   return (
     <div className="overflow-x-auto thin-scroll">
-      <div className="flex items-center justify-end gap-2 border-b border-[#1E293B] px-3 py-1.5">
+      <div className="flex flex-wrap items-center justify-end gap-2 border-b border-[#1E293B] px-3 py-1.5">
         {aiReview && <AiReviewNowButton />}
         {onCloseAll && positions.length > 1 && (
           <AlertDialog>
@@ -66,15 +72,24 @@ export default function PositionsTable({ positions, onClose, onCloseAll, aiRevie
           </AlertDialog>
         )}
       </div>
+      {mobile ? (
+        <div data-testid="positions-cards">{positions.map((p) => <PositionCard key={p.id} p={p} onClose={onClose} onChart={(x) => setChartId(x.id)} />)}</div>
+      ) : (
       <table data-testid="positions-table" className="w-full text-sm">
         <thead className="border-b border-[#1E293B]">
-          <tr><TH>Símbolo</TH><TH>Lado</TH><TH right>Entrada</TH><TH right>Marca</TH><TH right>SL</TH><TH right>TP</TH><TH right>Tamaño</TH><TH right>Margen</TH><TH right>PnL</TH><TH right>Acción</TH></tr>
+          <tr><TH>Gráfico</TH><TH>Símbolo</TH><TH>Lado</TH><TH right>Entrada</TH><TH right>Marca</TH><TH right>SL</TH><TH right>TP</TH><TH right>Tamaño</TH><TH right>Margen</TH><TH right>PnL</TH><TH right>Acción</TH></tr>
         </thead>
         <tbody className="num text-[12px]">
           {positions.map((p) => {
             const pct = p.margin ? (p.unrealized_pnl / p.margin) * 100 : 0;
             return (
               <tr key={p.id} data-testid={`position-row-${p.id}`} className={`border-b border-[#1E293B]/60 transition-colors hover:bg-[#111827] ${p.live ? "bg-rose-500/[0.03]" : ""}`}>
+                <TD>
+                  <button data-testid={`position-chart-${p.id}`} onClick={() => setChartId(p.id)} title={`Ver el gráfico de ${p.symbol} con la entrada, el SL y el TP`}
+                    className="inline-flex items-center gap-1 rounded-sm border border-amber-500/40 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-amber-300 transition-colors hover:bg-amber-500/10">
+                    <LineChart className="h-3.5 w-3.5" /> <span className="hidden xl:inline">Ver gráfico</span>
+                  </button>
+                </TD>
                 <TD>
                   <p className="font-display text-[13px] font-semibold text-slate-100">{p.symbol}</p>
                   <p className="text-[10px] text-slate-500">
@@ -113,6 +128,8 @@ export default function PositionsTable({ positions, onClose, onCloseAll, aiRevie
           })}
         </tbody>
       </table>
+      )}
+      <PositionChartDialog position={charted} chart={chart} onClose={() => setChartId(null)} />
     </div>
   );
 }

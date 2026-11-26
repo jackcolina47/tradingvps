@@ -133,11 +133,11 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <Watchlist items={data.watchlist} selected={symbol} onSelect={setSymbol} />
           <PriceChart symbol={symbol} defaultTf={data.settings.timeframe} kind={meta?.symbol_info?.[symbol]?.name || "Forex"} tfs={FX_TFS}
-            trade={{ riskPct: data.settings.risk_per_trade, equity: data.account.equity, live: data.status.mode === "REAL", currency: "USD", onDone: refresh }} />
+            trade={{ settings: data.settings, riskPct: data.settings.risk_per_trade, equity: data.account.equity, live: data.status.mode === "REAL", currency: "USD", onDone: refresh }} />
           <BotPanel mtf settings={data.settings} meta={meta} account={data.account} equity={data.equity} fmtLeverage={fmtLev} />
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
-          <Panel testId="fx-operations-panel" className="lg:col-span-8" delay={220}>
+          <Panel testId="fx-operations-panel" className="lg:col-span-12" delay={220}>
             <Tabs defaultValue="positions" className="flex h-full flex-col">
               <div className="flex items-center gap-3 border-b border-[#1E293B] px-4 py-2.5">
                 <Layers className="h-4 w-4 shrink-0 text-amber-400" />
@@ -160,7 +160,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
               </div>
               <TabsContent value="evolution" className="mt-0"><EvolutionPanel /></TabsContent>
               <TabsContent value="positions" className="mt-0">
-                <PositionsTable positions={data.positions} onClose={(id) => act(() => http.post(`/positions/${id}/close`), "Posición cerrada")}
+                <PositionsTable chart={{ tfs: FX_TFS, tf: data.settings.timeframe }} positions={data.positions} onClose={(id) => act(() => http.post(`/positions/${id}/close`), "Posición cerrada")}
                   onCloseAll={() => act(() => http.post("/positions/close-all"), "Cierre de emergencia ejecutado")} />
               </TabsContent>
               <TabsContent value="history" className="mt-0"><TradeHistory trades={data.trades} /></TabsContent>
@@ -174,7 +174,7 @@ export default function FxDashboard({ onLogout, bot = "fx" }) {
               </TabsContent>
             </Tabs>
           </Panel>
-          <AiSignals signals={data.signals} ai={data.status.ai} usage={data.status.ai_usage} minConfidence={data.settings.ai_min_confidence} title="Decisiones del embudo IA"
+          <AiSignals signals={data.signals} ai={data.status.ai} usage={data.status.ai_usage} minConfidence={data.settings.ai_min_confidence} title="Decisiones del embudo IA" className="lg:col-span-12" wide
             emptyText="Aquí aparece cada análisis del modelo potente (BUY, SELL o PASS) con su porcentaje de confianza: las BUY / SELL que superan el umbral se ejecutan y el resto se sigue como sombra." />
         </div>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
